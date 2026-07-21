@@ -15,17 +15,17 @@ enum FurcationClass: Int, CaseIterable {
     case three = 3
 }
 
-struct FurcationData {
+struct FurcationData: Equatable {
     var outer: [FurcationClass]
     var inner: [FurcationClass]
 }
 
-struct AspectData<T> {
+struct AspectData<T: Equatable>: Equatable {
     var outer: [T]
     var inner: [T]
 }
 
-struct ToothObject: Identifiable {
+struct ToothObject: Identifiable, Equatable {
     let id = UUID()
     var toothNumber: Int
     var probingDepth: AspectData<Int> = AspectData(outer: [0,0,0], inner: [0,0,0])
@@ -48,14 +48,83 @@ struct ToothObject: Identifiable {
     }
 }
 
-struct TeethSelection {
+struct TeethSelection: Equatable {
     var startTooth: ToothObject
-    var startIndex: Int
-    var endTooth: ToothObject
-    var endIndex: Int
+    var startAspect: ChartAspect?
+    var startSite: Int?
     
-    var selectedTeeth: [ToothObject] {
-        return []
+    var endTooth: ToothObject
+    var endAspect: ChartAspect?
+    var endSite: Int?
+    
+    var expectedSlots: Int {
+        if let sa = startAspect, let ss = startSite, let ea = endAspect, let es = endSite {
+            return ChartAnatomyResolver.sequence(from: (startTooth.toothNumber, sa, ss), to: (endTooth.toothNumber, ea, es)).count
+        }
+        return 3
+    }
+}
+
+struct ChartAnatomyResolver {
+    static func resolve(anatomy: AnatomyType, for tooth: Int, currentAspect: ChartAspect) -> (aspect: ChartAspect, site: Int)? {
+        let isRight = (11...18).contains(tooth) || (41...48).contains(tooth)
+        
+        let aspect: ChartAspect
+        switch anatomy {
+        case .mesioBuccal, .distoBuccal, .buccal, .labial:
+            aspect = .outer
+        case .mesioLingual, .distoLingual, .mesioPalatal, .distoPalatal, .lingual, .palatal:
+            aspect = .inner
+        case .mesial, .distal:
+            aspect = currentAspect
+        default:
+            return nil
+        }
+        
+        let isMesial: Bool
+        switch anatomy {
+        case .mesioBuccal, .mesioLingual, .mesioPalatal, .mesial: isMesial = true
+        case .distoBuccal, .distoLingual, .distoPalatal, .distal: isMesial = false
+        case .buccal, .labial, .lingual, .palatal:
+            return (aspect, 1)
+        default: return nil
+        }
+        
+        let siteIndex: Int
+        if isRight {
+            siteIndex = isMesial ? 2 : 0
+        } else {
+            siteIndex = isMesial ? 0 : 2
+        }
+        
+        return (aspect, siteIndex)
+    }
+    
+    static func sequence(from start: (Int, ChartAspect, Int), to end: (Int, ChartAspect, Int)) -> [(Int, ChartAspect, Int)] {
+        let allTeeth = [
+            18,17,16,15,14,13,12,11, 21,22,23,24,25,26,27,28,
+            48,47,46,45,44,43,42,41, 31,32,33,34,35,36,37,38
+        ]
+        
+        var flat: [(Int, ChartAspect, Int)] = []
+        let aspects: [ChartAspect] = start.1 == end.1 ? [start.1] : [ChartAspect.outer, ChartAspect.inner]
+        
+        for aspect in aspects {
+            for t in allTeeth {
+                for s in 0..<3 {
+                    flat.append((t, aspect, s))
+                }
+            }
+        }
+        
+        guard let startIndex = flat.firstIndex(where: { $0.0 == start.0 && $0.1 == start.1 && $0.2 == start.2 }),
+              let endIndex = flat.firstIndex(where: { $0.0 == end.0 && $0.1 == end.1 && $0.2 == end.2 }) else {
+            return []
+        }
+        
+        let lower = min(startIndex, endIndex)
+        let upper = max(startIndex, endIndex)
+        return Array(flat[lower...upper])
     }
 }
 
@@ -68,12 +137,26 @@ enum AnnotationOperation: Hashable {
     case plaque
     case missing
     case implant
+    
+    var displayName: String {
+        switch self {
+        case .probingDepth: return "Probing Depth"
+        case .gingivalMargin: return "Gingival Margin"
+        case .mobility: return "Mobility"
+        case .furcation: return "Furcation"
+        case .bleeding: return "Bleeding"
+        case .plaque: return "Plaque"
+        case .missing: return "Missing"
+        case .implant: return "Implant"
+        }
+    }
 }
 
-struct AnnotationCommand {
+struct AnnotationCommand: Equatable {
     var operation: AnnotationOperation
     var teethSelection: TeethSelection
-    var values: [Int]
+    var aspect: ChartAspect?
+    var values: [String]
 }
 
 enum ChartAspect: Hashable {
@@ -156,6 +239,20 @@ extension ToothObject {
         }
         return mouth
     }
+    
+    static func fullMouthEmpty() -> [Int: ToothObject] {
+        var mouth: [Int: ToothObject] = [:]
+        let allTeeth = [
+            18,17,16,15,14,13,12,11,
+            21,22,23,24,25,26,27,28,
+            48,47,46,45,44,43,42,41,
+            31,32,33,34,35,36,37,38
+        ]
+        for t in allTeeth {
+            mouth[t] = ToothObject.create(number: t)
+        }
+        return mouth
+    }
 }
 
 // MARK: - Voice Parsing
@@ -167,7 +264,6 @@ enum ActionType: String, Equatable {
     case from = "dari"
     case until = "sampai"
     case until2 = "hingga"
-    case minus = "minus"
 }
 
 enum AnatomyType: String, Equatable {
@@ -204,7 +300,11 @@ class VoiceTokenizer {
     ]
     
     static func tokenize(text: String) -> [VoiceToken] {
-        let cleaned = text.lowercased().replacingOccurrences(of: ".", with: "").replacingOccurrences(of: ",", with: "")
+        let cleaned = text.lowercased()
+            .replacingOccurrences(of: ".", with: "")
+            .replacingOccurrences(of: ",", with: "")
+            .replacingOccurrences(of: "mid-", with: "mid ")
+            
         let words = cleaned.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
         var tokens: [VoiceToken] = []
         
@@ -216,6 +316,12 @@ class VoiceTokenizer {
             if (w == "gak" || w == "tidak") && nextW == "ada" {
                 tokens.append(.action(.missing))
                 i += 2; continue
+            }
+            if w == "mid" {
+                if let anatomy = AnatomyType(rawValue: nextW) {
+                    tokens.append(.anatomy(anatomy))
+                    i += 2; continue
+                }
             }
             if w == "mesio" && nextW == "bukal" { tokens.append(.anatomy(.mesioBuccal)); i += 2; continue }
             if w == "disto" && nextW == "bukal" { tokens.append(.anatomy(.distoBuccal)); i += 2; continue }
@@ -249,6 +355,23 @@ class VoiceTokenizer {
             }
             
             if let anatomy = AnatomyType(rawValue: w) { tokens.append(.anatomy(anatomy)); i += 1; continue }
+            if w == "lanjut" {
+                tokens.append(.action(.next))
+                let aspectWords = ["palatal", "lingual", "bukal", "labial"]
+                if aspectWords.contains(nextW) {
+                    let thirdW = (i + 2 < words.count) ? words[i+2] : ""
+                    var skipNext = true
+                    if let tNum = Int(thirdW), tNum > 10 && tNum < 99 {
+                        skipNext = false
+                    }
+                    if skipNext {
+                        i += 2
+                        continue
+                    }
+                }
+                i += 1
+                continue
+            }
             if let action = ActionType(rawValue: w) { tokens.append(.action(action)); i += 1; continue }
             
             if w == "resesi" { tokens.append(.metric(.gingivalMargin)); i += 1; continue }
@@ -264,41 +387,89 @@ class VoiceTokenizer {
 
 class VoiceCommandParser {
     var cursor: ChartingCursor
+    var activeSelection: TeethSelection?
+    var pendingValues: [String] = []
+    var missingTeeth: Set<Int> = []
     
     init(configuration: ChartingConfiguration) {
         self.cursor = ChartingCursor(configuration: configuration)
     }
     
-    func parse(text: String) -> [AnnotationCommand] {
+    func parse(text: String, isFinal: Bool = false) -> [AnnotationCommand] {
         let tokens = VoiceTokenizer.tokenize(text: text)
         var commands: [AnnotationCommand] = []
         var i = 0
         
         var currentNumbers: [Int] = []
         
-        func flushNumbers() {
+        func restoreToMainSequence() {
+            cursor.setMetric(.probingDepth)
+            activeSelection = nil
+            cursor.syncWithSequence()
+            while missingTeeth.contains(cursor.currentTooth) {
+                if !cursor.advanceToNextTooth() { break }
+            }
+        }
+        
+        func emitBoolIfPending() {
+            let m = cursor.currentMetric
+            if m == .bleeding || m == .plaque || m == .implant {
+                if let sel = activeSelection {
+                    let targetSlots = sel.expectedSlots
+                    let values = Array(repeating: "True", count: targetSlots)
+                    let cmd = AnnotationCommand(operation: m, teethSelection: sel, aspect: cursor.currentAspect, values: values)
+                    commands.append(cmd)
+                    activeSelection = nil
+                }
+            }
+        }
+        
+        func flushNumbers(force: Bool = false) {
             if currentNumbers.isEmpty { return }
             
-            var temp = currentNumbers
-            while temp.count > 0 {
-                let chunk = Array(temp.prefix(3))
-                temp = Array(temp.dropFirst(3))
+            let targetSlots = activeSelection?.expectedSlots ?? 3
+            
+            if currentNumbers.count >= targetSlots || force {
+                var values = currentNumbers
                 
-                var values = chunk
-                if values.count < 3 {
+                if values.count == 1 && targetSlots > 1 {
+                    values = Array(repeating: values[0], count: targetSlots)
+                } else if values.count < targetSlots {
                     let fill = values.last ?? 0
-                    while values.count < 3 { values.append(fill) }
+                    while values.count < targetSlots { values.append(fill) }
+                }
+                
+                values = Array(values.prefix(targetSlots))
+                
+                let selectionToUse = activeSelection ?? TeethSelection(startTooth: ToothObject.create(number: cursor.currentTooth), startAspect: nil, startSite: nil, endTooth: ToothObject.create(number: cursor.currentTooth), endAspect: nil, endSite: nil)
+                
+                if self.activeSelection == nil || self.activeSelection?.expectedSlots == 3 {
+                    let jaw: JawType = (11...28).contains(cursor.currentTooth) ? .upper : .lower
+                    let aspectType: AspectType = cursor.currentAspect == .outer ? .buccal : .palatal
+                    let dir = cursor.configuration.direction(for: jaw, aspect: aspectType)
+                    
+                    if dir == .rightToLeft {
+                        values = values.reversed()
+                    }
                 }
                 
                 let cmd = AnnotationCommand(
                     operation: cursor.currentMetric,
-                    teethSelection: TeethSelection(startTooth: ToothObject.create(number: cursor.currentTooth), startIndex: 0, endTooth: ToothObject.create(number: cursor.currentTooth), endIndex: 0),
-                    values: values
+                    teethSelection: selectionToUse,
+                    aspect: cursor.currentAspect,
+                    values: values.map { String($0) }
                 )
                 commands.append(cmd)
-                _ = cursor.advanceToNextTooth()
+                
+                currentNumbers = []
+                if self.activeSelection == nil {
+                    _ = cursor.advanceToNextTooth()
+                    while missingTeeth.contains(cursor.currentTooth) {
+                        if !cursor.advanceToNextTooth() { break }
+                    }
+                }
+                self.activeSelection = nil
             }
-            currentNumbers = []
         }
         
         while i < tokens.count {
@@ -306,45 +477,169 @@ class VoiceCommandParser {
             
             switch token {
             case .number(let n):
+                if cursor.currentMetric == .bleeding || cursor.currentMetric == .plaque || cursor.currentMetric == .implant {
+                    emitBoolIfPending()
+                    restoreToMainSequence()
+                }
                 currentNumbers.append(n)
+                flushNumbers(force: false)
                 i += 1
                 
-            case .toothIdentifier(let t):
-                flushNumbers()
-                cursor.jumpTo(tooth: t)
-                i += 1
+            case .toothIdentifier(let tooth):
+                emitBoolIfPending()
+                flushNumbers(force: true)
+                
+                var isRange = false
+                var peek = i + 1
+                var endAnatomy: AnatomyType? = nil
+                var endTooth: Int? = nil
+                
+                if peek < tokens.count, case .action(let act) = tokens[peek], (act == .until || act == .until2) {
+                    isRange = true
+                    peek += 1
+                }
+                
+                if isRange {
+                    if peek < tokens.count, case .anatomy(let anat) = tokens[peek] {
+                        endAnatomy = anat
+                        peek += 1
+                    }
+                    if peek < tokens.count, case .toothIdentifier(let et) = tokens[peek] {
+                        endTooth = et
+                        peek += 1
+                    }
+                }
+                
+                var startAnatomy: AnatomyType? = nil
+                if i > 0, case .anatomy(let anat) = tokens[i-1] {
+                    startAnatomy = anat
+                }
+                
+                if let et = endTooth {
+                    var sAspect: ChartAspect?
+                    var sSite: Int?
+                    if let sa = startAnatomy, let resolved = ChartAnatomyResolver.resolve(anatomy: sa, for: tooth, currentAspect: cursor.currentAspect) {
+                        sAspect = resolved.aspect; sSite = resolved.site
+                    }
+                    var eAspect: ChartAspect?
+                    var eSite: Int?
+                    if let ea = endAnatomy, let resolved = ChartAnatomyResolver.resolve(anatomy: ea, for: et, currentAspect: cursor.currentAspect) {
+                        eAspect = resolved.aspect; eSite = resolved.site
+                    } else if endAnatomy == nil {
+                        eAspect = sAspect; eSite = sSite
+                    }
+                    self.activeSelection = TeethSelection(startTooth: ToothObject.create(number: tooth), startAspect: sAspect, startSite: sSite, endTooth: ToothObject.create(number: et), endAspect: eAspect, endSite: eSite)
+                    i = peek
+                } else if isRange {
+                    if let sa = startAnatomy, let resolved = ChartAnatomyResolver.resolve(anatomy: sa, for: tooth, currentAspect: cursor.currentAspect) {
+                        self.activeSelection = TeethSelection(startTooth: ToothObject.create(number: tooth), startAspect: resolved.aspect, startSite: resolved.site, endTooth: ToothObject.create(number: tooth), endAspect: resolved.aspect, endSite: resolved.site)
+                    } else {
+                        self.activeSelection = TeethSelection(startTooth: ToothObject.create(number: tooth), startAspect: nil, startSite: nil, endTooth: ToothObject.create(number: tooth), endAspect: nil, endSite: nil)
+                    }
+                    i = peek
+                } else {
+                    if let sa = startAnatomy, let resolved = ChartAnatomyResolver.resolve(anatomy: sa, for: tooth, currentAspect: cursor.currentAspect) {
+                        self.activeSelection = TeethSelection(startTooth: ToothObject.create(number: tooth), startAspect: resolved.aspect, startSite: resolved.site, endTooth: ToothObject.create(number: tooth), endAspect: resolved.aspect, endSite: resolved.site)
+                    } else {
+                        self.activeSelection = TeethSelection(startTooth: ToothObject.create(number: tooth), startAspect: nil, startSite: nil, endTooth: ToothObject.create(number: tooth), endAspect: nil, endSite: nil)
+                    }
+                    i += 1
+                }
                 
             case .metric(let m):
-                flushNumbers()
+                emitBoolIfPending()
+                flushNumbers(force: true)
+                self.activeSelection = nil
                 cursor.setMetric(m)
                 i += 1
                 
             case .action(let a):
                 if a == .next {
-                    flushNumbers()
-                    _ = cursor.advanceToNextRow()
+                    if cursor.currentMetric == .bleeding || cursor.currentMetric == .plaque || cursor.currentMetric == .implant {
+                        let sel = activeSelection ?? TeethSelection(startTooth: ToothObject.create(number: cursor.currentTooth), startAspect: nil, startSite: nil, endTooth: ToothObject.create(number: cursor.currentTooth), endAspect: nil, endSite: nil)
+                        let targetSlots = sel.expectedSlots
+                        commands.append(AnnotationCommand(operation: cursor.currentMetric, teethSelection: sel, aspect: cursor.currentAspect, values: Array(repeating: "True", count: targetSlots)))
+                    }
+                    flushNumbers(force: true)
+                    restoreToMainSequence()
                 } else if a == .missing || a == .missing2 {
-                    flushNumbers()
+                    emitBoolIfPending()
+                    flushNumbers(force: true)
+                    self.activeSelection = nil
+                    
+                    self.missingTeeth.insert(cursor.currentTooth)
+                    
                     let cmd = AnnotationCommand(
                         operation: .missing,
-                        teethSelection: TeethSelection(startTooth: ToothObject.create(number: cursor.currentTooth), startIndex: 0, endTooth: ToothObject.create(number: cursor.currentTooth), endIndex: 0),
-                        values: []
+                        teethSelection: TeethSelection(startTooth: ToothObject.create(number: cursor.currentTooth), startAspect: nil, startSite: nil, endTooth: ToothObject.create(number: cursor.currentTooth), endAspect: nil, endSite: nil),
+                        aspect: cursor.currentAspect,
+                        values: ["True"]
                     )
                     commands.append(cmd)
                     _ = cursor.advanceToNextTooth()
+                    while missingTeeth.contains(cursor.currentTooth) {
+                        if !cursor.advanceToNextTooth() { break }
+                    }
+                } else if a == .until || a == .until2 {
+                    emitBoolIfPending()
+                    flushNumbers(force: true)
+                    var peek = i + 1
+                    var endAnatomy: AnatomyType? = nil
+                    var endTooth: Int? = nil
+                    
+                    if peek < tokens.count, case .anatomy(let anat) = tokens[peek] {
+                        endAnatomy = anat
+                        peek += 1
+                    }
+                    if peek < tokens.count, case .toothIdentifier(let et) = tokens[peek] {
+                        endTooth = et
+                        peek += 1
+                    }
+                    
+                    if let et = endTooth {
+                        var eAspect = cursor.currentAspect
+                        var eSite: Int? = nil
+                        if let ea = endAnatomy, let resolved = ChartAnatomyResolver.resolve(anatomy: ea, for: et, currentAspect: cursor.currentAspect) {
+                            eAspect = resolved.aspect; eSite = resolved.site
+                        }
+                        
+                        self.activeSelection = TeethSelection(
+                            startTooth: ToothObject.create(number: cursor.currentTooth), 
+                            startAspect: cursor.currentAspect, 
+                            startSite: nil, 
+                            endTooth: ToothObject.create(number: et), 
+                            endAspect: eAspect, 
+                            endSite: eSite
+                        )
+                        i = peek
+                        continue
+                    } else {
+                        self.activeSelection = nil
+                        i = peek
+                        continue
+                    }
                 }
                 i += 1
                 
             case .anatomy(let a):
                 if a == .lowerJaw {
-                    flushNumbers()
+                    emitBoolIfPending()
+                    flushNumbers(force: true)
+                    self.activeSelection = nil
                     _ = cursor.jumpTo(jaw: .lower)
-                } else if a == .palatal || a == .lingual {
-                    flushNumbers()
-                    _ = cursor.jumpTo(aspect: .palatal)
-                } else if a == .buccal || a == .labial {
-                    flushNumbers()
-                    _ = cursor.jumpTo(aspect: .buccal)
+                } else if a == .upperJaw {
+                    emitBoolIfPending()
+                    flushNumbers(force: true)
+                    self.activeSelection = nil
+                    _ = cursor.jumpTo(jaw: .upper)
+                } else {
+                    if i + 1 < tokens.count, case .toothIdentifier(_) = tokens[i+1] {
+                        // Defer selection until the following tooth identifier is processed
+                    } else if let resolved = ChartAnatomyResolver.resolve(anatomy: a, for: cursor.currentTooth, currentAspect: cursor.currentAspect) {
+                        emitBoolIfPending()
+                        flushNumbers(force: true)
+                        self.activeSelection = TeethSelection(startTooth: ToothObject.create(number: cursor.currentTooth), startAspect: resolved.aspect, startSite: resolved.site, endTooth: ToothObject.create(number: cursor.currentTooth), endAspect: resolved.aspect, endSite: resolved.site)
+                    }
                 }
                 i += 1
                 
@@ -358,7 +653,12 @@ class VoiceCommandParser {
             }
         }
         
-        flushNumbers()
+        if isFinal {
+            emitBoolIfPending()
+            flushNumbers(force: true)
+        }
+        
+        self.pendingValues = currentNumbers.map { String($0) }
         return commands
     }
 }

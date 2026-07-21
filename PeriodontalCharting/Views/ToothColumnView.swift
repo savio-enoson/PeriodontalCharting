@@ -56,7 +56,7 @@ struct ToothColumnView: View {
                     }
                 }
         }
-        .frame(width: 60)
+        .frame(width: 72)
     }
 
     // MARK: Tooth Graphic
@@ -87,8 +87,8 @@ struct ToothColumnView: View {
     @ViewBuilder
     private func sharedGrid() -> some View {
         VStack(spacing: 1) {
-            ImplantCheckCell(isChecked: tooth.implant, isSelected: isCellSelected(op: .implant))
-            SingleValueCell(value: "\(tooth.mobility.rawValue)", isSelected: isCellSelected(op: .mobility))
+            ImplantCheckCell(isChecked: tooth.implant, isSelected: isCellSelected(op: .implant), isMissing: tooth.missing)
+            SingleValueCell(value: "\(tooth.mobility.rawValue)", isSelected: isCellSelected(op: .mobility), isMissing: tooth.missing)
         }
         .background(Color(.separator))
     }
@@ -98,29 +98,36 @@ struct ToothColumnView: View {
         VStack(spacing: 1) {
             FurcationCell(
                 furcation: isOuter ? tooth.furcation?.outer : tooth.furcation?.inner,
-                selectedSites: selectedSites(for: .furcation, isOuter: isOuter)
+                selectedSites: selectedSites(for: .furcation, isOuter: isOuter),
+                isMissing: tooth.missing
             )
             TripleValueRow(
                 values: isOuter ? tooth.gingivalMargin.outer : tooth.gingivalMargin.inner,
-                selectedSites: selectedSites(for: .gingivalMargin, isOuter: isOuter)
+                selectedSites: selectedSites(for: .gingivalMargin, isOuter: isOuter),
+                isMissing: tooth.missing
             )
             TripleValueRow(
                 values: isOuter ? tooth.probingDepth.outer  : tooth.probingDepth.inner,
-                selectedSites: selectedSites(for: .probingDepth, isOuter: isOuter)
+                selectedSites: selectedSites(for: .probingDepth, isOuter: isOuter),
+                isMissing: tooth.missing,
+                isProbingDepth: true
             )
             TripleValueRow(
                 values: isOuter ? tooth.attachmentLevel.outer : tooth.attachmentLevel.inner,
-                selectedSites: [false, false, false] // CAL is computed, usually not selected directly
+                selectedSites: [false, false, false], // CAL is computed, usually not selected directly
+                isMissing: tooth.missing
             )
             BoolDotRow(
                 values: isOuter ? tooth.bleeding.outer : tooth.bleeding.inner,
                 dotColor: .red,
-                selectedSites: selectedSites(for: .bleeding, isOuter: isOuter)
+                selectedSites: selectedSites(for: .bleeding, isOuter: isOuter),
+                isMissing: tooth.missing
             )
             BoolDotRow(
                 values: isOuter ? tooth.plaque.outer   : tooth.plaque.inner,
                 dotColor: .blue,
-                selectedSites: selectedSites(for: .plaque, isOuter: isOuter)
+                selectedSites: selectedSites(for: .plaque, isOuter: isOuter),
+                isMissing: tooth.missing
             )
         }
         // 1pt grid background — VStack(spacing:1) gaps reveal this Color as hairlines
@@ -133,13 +140,18 @@ struct ToothColumnView: View {
 private struct ImplantCheckCell: View {
     let isChecked: Bool
     let isSelected: Bool
+    let isMissing: Bool
 
     var body: some View {
         ZStack {
-            Color(.systemBackground)
-            Image(systemName: isChecked ? "checkmark.square.fill" : "square")
-                .font(.system(size: 10))
-                .foregroundStyle(isChecked ? Color.blue : Color(.separator))
+            if isMissing {
+                HatchedPattern()
+            } else {
+                Color(.systemBackground)
+                Image(systemName: isChecked ? "checkmark.square.fill" : "square")
+                    .font(.system(size: 10))
+                    .foregroundStyle(isChecked ? Color.blue : Color(.separator))
+            }
             if isSelected {
                 Rectangle().strokeBorder(Color.orange, lineWidth: 2)
             }
@@ -153,13 +165,18 @@ private struct ImplantCheckCell: View {
 private struct SingleValueCell: View {
     let value: String
     let isSelected: Bool
+    let isMissing: Bool
 
     var body: some View {
         ZStack {
-            Color(.systemBackground)
-            Text(value)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            if isMissing {
+                HatchedPattern()
+            } else {
+                Color(.systemBackground)
+                Text(value)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             if isSelected {
                 Rectangle().strokeBorder(Color.orange, lineWidth: 2)
             }
@@ -173,16 +190,21 @@ private struct SingleValueCell: View {
 private struct FurcationCell: View {
     let furcation: [FurcationClass]?
     let selectedSites: [Bool]
+    let isMissing: Bool
 
     var body: some View {
         if let values = furcation, !values.isEmpty {
             HStack(spacing: 0) {
                 ForEach(values.indices, id: \.self) { i in
                     ZStack {
-                        Color(.systemBackground)
-                        Text("\(values[i].rawValue)")
-                            .font(.caption)
-                            .foregroundStyle(.primary)
+                        if isMissing {
+                            HatchedPattern()
+                        } else {
+                            Color(.systemBackground)
+                            Text("\(values[i].rawValue)")
+                                .font(.caption)
+                                .foregroundStyle(.primary)
+                        }
                         
                         if i < selectedSites.count && selectedSites[i] {
                             Rectangle().strokeBorder(Color.orange, lineWidth: 2)
@@ -199,8 +221,13 @@ private struct FurcationCell: View {
             }
             .frame(height: 18)
         } else {
-            HatchedPattern()
-                .frame(height: 18)
+            if isMissing {
+                HatchedPattern()
+                    .frame(height: 18)
+            } else {
+                Color(.systemBackground)
+                    .frame(height: 18)
+            }
         }
     }
 }
@@ -210,16 +237,22 @@ private struct FurcationCell: View {
 private struct TripleValueRow: View {
     let values: [Int]
     let selectedSites: [Bool]
+    let isMissing: Bool
+    var isProbingDepth: Bool = false
 
     var body: some View {
         HStack(spacing: 0) {
             ForEach(0..<3, id: \.self) { i in
                 ZStack {
-                    Color(.systemBackground)
-                    if i < values.count {
-                        Text("\(values[i])")
-                            .font(.caption)
-                            .foregroundStyle(.primary)
+                    if isMissing {
+                        HatchedPattern()
+                    } else {
+                        Color(.systemBackground)
+                        if i < values.count {
+                            Text("\(values[i])")
+                                .font(.caption)
+                                .foregroundStyle(isProbingDepth && values[i] >= 4 ? .red : .primary)
+                        }
                     }
                     if i < selectedSites.count && selectedSites[i] {
                         Rectangle().strokeBorder(Color.orange, lineWidth: 2)
@@ -237,20 +270,25 @@ private struct BoolDotRow: View {
     let values: [Bool]
     let dotColor: Color
     let selectedSites: [Bool]
+    let isMissing: Bool
 
     var body: some View {
         HStack(spacing: 0) {
             ForEach(0..<3, id: \.self) { i in
                 ZStack {
-                    Color(.systemBackground)
-                    if i < values.count && values[i] {
-                        Circle()
-                            .fill(dotColor)
-                            .frame(width: 6, height: 6)
+                    if isMissing {
+                        HatchedPattern()
                     } else {
-                        Circle()
-                            .stroke(Color(.separator), lineWidth: 1)
-                            .frame(width: 6, height: 6)
+                        Color(.systemBackground)
+                        if i < values.count && values[i] {
+                            Circle()
+                                .fill(dotColor)
+                                .frame(width: 6, height: 6)
+                        } else {
+                            Circle()
+                                .stroke(Color(.separator), lineWidth: 1)
+                                .frame(width: 6, height: 6)
+                        }
                     }
                     
                     if i < selectedSites.count && selectedSites[i] {
@@ -297,9 +335,16 @@ struct ToothGraphicSideView: View {
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 2)
-                .fill(tooth.missing ? Color(.tertiarySystemBackground) : Color.blue.opacity(0.1))
-                .overlay(
+            ZStack {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(tooth.missing ? Color(.tertiarySystemBackground) : Color.blue.opacity(0.1))
+                
+                if tooth.missing {
+                    HatchedPattern()
+                        .clipShape(RoundedRectangle(cornerRadius: 2))
+                }
+            }
+            .overlay(
                     RoundedRectangle(cornerRadius: 2)
                         .stroke(Color(.separator), lineWidth: 1)
                 )

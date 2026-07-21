@@ -28,6 +28,7 @@ struct QuadrantView: View {
                 HStack(spacing: 0) {
                     ForEach(Array(teeth.enumerated()), id: \.element.id) { index, _ in
                         ToothColumnView(teeth: teeth, index: index, isUpperJaw: isUpperJaw)
+                            .id(teeth[index].toothNumber)
                     }
                 }
 

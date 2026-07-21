@@ -2,11 +2,19 @@ import SwiftUI
 
 struct SelectionDebugMenu: View {
     @EnvironmentObject var selectionModel: ChartSelectionModel
+    @EnvironmentObject var aiViewModel: AIVoiceViewModel
     @Environment(\.dismiss) var dismiss
 
     var body: some View {
         NavigationStack {
             List {
+                Section("AI Simulation") {
+                    VStack(alignment: .leading) {
+                        Text("WPM: \(Int(aiViewModel.wpm))")
+                        Slider(value: $aiViewModel.wpm, in: 20...300, step: 10)
+                    }
+                }
+                
                 Section("Single Cell Highlights") {
                     Button("Tooth 16 Probing Depth (Outer)") {
                         var newSelection = Set<ChartCellCoordinate>()

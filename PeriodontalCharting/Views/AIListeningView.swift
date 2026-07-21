@@ -24,11 +24,7 @@ struct AIListeningView: View {
                     
                     // DEBUG: Start Simulation
                     Button(action: {
-                        if viewModel.isListening {
-                            viewModel.stopSimulation()
-                        } else {
-                            viewModel.simulateTranscription(from: AIVoiceViewModel.debugTranscript, wpm: 100)
-                        }
+                        viewModel.toggleSimulation(from: AIVoiceViewModel.debugTranscript)
                     }) {
                         Image(systemName: viewModel.isListening ? "stop.circle.fill" : "play.circle.fill")
                             .font(.title2)
@@ -45,7 +41,7 @@ struct AIListeningView: View {
                     
                     ScrollView {
                         Text(viewModel.liveTranscription.isEmpty ? "Waiting for dictation..." : viewModel.liveTranscription)
-                            .font(.system(.body, design: .monospaced))
+                            .font(.system(.footnote, design: .monospaced))
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .foregroundStyle(viewModel.liveTranscription.isEmpty ? .tertiary : .primary)
                     }
@@ -61,11 +57,43 @@ struct AIListeningView: View {
                         .foregroundStyle(.secondary)
                     
                     VStack(spacing: 0) {
-                        CommandRow(label: "Operation", value: "Update Mobility")
+                        CommandRow(
+                            label: "Operation",
+                            value: viewModel.currentCursor.map { $0.currentMetric.displayName } ?? "-"
+                        )
                         Divider()
-                        CommandRow(label: "Selection", value: "Tooth 18, 17, 16")
+                        CommandRow(
+                            label: "Selection",
+                            value: viewModel.currentCursor.map { "\($0.currentTooth)" } ?? "-"
+                        )
                         Divider()
-                        CommandRow(label: "Values", value: "2")
+                        VStack(alignment: .trailing, spacing: 12) {
+                            HStack {
+                                Text(viewModel.pendingValues.isEmpty ? "Last Applied" : "Pending Values")
+                                    .foregroundStyle(.secondary)
+                                Spacer()
+                            }
+                            
+                            let valuesToDisplay = !viewModel.pendingValues.isEmpty ? viewModel.pendingValues : (viewModel.currentCommand?.values ?? [])
+                            if !valuesToDisplay.isEmpty {
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: 8) {
+                                        Spacer(minLength: 0)
+                                        ForEach(Array(valuesToDisplay.enumerated()), id: \.offset) { _, val in
+                                            Text(val)
+                                                .padding(.horizontal, 12)
+                                                .padding(.vertical, 6)
+                                                .overlay(Capsule().stroke(Color.black, lineWidth: 1))
+                                        }
+                                    }
+                                    .padding(.vertical, 4)
+                                    .frame(minWidth: 0, maxWidth: .infinity, alignment: .trailing)
+                                }
+                            } else {
+                                Text("-")
+                            }
+                        }
+                        .padding()
                     }
                     .background(Color.white, in: RoundedRectangle(cornerRadius: 12))
                 }
@@ -77,9 +105,21 @@ struct AIListeningView: View {
                         .foregroundStyle(.secondary)
                     
                     VStack(spacing: 8) {
-                        HistoryCard(operation: "Probing Depth", selection: "Tooth 41-43")
-                        HistoryCard(operation: "Bleeding on Probing", selection: "Tooth 38 (Distal)")
-                        HistoryCard(operation: "Furcation", selection: "Tooth 26")
+                        if viewModel.commandHistory.isEmpty {
+                            Text("No history yet")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding()
+                                .background(Color.white, in: RoundedRectangle(cornerRadius: 12))
+                        } else {
+                            ForEach(Array(viewModel.commandHistory.suffix(5).reversed().enumerated()), id: \.offset) { _, cmd in
+                                HistoryCard(
+                                    operation: cmd.operation.displayName,
+                                    selection: "Tooth \(cmd.teethSelection.startTooth.toothNumber) (\(cmd.values.map { String($0) }.joined(separator: ", ")))"
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -121,7 +161,7 @@ struct CommandRow: View {
                 .foregroundStyle(.secondary)
             Spacer()
             Text(value)
-                .bold()
+                .foregroundStyle(.primary)
         }
         .padding()
     }

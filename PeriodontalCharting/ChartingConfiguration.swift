@@ -34,7 +34,7 @@ extension AspectType {
     }
 }
 
-struct ChartingConfiguration: Codable {
+struct ChartingConfiguration: Codable, Equatable {
     var primaryOrder: PrimaryOrderType = .jawFirst
     
     // For Jaw First
@@ -79,7 +79,7 @@ extension ChartingConfiguration {
     }
 }
 
-struct ChartingCursor {
+struct ChartingCursor: Equatable {
     var currentTooth: Int
     var currentAspect: ChartAspect
     var currentMetric: AnnotationOperation = .probingDepth
@@ -162,13 +162,29 @@ struct ChartingCursor {
         }
         
         setupSequence()
-        self.currentMetric = .probingDepth
         return true
     }
     
     mutating func jumpTo(tooth: Int) {
         self.currentTooth = tooth
-        self.currentMetric = .probingDepth
+    }
+    
+    mutating func syncWithSequence() {
+        if sequenceIndex < currentSequence.count {
+            self.currentTooth = currentSequence[sequenceIndex]
+        }
+        
+        if configuration.primaryOrder == .jawFirst {
+            let jaw = configuration.jawOrder[primaryIndex]
+            let aspectOrder = jaw == .upper ? configuration.upperAspectOrder : configuration.lowerAspectOrder
+            guard secondaryIndex < aspectOrder.count else { return }
+            let aspect = aspectOrder[secondaryIndex]
+            self.currentAspect = (aspect == .buccal) ? .outer : .inner
+        } else {
+            guard primaryIndex < configuration.aspectOrder.count else { return }
+            let aspect = configuration.aspectOrder[primaryIndex]
+            self.currentAspect = (aspect == .buccal) ? .outer : .inner
+        }
     }
     
     mutating func setMetric(_ metric: AnnotationOperation) {
