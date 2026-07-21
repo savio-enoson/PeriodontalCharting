@@ -1,0 +1,179 @@
+{
+  "" : {
+    "diagnostics" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/PeriodontalCharting-primary.dia",
+    "emit-module-dependencies" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/PeriodontalCharting-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/PeriodontalCharting-primary-emit-module.dia",
+    "pch" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/PeriodontalCharting-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/PeriodontalCharting-primary.swiftdeps"
+  },
+  "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/DerivedSources/GeneratedAssetSymbols.swift" : {
+    "const-values" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/GeneratedAssetSymbols.swiftconstvalues",
+    "dependencies" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/GeneratedAssetSymbols.d",
+    "diagnostics" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/GeneratedAssetSymbols.dia",
+    "index-unit-output-path" : "/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "llvm-bc" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/GeneratedAssetSymbols.bc",
+    "object" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "swift-dependencies" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/GeneratedAssetSymbols.swiftdeps",
+    "swiftmodule" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/GeneratedAssetSymbols~partial.swiftmodule"
+  },
+  "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/PeriodontalCharting/Catalyst/CatalystAlert.swift" : {
+    "const-values" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystAlert.swiftconstvalues",
+    "dependencies" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystAlert.d",
+    "diagnostics" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystAlert.dia",
+    "index-unit-output-path" : "/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystAlert.o",
+    "llvm-bc" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystAlert.bc",
+    "object" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystAlert.o",
+    "swift-dependencies" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystAlert.swiftdeps",
+    "swiftmodule" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystAlert~partial.swiftmodule"
+  },
+  "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/PeriodontalCharting/Catalyst/CatalystAutocomplete.swift" : {
+    "const-values" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystAutocomplete.swiftconstvalues",
+    "dependencies" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystAutocomplete.d",
+    "diagnostics" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystAutocomplete.dia",
+    "index-unit-output-path" : "/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystAutocomplete.o",
+    "llvm-bc" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystAutocomplete.bc",
+    "object" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystAutocomplete.o",
+    "swift-dependencies" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystAutocomplete.swiftdeps",
+    "swiftmodule" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystAutocomplete~partial.swiftmodule"
+  },
+  "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/PeriodontalCharting/Catalyst/CatalystButtons.swift" : {
+    "const-values" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystButtons.swiftconstvalues",
+    "dependencies" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystButtons.d",
+    "diagnostics" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystButtons.dia",
+    "index-unit-output-path" : "/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystButtons.o",
+    "llvm-bc" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystButtons.bc",
+    "object" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystButtons.o",
+    "swift-dependencies" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystButtons.swiftdeps",
+    "swiftmodule" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystButtons~partial.swiftmodule"
+  },
+  "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/PeriodontalCharting/Catalyst/CatalystDataTable.swift" : {
+    "const-values" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystDataTable.swiftconstvalues",
+    "dependencies" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystDataTable.d",
+    "diagnostics" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystDataTable.dia",
+    "index-unit-output-path" : "/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystDataTable.o",
+    "llvm-bc" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystDataTable.bc",
+    "object" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystDataTable.o",
+    "swift-dependencies" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystDataTable.swiftdeps",
+    "swiftmodule" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystDataTable~partial.swiftmodule"
+  },
+  "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/PeriodontalCharting/Catalyst/CatalystDialog.swift" : {
+    "const-values" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystDialog.swiftconstvalues",
+    "dependencies" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystDialog.d",
+    "diagnostics" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystDialog.dia",
+    "index-unit-output-path" : "/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystDialog.o",
+    "llvm-bc" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystDialog.bc",
+    "object" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystDialog.o",
+    "swift-dependencies" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystDialog.swiftdeps",
+    "swiftmodule" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystDialog~partial.swiftmodule"
+  },
+  "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/PeriodontalCharting/Catalyst/CatalystForms.swift" : {
+    "const-values" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystForms.swiftconstvalues",
+    "dependencies" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystForms.d",
+    "diagnostics" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystForms.dia",
+    "index-unit-output-path" : "/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystForms.o",
+    "llvm-bc" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystForms.bc",
+    "object" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystForms.o",
+    "swift-dependencies" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystForms.swiftdeps",
+    "swiftmodule" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystForms~partial.swiftmodule"
+  },
+  "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/PeriodontalCharting/Catalyst/CatalystLayout.swift" : {
+    "const-values" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystLayout.swiftconstvalues",
+    "dependencies" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystLayout.d",
+    "diagnostics" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystLayout.dia",
+    "index-unit-output-path" : "/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystLayout.o",
+    "llvm-bc" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystLayout.bc",
+    "object" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystLayout.o",
+    "swift-dependencies" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystLayout.swiftdeps",
+    "swiftmodule" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystLayout~partial.swiftmodule"
+  },
+  "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/PeriodontalCharting/Catalyst/CatalystModifiers.swift" : {
+    "const-values" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystModifiers.swiftconstvalues",
+    "dependencies" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystModifiers.d",
+    "diagnostics" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystModifiers.dia",
+    "index-unit-output-path" : "/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystModifiers.o",
+    "llvm-bc" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystModifiers.bc",
+    "object" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystModifiers.o",
+    "swift-dependencies" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystModifiers.swiftdeps",
+    "swiftmodule" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystModifiers~partial.swiftmodule"
+  },
+  "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/PeriodontalCharting/Catalyst/CatalystNavigation.swift" : {
+    "const-values" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystNavigation.swiftconstvalues",
+    "dependencies" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystNavigation.d",
+    "diagnostics" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystNavigation.dia",
+    "index-unit-output-path" : "/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystNavigation.o",
+    "llvm-bc" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystNavigation.bc",
+    "object" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystNavigation.o",
+    "swift-dependencies" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystNavigation.swiftdeps",
+    "swiftmodule" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystNavigation~partial.swiftmodule"
+  },
+  "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/PeriodontalCharting/Catalyst/CatalystPanels.swift" : {
+    "const-values" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystPanels.swiftconstvalues",
+    "dependencies" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystPanels.d",
+    "diagnostics" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystPanels.dia",
+    "index-unit-output-path" : "/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystPanels.o",
+    "llvm-bc" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystPanels.bc",
+    "object" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystPanels.o",
+    "swift-dependencies" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystPanels.swiftdeps",
+    "swiftmodule" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystPanels~partial.swiftmodule"
+  },
+  "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/PeriodontalCharting/Catalyst/CatalystShowcaseView.swift" : {
+    "const-values" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystShowcaseView.swiftconstvalues",
+    "dependencies" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystShowcaseView.d",
+    "diagnostics" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystShowcaseView.dia",
+    "index-unit-output-path" : "/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystShowcaseView.o",
+    "llvm-bc" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystShowcaseView.bc",
+    "object" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystShowcaseView.o",
+    "swift-dependencies" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystShowcaseView.swiftdeps",
+    "swiftmodule" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystShowcaseView~partial.swiftmodule"
+  },
+  "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/PeriodontalCharting/Catalyst/CatalystToast.swift" : {
+    "const-values" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystToast.swiftconstvalues",
+    "dependencies" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystToast.d",
+    "diagnostics" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystToast.dia",
+    "index-unit-output-path" : "/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystToast.o",
+    "llvm-bc" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystToast.bc",
+    "object" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystToast.o",
+    "swift-dependencies" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystToast.swiftdeps",
+    "swiftmodule" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystToast~partial.swiftmodule"
+  },
+  "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/PeriodontalCharting/Catalyst/CatalystTokens.swift" : {
+    "const-values" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystTokens.swiftconstvalues",
+    "dependencies" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystTokens.d",
+    "diagnostics" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystTokens.dia",
+    "index-unit-output-path" : "/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystTokens.o",
+    "llvm-bc" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystTokens.bc",
+    "object" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystTokens.o",
+    "swift-dependencies" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystTokens.swiftdeps",
+    "swiftmodule" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/CatalystTokens~partial.swiftmodule"
+  },
+  "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/PeriodontalCharting/ContentView.swift" : {
+    "const-values" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/ContentView.swiftconstvalues",
+    "dependencies" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/ContentView.d",
+    "diagnostics" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/ContentView.dia",
+    "index-unit-output-path" : "/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/ContentView.o",
+    "llvm-bc" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/ContentView.bc",
+    "object" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/ContentView.o",
+    "swift-dependencies" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/ContentView.swiftdeps",
+    "swiftmodule" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/ContentView~partial.swiftmodule"
+  },
+  "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/PeriodontalCharting/Models.swift" : {
+    "const-values" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/Models.swiftconstvalues",
+    "dependencies" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/Models.d",
+    "diagnostics" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/Models.dia",
+    "index-unit-output-path" : "/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/Models.o",
+    "llvm-bc" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/Models.bc",
+    "object" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/Models.o",
+    "swift-dependencies" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/Models.swiftdeps",
+    "swiftmodule" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/Models~partial.swiftmodule"
+  },
+  "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/PeriodontalCharting/PeriodontalChartingApp.swift" : {
+    "const-values" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/PeriodontalChartingApp.swiftconstvalues",
+    "dependencies" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/PeriodontalChartingApp.d",
+    "diagnostics" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/PeriodontalChartingApp.dia",
+    "index-unit-output-path" : "/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/PeriodontalChartingApp.o",
+    "llvm-bc" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/PeriodontalChartingApp.bc",
+    "object" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/PeriodontalChartingApp.o",
+    "swift-dependencies" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/PeriodontalChartingApp.swiftdeps",
+    "swiftmodule" : "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/DerivedData/Build/Intermediates.noindex/PeriodontalCharting.build/Debug-iphoneos/PeriodontalCharting.build/Objects-normal/arm64/PeriodontalChartingApp~partial.swiftmodule"
+  }
+}
