@@ -44,23 +44,53 @@ This project modernises the workflow in two phases:
 ```
 PeriodontalCharting/
 ├── PeriodontalCharting.xcodeproj/
-└── PeriodontalCharting/                 <- App source root
-    ├── PeriodontalChartingApp.swift     <- @main entry point
-    ├── ContentView.swift                <- NavigationSplitView shell
-    ├── Models.swift                     <- All data types + NLP engine
-    ├── ChartingConfiguration.swift      <- Traversal config + cursor
-    ├── AudioManager.swift               <- AVFoundation recording/playback
-    ├── Views/
-    │   ├── ChartDashboard.swift         <- Root interactive viewport
-    │   ├── QuadrantView.swift           <- One dental quadrant
-    │   ├── ToothColumnView.swift        <- Single tooth column + graphic
-    │   ├── AIListeningView.swift        <- Voice overlay panel
-    │   ├── OnboardingView.swift         <- Settings / onboarding modal
-    │   └── SelectionDebugMenu.swift     <- Developer debug sheet
+└── PeriodontalCharting/                         <- App source root (auto-discovered by Xcode)
+    │
+    ├── App/
+    │   ├── PeriodontalChartingApp.swift         <- @main entry point
+    │   └── ContentView.swift                    <- NavigationSplitView shell
+    │
+    ├── Models/
+    │   └── Models.swift                         <- Core chart data types
+    │
+    ├── NLP/
+    │   ├── VoiceTokenizer.swift                 <- ActionType, AnatomyType, VoiceToken, VoiceTokenizer
+    │   └── VoiceCommandParser.swift             <- VoiceCommandParser state machine
+    │
+    ├── Configuration/
+    │   ├── ChartingConfiguration.swift          <- Config enums + ChartingConfiguration struct
+    │   └── ChartingCursor.swift                 <- ChartingCursor traversal state machine
+    │
+    ├── Audio/
+    │   └── AudioManager.swift                   <- AVFoundation recording/playback
+    │
     ├── ViewModels/
-    │   └── AIVoiceViewModel.swift       <- Voice simulation + parser state
-    └── TestTranscripts/
-        └── dr_lucky_ground.txt          <- Reference clinical dictation sample
+    │   └── AIVoiceViewModel.swift               <- Voice simulation + parser orchestration
+    │
+    ├── Views/
+    │   ├── Chart/
+    │   │   ├── ChartDashboard.swift             <- Root interactive viewport + state owner
+    │   │   ├── QuadrantView.swift               <- One dental quadrant + SideLabelsView
+    │   │   ├── ToothColumnView.swift            <- Single tooth column layout
+    │   │   ├── ToothRowViews.swift              <- Cell types: ImplantCheckCell, SingleValueCell,
+    │   │   │                                       FurcationCell, TripleValueRow, BoolDotRow, HatchedPattern
+    │   │   └── ToothGraphicSideView.swift       <- Path-based GM/PD line chart per tooth side
+    │   │
+    │   ├── Voice/
+    │   │   └── AIListeningView.swift            <- Voice overlay panel
+    │   │
+    │   └── Onboarding/
+    │       ├── OnboardingView.swift             <- Main onboarding/settings view
+    │       ├── TwoItemReorderable.swift         <- Generic drag-to-reorder for 2 items
+    │       └── AnnotationVisualizerView.swift   <- Traversal-order preview diagram
+    │
+    ├── Debug/
+    │   └── SelectionDebugMenu.swift             <- Developer debug sheet
+    │
+    ├── TestTranscripts/
+    │   └── dr_lucky_ground.txt                  <- Reference clinical dictation sample
+    │
+    └── Assets.xcassets/
 ```
 
 ---
@@ -106,19 +136,19 @@ PeriodontalChartingApp
 
 ## File-by-File Reference
 
-### `PeriodontalChartingApp.swift`
+### `App/PeriodontalChartingApp.swift`
 
 The `@main` entry point. A minimal `WindowGroup` wrapping `ContentView` — no environment injections required at this level.
 
 ---
 
-### `ContentView.swift`
+### `App/ContentView.swift`
 
 Serves as the root layout shell. Uses a native iPadOS `NavigationSplitView` presenting a patient record placeholder list in the sidebar and `ChartDashboard` in the detail pane. Passes a `$columnVisibility` binding to `ChartDashboard` so the dashboard can programmatically collapse the sidebar (e.g., when AI Mode activates) and the floating sidebar-restore button knows whether to appear. The navy blue `toolbarBackground` is applied here, giving the entire navigation chrome a consistent dark style.
 
 ---
 
-### `ChartDashboard.swift`
+### `Views/Chart/ChartDashboard.swift`
 
 The **root interactive viewport** and sole owner of global chart state.
 
@@ -173,7 +203,7 @@ Q4 precedes Q3 to mirror the upper jaw layout and produce correct anatomical ali
 
 ---
 
-### `QuadrantView.swift`
+### `Views/Chart/QuadrantView.swift`
 
 Renders one dental quadrant. It:
 
@@ -185,20 +215,20 @@ Renders one dental quadrant. It:
 
 ---
 
-### `ToothColumnView.swift`
+### `Views/Chart/ToothColumnView.swift`
 
-The **core rendering engine** for a single tooth column. Fixed to **72pt width**, composed of four sub-sections in a `VStack(spacing: 4)`:
+The **layout orchestrator** for a single tooth column. Fixed to **72pt width**, composed of four sub-sections in a `VStack(spacing: 4)`:
 
 1. **Tooth number header** — 24pt `Text` showing the FDI number.
 2. **`sharedGrid`** — `ImplantCheckCell` + `SingleValueCell` (Mobility). These are whole-tooth properties, not per-aspect.
 3. **`aspectGrid`** — Full data grid for one aspect (outer or inner depending on jaw). For upper jaw: outer is at the top (Facial), inner at the bottom (Palatal). For lower jaw: reversed. Contains: `FurcationCell`, GM `TripleValueRow`, PD `TripleValueRow`, CAL `TripleValueRow`, Bleeding `BoolDotRow`, Plaque `BoolDotRow`.
 4. **`toothGraphic`** — Two stacked `ToothGraphicSideView` instances. Upper jaw: outer on top (non-mirrored), inner below (mirrored). Lower jaw: inner on top (mirrored), outer below (non-mirrored).
 
-**Grid hairlines:** `VStack(spacing: 1)` gaps reveal the parent's `Color(.separator)` background, creating hairline grid lines without any explicit `Divider()` calls inside cells. Column dividers are a 1pt `Color(.separator)` overlaid on the trailing edge of each column (except the last).
+**Row cell types** are defined in `ToothRowViews.swift` (extracted from this file). **Grid hairlines:** `VStack(spacing: 1)` gaps reveal the parent's `Color(.separator)` background, creating hairline grid lines without any explicit `Divider()` calls inside cells. Column dividers are a 1pt `Color(.separator)` overlaid on the trailing edge of each column (except the last).
 
 **Selection highlighting:** `ToothColumnView` reads `ChartSelectionModel` from the environment. Each sub-view receives a `selectedSites: [Bool]` array. When a site is selected, its `ZStack` overlays a 2pt orange `strokeBorder`. PD values >= 4 mm are rendered in `.red` (controlled by the `isProbingDepth` flag on `TripleValueRow`).
 
-#### Row types
+#### Row types (defined in `ToothRowViews.swift`)
 
 | Struct | Height | Appearance |
 |---|---|---|
@@ -211,9 +241,9 @@ The **core rendering engine** for a single tooth column. Fixed to **72pt width**
 
 ---
 
-### `ToothGraphicSideView.swift`
+### `Views/Chart/ToothGraphicSideView.swift`
 
-Handles the complex `Path` drawing for the clinical line chart embedded in each tooth column.
+Extracted from `ToothColumnView.swift` into its own file. Handles the complex `Path` drawing for the clinical line chart embedded in each tooth column.
 
 #### Layout constants
 
@@ -253,7 +283,7 @@ For upper jaw: outer (facial) is non-mirrored (top), inner (palatal) is mirrored
 
 ---
 
-### `AIListeningView.swift`
+### `Views/Voice/AIListeningView.swift`
 
 A floating overlay panel that slides in from the trailing edge in AI Mode. It fills **40% of viewport width** and **80% of height**.
 
@@ -272,7 +302,7 @@ A floating overlay panel that slides in from the trailing edge in AI Mode. It fi
 
 ---
 
-### `OnboardingView.swift` & `AnnotationVisualizerView`
+### `Views/Onboarding/OnboardingView.swift` & `AnnotationVisualizerView`
 
 A unified configuration interface for both initial onboarding and in-app settings (`isSettingsMode` flag).
 
@@ -284,7 +314,7 @@ A unified configuration interface for both initial onboarding and in-app setting
 
 #### Section 2 — Annotation Order Configuration
 
-**`TwoItemReorderable<Item, Content>`** — a generic `View` for zero-delay drag-reordering of exactly 2 items. Bypasses SwiftUI's built-in `onDrag` limitations (long-press delay, translucent snapshot) using a raw `DragGesture`:
+**`TwoItemReorderable<Item, Content>`** (extracted to `TwoItemReorderable.swift`) — a generic `View` for zero-delay drag-reordering of exactly 2 items. Bypasses SwiftUI's built-in `onDrag` limitations (long-press delay, translucent snapshot) using a raw `DragGesture`:
 
 - Tracks `draggingItem`, `dragOffset`, and `isSwapped`.
 - The non-dragging item animates to its swapped offset (`+/-(itemHeight + spacing)`) during drag for immediate visual feedback.
@@ -301,13 +331,13 @@ A unified configuration interface for both initial onboarding and in-app setting
 - Each aspect card contains a nested `TwoItemReorderable` for jaw order (Upper/Lower).
 - Same direction picker per row.
 
-**`AnnotationVisualizerView`** — a live top-down teeth preview re-rendering on every config change. Shows two `JawVisualizer` instances (upper/lower), each displaying a 16-block placeholder tooth strip flanked by traversal arrows. The step number (e.g. "1.", "2.") is computed by `ChartingConfiguration.sequenceIndex(for:aspect:)`.
+**`AnnotationVisualizerView`** (extracted to `AnnotationVisualizerView.swift`) — a live top-down teeth preview re-rendering on every config change. Shows two `JawVisualizer` instances (upper/lower), each displaying a 16-block placeholder tooth strip flanked by traversal arrows. The step number (e.g. "1.", "2.") is computed by `ChartingConfiguration.sequenceIndex(for:aspect:)`.
 
 **Configuration persistence:** Encoded with `JSONEncoder` and stored in `UserDefaults` under key `"ChartingConfiguration"`. Read back in `OnboardingView.onAppear` and `AIVoiceViewModel.getConfiguration()`.
 
 ---
 
-### `SelectionDebugMenu.swift`
+### `Debug/SelectionDebugMenu.swift`
 
 A developer `.sheet` exposing:
 
@@ -319,9 +349,11 @@ Each button directly mutates `selectionModel.selectedCells`, triggering an immed
 
 ---
 
-## Data Model (`Models.swift`)
+## Data Model (`Models/Models.swift`)
 
 All chart state is expressed through a strictly typed value-type model. The single source of truth is `mouth: [Int: ToothObject]` in `ChartDashboard`, keyed by FDI tooth number.
+
+> **After the refactor**, `Models.swift` contains only the core data types listed below. The NLP pipeline has been extracted into two dedicated files: [`VoiceTokenizer.swift`](#voicetokenizerswift) and [`VoiceCommandParser.swift`](#voicecommandparserswift).
 
 ### `ToothObject`
 
@@ -405,9 +437,15 @@ struct AnnotationCommand: Equatable {
 
 ---
 
-## NLP Voice Pipeline
+## NLP Voice Pipeline (`NLP/`)
 
-Implemented entirely in `Models.swift`. Three components: `VoiceTokenizer`, `VoiceCommandParser`, and `ChartingCursor`.
+The pipeline is split across three dedicated files:
+
+| File | Responsibility |
+|---|---|
+| `VoiceTokenizer.swift` | `ActionType`, `AnatomyType`, `VoiceToken` enums + `VoiceTokenizer` class |
+| `VoiceCommandParser.swift` | `VoiceCommandParser` state machine |
+| `ChartingCursor.swift` | `ChartingCursor` traversal struct (see Configuration System) |
 
 ### `VoiceTokenizer`
 
@@ -489,7 +527,7 @@ The parser is called on every new word with the full accumulated text (stateless
 
 ### `ChartingCursor`
 
-A value-type `struct` tracking the traversal state:
+Extracted into its own file (`ChartingCursor.swift`). A value-type `struct` tracking the traversal state:
 
 ```swift
 struct ChartingCursor: Equatable {
@@ -511,9 +549,11 @@ struct ChartingCursor: Equatable {
 
 ---
 
-## Configuration System (`ChartingConfiguration.swift`)
+## Configuration System (`Configuration/`)
 
 `ChartingConfiguration` is a `Codable`, `Equatable` struct serialised to `UserDefaults` as JSON under key `"ChartingConfiguration"`.
+
+> **After the refactor**, `ChartingConfiguration.swift` contains only the enums and the `ChartingConfiguration` struct. `ChartingCursor` has been extracted to its own file `ChartingCursor.swift`.
 
 | Property | Default | Meaning |
 |---|---|---|
@@ -534,7 +574,7 @@ struct ChartingCursor: Equatable {
 
 ---
 
-## Audio Infrastructure (`AudioManager.swift`)
+## Audio Infrastructure (`Audio/AudioManager.swift`)
 
 Singleton `ObservableObject` managing all `AVFoundation` interactions.
 
