@@ -12,7 +12,7 @@ class AIVoiceViewModel: ObservableObject {
     @Published var currentCursor: ChartingCursor? = nil
     @Published var activeSelection: TeethSelection? = nil
     @Published var pendingValues: [String] = []
-    @Published var wpm: Double = 80.0
+    @Published var wpm: Double = 100.0
     
     private var simulationTask: Task<Void, Never>?
     private var flushTimer: Timer?
@@ -51,7 +51,7 @@ Lanjut palatal
 4 4 4
 4 2 2
 
-BOP dari Mesio Bukal 26 sampai Disto bukal 24.
+BOP dari Mesio palatal 26 sampai Disto palatal 24.
 Lanjut, 23.
 2 2 2
 2 2 2
@@ -66,8 +66,8 @@ Lanjut, 23.
 3 3 2
 
 15 palatal. Resesi palatal dan disto palatal 1.
-16 Resesi Mesio bukal 2. Bukal 4. Distol bukal 2
-17 resesi mesio bukal 1
+16 Resesi Mesio palatal 2. palatal 4. Disto palatal 2
+17 resesi mesio palatal 1
 BOP dimulai dari disto lingual 15 hingga palatal 16
 plaque pada semua gigi
 

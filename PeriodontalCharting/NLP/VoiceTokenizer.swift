@@ -9,6 +9,10 @@ enum ActionType: String, Equatable {
     case from = "dari"
     case until = "sampai"
     case until2 = "hingga"
+    case until3 = "dan"
+    case at = "pada"
+    case at2 = "di"
+    case all = "semua"
 }
 
 enum AnatomyType: String, Equatable {
@@ -31,7 +35,7 @@ enum AnatomyType: String, Equatable {
 enum VoiceToken: Equatable {
     case number(Int)
     case anatomy(AnatomyType)
-    case metric(AnnotationOperation)
+    case metric(AnnotationOperation, multiplier: Int)
     case action(ActionType)
     case toothIdentifier(Int)
     case word(String)
@@ -119,9 +123,16 @@ class VoiceTokenizer {
             }
             if let action = ActionType(rawValue: w) { tokens.append(.action(action)); i += 1; continue }
             
-            if w == "resesi" { tokens.append(.metric(.gingivalMargin)); i += 1; continue }
-            if w == "bop" || w == "berdarah" { tokens.append(.metric(.bleeding)); i += 1; continue }
-            if w == "plaque" || w == "plak" { tokens.append(.metric(.plaque)); i += 1; continue }
+            if w == "resesi" || w == "kemunduran" { tokens.append(.metric(.gingivalMargin, multiplier: -1)); i += 1; continue }
+            if w == "margin" || w == "gingival" { tokens.append(.metric(.gingivalMargin, multiplier: 1)); i += 1; continue }
+            if w == "enlargement" || w == "pembengkakan" || w == "pembesaran" { tokens.append(.metric(.gingivalMargin, multiplier: 1)); i += 1; continue }
+            
+            if w == "poket" || w == "probing" || w == "kedalaman" { tokens.append(.metric(.probingDepth, multiplier: 1)); i += 1; continue }
+            if w == "bop" || w == "berdarah" { tokens.append(.metric(.bleeding, multiplier: 1)); i += 1; continue }
+            if w == "plaque" || w == "plak" { tokens.append(.metric(.plaque, multiplier: 1)); i += 1; continue }
+            if w == "kegoyangan" || w == "mobilitas" || w == "mobility" { tokens.append(.metric(.mobility, multiplier: 1)); i += 1; continue }
+            if w == "furkasi" || w == "furcation" { tokens.append(.metric(.furcation, multiplier: 1)); i += 1; continue }
+            if w == "implan" || w == "implant" { tokens.append(.metric(.implant, multiplier: 1)); i += 1; continue }
             
             tokens.append(.word(w))
             i += 1

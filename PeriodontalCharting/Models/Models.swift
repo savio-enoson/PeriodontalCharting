@@ -58,18 +58,38 @@ struct TeethSelection: Equatable {
     var endSite: Int?
     
     var expectedSlots: Int {
-        if let sa = startAspect, let ss = startSite, let ea = endAspect, let es = endSite {
-            return ChartAnatomyResolver.sequence(from: (startTooth.toothNumber, sa, ss), to: (endTooth.toothNumber, ea, es)).count
+        if let ss = startSite, let es = endSite, startTooth == endTooth {
+            let aspectMultiplier = (startAspect == nil) ? 2 : 1
+            let siteDist = abs(ss - es) + 1
+            return siteDist * aspectMultiplier
         }
+        
+        if let sa = startAspect, let ea = endAspect {
+            return ChartAnatomyResolver.sequence(from: (startTooth.toothNumber, sa, startSite), to: (endTooth.toothNumber, ea, endSite)).count
+        }
+        
+        if startTooth.toothNumber != endTooth.toothNumber {
+            let allTeeth = [
+                18,17,16,15,14,13,12,11, 21,22,23,24,25,26,27,28,
+                48,47,46,45,44,43,42,41, 31,32,33,34,35,36,37,38
+            ]
+            if let sIdx = allTeeth.firstIndex(of: startTooth.toothNumber),
+               let eIdx = allTeeth.firstIndex(of: endTooth.toothNumber) {
+                let lower = min(sIdx, eIdx)
+                let upper = max(sIdx, eIdx)
+                return (upper - lower + 1) * 3
+            }
+        }
+        
         return 3
     }
 }
 
 struct ChartAnatomyResolver {
-    static func resolve(anatomy: AnatomyType, for tooth: Int, currentAspect: ChartAspect) -> (aspect: ChartAspect, site: Int)? {
+    static func resolve(anatomy: AnatomyType, for tooth: Int, currentAspect: ChartAspect) -> (aspect: ChartAspect?, site: Int?)? {
         let isRight = (11...18).contains(tooth) || (41...48).contains(tooth)
         
-        let aspect: ChartAspect
+        let aspect: ChartAspect?
         switch anatomy {
         case .mesioBuccal, .distoBuccal, .buccal, .labial:
             aspect = .outer
@@ -86,7 +106,7 @@ struct ChartAnatomyResolver {
         case .mesioBuccal, .mesioLingual, .mesioPalatal, .mesial: isMesial = true
         case .distoBuccal, .distoLingual, .distoPalatal, .distal: isMesial = false
         case .buccal, .labial, .lingual, .palatal:
-            return (aspect, 1)
+            return (aspect, nil)
         default: return nil
         }
         
@@ -100,7 +120,7 @@ struct ChartAnatomyResolver {
         return (aspect, siteIndex)
     }
     
-    static func sequence(from start: (Int, ChartAspect, Int), to end: (Int, ChartAspect, Int)) -> [(Int, ChartAspect, Int)] {
+    static func sequence(from start: (Int, ChartAspect, Int?), to end: (Int, ChartAspect, Int?)) -> [(Int, ChartAspect, Int)] {
         let allTeeth = [
             18,17,16,15,14,13,12,11, 21,22,23,24,25,26,27,28,
             48,47,46,45,44,43,42,41, 31,32,33,34,35,36,37,38
@@ -117,13 +137,31 @@ struct ChartAnatomyResolver {
             }
         }
         
-        guard let startIndex = flat.firstIndex(where: { $0.0 == start.0 && $0.1 == start.1 && $0.2 == start.2 }),
-              let endIndex = flat.firstIndex(where: { $0.0 == end.0 && $0.1 == end.1 && $0.2 == end.2 }) else {
+        var startIndices: [Int] = []
+        if let sSite = start.2 {
+            if let idx = flat.firstIndex(where: { $0.0 == start.0 && $0.1 == start.1 && $0.2 == sSite }) {
+                startIndices.append(idx)
+            }
+        } else {
+            startIndices = flat.enumerated().filter({ $0.element.0 == start.0 && $0.element.1 == start.1 }).map { $0.offset }
+        }
+        
+        var endIndices: [Int] = []
+        if let eSite = end.2 {
+            if let idx = flat.firstIndex(where: { $0.0 == end.0 && $0.1 == end.1 && $0.2 == eSite }) {
+                endIndices.append(idx)
+            }
+        } else {
+            endIndices = flat.enumerated().filter({ $0.element.0 == end.0 && $0.element.1 == end.1 }).map { $0.offset }
+        }
+        
+        guard let minStart = startIndices.min(), let maxStart = startIndices.max(),
+              let minEnd = endIndices.min(), let maxEnd = endIndices.max() else {
             return []
         }
         
-        let lower = min(startIndex, endIndex)
-        let upper = max(startIndex, endIndex)
+        let lower = min(minStart, minEnd)
+        let upper = max(maxStart, maxEnd)
         return Array(flat[lower...upper])
     }
 }

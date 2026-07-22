@@ -136,4 +136,71 @@ struct ChartingCursor: Equatable {
         }
         return false
     }
+    
+    mutating func jumpTo(tooth: Int, aspect: ChartAspect, updateSequenceIndex: Bool = true) -> Bool {
+        let originalPrimary = primaryIndex
+        let originalSecondary = secondaryIndex
+        let originalSequenceIndex = sequenceIndex
+        let originalSequence = currentSequence
+        let originalAspect = currentAspect
+        let originalTooth = currentTooth
+        
+        let primaryLimit = configuration.primaryOrder == .jawFirst ? configuration.jawOrder.count : configuration.aspectOrder.count
+        for p in 0..<primaryLimit {
+            let secondaryLimit: Int
+            if configuration.primaryOrder == .jawFirst {
+                let jaw = configuration.jawOrder[p]
+                secondaryLimit = (jaw == .upper ? configuration.upperAspectOrder : configuration.lowerAspectOrder).count
+            } else {
+                let a = configuration.aspectOrder[p]
+                secondaryLimit = (a == .buccal ? configuration.buccalJawOrder : configuration.palatalJawOrder).count
+            }
+            
+            for s in 0..<secondaryLimit {
+                let testAspect: ChartAspect
+                let testSequence: [Int]
+                
+                if configuration.primaryOrder == .jawFirst {
+                    let jaw = configuration.jawOrder[p]
+                    let aspectOrder = jaw == .upper ? configuration.upperAspectOrder : configuration.lowerAspectOrder
+                    let aspectEnum = aspectOrder[s]
+                    testAspect = (aspectEnum == .buccal) ? .outer : .inner
+                    testSequence = configuration.getSequence(for: jaw, aspect: aspectEnum)
+                } else {
+                    let aspectEnum = configuration.aspectOrder[p]
+                    let jawOrder = aspectEnum == .buccal ? configuration.buccalJawOrder : configuration.palatalJawOrder
+                    let jaw = jawOrder[s]
+                    testAspect = (aspectEnum == .buccal) ? .outer : .inner
+                    testSequence = configuration.getSequence(for: jaw, aspect: aspectEnum)
+                }
+                
+                if testAspect == aspect, let idx = testSequence.firstIndex(of: tooth) {
+                    if updateSequenceIndex {
+                        primaryIndex = p
+                        secondaryIndex = s
+                        currentSequence = testSequence
+                        currentAspect = testAspect
+                        sequenceIndex = idx
+                        currentTooth = tooth
+                    } else {
+                        primaryIndex = originalPrimary
+                        secondaryIndex = originalSecondary
+                        sequenceIndex = originalSequenceIndex
+                        currentSequence = originalSequence
+                        currentAspect = originalAspect
+                        currentTooth = tooth
+                    }
+                    return true
+                }
+            }
+        }
+        
+        primaryIndex = originalPrimary
+        secondaryIndex = originalSecondary
+        sequenceIndex = originalSequenceIndex
+        currentSequence = originalSequence
+        currentAspect = originalAspect
+        currentTooth = originalTooth
+        return false
+    }
 }

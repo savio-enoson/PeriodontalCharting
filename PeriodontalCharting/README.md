@@ -130,7 +130,7 @@ PeriodontalChartingApp
 - `ChartDashboard` owns `mouth: [Int: ToothObject]` (the entire clinical record) and two `@StateObject`s: `ChartSelectionModel` (which cells are highlighted orange) and `AIVoiceViewModel` (the voice pipeline state).
 - `ChartSelectionModel` is injected as an `@EnvironmentObject`, allowing `ToothColumnView` to read highlight state without prop-drilling.
 - When `AIVoiceViewModel.commandHistory` changes, `ChartDashboard.onChange` rebuilds `mouth` from scratch by replaying all commands in order. This ensures idempotency — replaying the full history always produces the same chart state regardless of mid-stream parsing artefacts.
-- `ChartDashboard` also observes `aiViewModel.currentCursor` and `aiViewModel.activeSelection` to keep the orange highlight mask and `ScrollViewProxy` camera in sync with the parser.
+- `ChartDashboard` observes `aiViewModel.currentCursor` to keep the `ScrollViewProxy` camera in sync with the underlying parser tooth position. It avoids listening to volatile `activeSelection` changes to prevent jittery, jumpy scrolling while applying in-place modifiers.
 
 ---
 
@@ -281,6 +281,29 @@ The probing depth line represents the bottom of the periodontal pocket:
 
 For upper jaw: outer (facial) is non-mirrored (top), inner (palatal) is mirrored (bottom). For lower jaw: reversed. This ensures roots always point toward the dental arch center, consistent with WHO charting convention.
 
+### `ViewModels/AIVoiceViewModel.swift`
+
+An `@MainActor` `ObservableObject` that orchestrates the voice parsing simulation and maintains the live state of the NLP pipeline.
+
+#### State properties
+
+| Property | Type | Role |
+|---|---|---|
+| `liveTranscription` | `String` | The raw incoming text stream, updated word-by-word during simulation. |
+| `isListening` | `Bool` | Whether the simulation or live microphone recording is currently active. |
+| `currentCommand` | `AnnotationCommand?` | The most recent command emitted by the parser for the current metric. |
+| `commandHistory` | `[AnnotationCommand]` | The complete list of all applied mutations. `ChartDashboard` listens to this to rebuild the mouth. |
+| `currentCursor` | `ChartingCursor?` | The current traversal position of the parser. |
+| `activeSelection` | `TeethSelection?` | Any explicitly targeted out-of-sequence selection (e.g. from "BOP 16"). |
+| `pendingValues` | `[String]` | Numbers buffered by the parser but not yet committed. |
+| `wpm` | `Double` | Simulation playback speed (Words Per Minute). |
+
+#### Simulation Engine
+
+- **`startSimulation(from:)`** — Splits the input transcript (e.g., `dr_lucky_ground.txt`) into an array of words. Spawns an async `Task` that loops through the array, appending one word at a time to `liveTranscription`.
+- **Parsing per word** — On every loop iteration, a fresh `VoiceCommandParser` is instantiated and runs `parse(text: liveTranscription, isFinal: false)`. The view model then copies the parser's internal state (`cursor`, `activeSelection`, `pendingValues`) into its own `@Published` properties, which drives the UI updates in `AIListeningView` and `ChartDashboard`.
+- **`flushTimer`** — A 1.5-second inactivity timer. If no new words arrive (e.g. the clinician pauses dictation), the timer fires and runs `parse(text: isFinal: true)`, forcing the parser to commit any pending numeric values or boolean metrics.
+
 ---
 
 ### `Views/Voice/AIListeningView.swift`
@@ -412,8 +435,8 @@ Represents a parsed target range. `expectedSlots` is the count of `(tooth, aspec
 
 Static utility with two key functions:
 
-- **`resolve(anatomy:for:currentAspect:)`** — maps an `AnatomyType` token to `(ChartAspect, siteIndex)`. Handles the right-side mirror: on teeth 11-18 and 41-48, "mesial" = site index 2 (distal from chart perspective); on 21-28 and 31-38, "mesial" = site index 0.
-- **`sequence(from:to:)`** — returns the contiguous `[(tooth, aspect, site)]` slice between two coordinates in canonical mouth order. Powers both range command parsing and highlight mask generation.
+- **`resolve(anatomy:for:currentAspect:)`** — maps an `AnatomyType` token to `(ChartAspect, siteIndex)`. Handles the right-side mirror: on teeth 11-18 and 41-48, "mesial" = site index 2 (distal from chart perspective); on 21-28 and 31-38, "mesial" = site index 0. Single-sided calls like `.mesial` strictly return their precise isolated target site without affecting the opposite site.
+- **`sequence(from:to:)`** — returns the contiguous `[(tooth, aspect, site)]` slice between two coordinates in canonical mouth order. Allows sequences to optionally include specific start and end site boundaries. Powers both range command parsing and highlight mask generation.
 
 ### Factory Methods
 
@@ -493,7 +516,9 @@ State machine called on every new word. Text is fully re-tokenized from scratch 
 2. Single value + `targetSlots > 1` -> broadcast to fill all slots (e.g., `"2"` -> `[2,2,2]`).
 3. Fewer values than slots -> pad by repeating the last value.
 4. **Direction reversal:** if the configuration specifies Right-to-Left for the current jaw/aspect, reverse the values array before emission. Maps the clinician's natural dictation order to the correct anatomical site indices without requiring them to reverse.
-5. Emit `AnnotationCommand`, advance cursor (skipping `missingTeeth`), clear `activeSelection`.
+5. Emit `AnnotationCommand`.
+6. **Auto-advance mechanism:** If the active metric is `.probingDepth`, advance cursor (skipping `missingTeeth`). Modifiers like `.gingivalMargin` and `.mobility` will intentionally *not* auto-advance, keeping focus on the current tooth indefinitely to allow the clinician to add further modifiers on different aspects without the UI jumping prematurely.
+7. Clear `activeSelection`.
 
 #### Token handling rules
 
@@ -518,6 +543,14 @@ State machine called on every new word. Text is fully re-tokenized from scratch 
 **`.anatomy(a)`** — For jaw tokens: `cursor.jumpTo(jaw:)`. For directional anatomies: if next token is `.toothIdentifier`, defer (anatomy consumed as `startAnatomy`); otherwise resolve to a single-site `activeSelection` on the current tooth.
 
 **`.word("minus")` + `.number(n)`** — Append `-n`, skip both tokens.
+
+#### Auto-Advance & State Restoration
+
+To balance hands-free flow with precise corrections, the parser distinguishes between **in-sequence** dictation and **out-of-band** (post-targeted) corrections:
+
+1. **Auto-Advance (`isPlainTooth`)**: The cursor automatically advances to the next tooth *only* if the current metric is `.probingDepth` and the selection is a "plain tooth" (i.e., `activeSelection` has no specific sub-aspect or site). This allows the clinician to seamlessly rattle off probing depths (e.g., `"3 2 3 ... 2 2 2"`) across the arch.
+2. **Suspension & Post-Targeting**: If the clinician is charting probing depths and suddenly dictates a modifier (e.g., `"Resesi 1 mili Mesial"`), the parser treats this as an out-of-band post-target. It temporarily suspends the sequence, creates a localized `TeethSelection` for the mesial site, flushes the gingival margin value, and then automatically invokes `restoreToMainSequence()`. This restores the metric back to `.probingDepth` so the clinician can immediately resume their probing depth sequence (e.g., `"2 2 2"`) without needing to manually re-declare the metric.
+3. **Anatomy Lookahead**: When encountering an anatomy token (e.g., `"Lingual"`), `resolveAnatomyWithLookahead` scans ahead in the token stream. If it finds exactly 1 or 2 numbers, it assumes the clinician is targeting a specific mid-site (site index 1). If it finds 3 numbers (e.g., `"Lingual 2 2 3"`), it infers a full-aspect target, leaving `site = nil` so the parser expects a 3-slot array.
 
 #### Streaming / flush timer
 
