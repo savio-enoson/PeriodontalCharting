@@ -4,7 +4,10 @@ struct SelectionDebugMenu: View {
     @EnvironmentObject var selectionModel: ChartSelectionModel
     @EnvironmentObject var aiViewModel: AIVoiceViewModel
     @Environment(\.dismiss) var dismiss
-
+    
+    @State private var showAlert = false
+    @State private var alertMessage = ""
+    
     var body: some View {
         NavigationStack {
             List {
@@ -12,6 +15,59 @@ struct SelectionDebugMenu: View {
                     VStack(alignment: .leading) {
                         Text("WPM: \(Int(aiViewModel.wpm))")
                         Slider(value: $aiViewModel.wpm, in: 20...300, step: 10)
+                    }
+                }
+                
+                Section("Instant Fill (Testing)") {
+                    Picker("Test Transcript", selection: $aiViewModel.selectedTestTranscriptName) {
+                        ForEach(TestTranscripts.all, id: \.0) { transcript in
+                            Text(transcript.0).tag(transcript.0)
+                        }
+                    }
+                    
+                    Button("Fill Chart") {
+                        if let text = TestTranscripts.all.first(where: { $0.0 == aiViewModel.selectedTestTranscriptName })?.1 {
+                            aiViewModel.parseInstant(text: text)
+                        }
+                        dismiss()
+                    }
+                    
+                    Button("Clear Chart", role: .destructive) {
+                        aiViewModel.parseInstant(text: "")
+                        selectionModel.selectedCells.removeAll()
+                        dismiss()
+                    }
+                }
+                
+                Section("Regression Testing") {
+                    Button("Save as Ground Truth") {
+                        if let text = TestTranscripts.all.first(where: { $0.0 == aiViewModel.selectedTestTranscriptName })?.1 {
+                            // Fetch active config or default
+                            let config = (try? JSONDecoder().decode(ChartingConfiguration.self, from: UserDefaults.standard.data(forKey: "ChartingConfiguration") ?? Data())) ?? ChartingConfiguration()
+                            let mouth = ChartTestingUtilities.parseTranscript(text: text, config: config)
+                            let success = ChartTestingUtilities.saveChart(mouth: mouth)
+                            alertMessage = success ? "Successfully saved ground truth to project folder." : "Failed to save ground truth."
+                            showAlert = true
+                        }
+                    }
+                    
+                    Button("Test vs Ground Truth") {
+                        if let text = TestTranscripts.all.first(where: { $0.0 == aiViewModel.selectedTestTranscriptName })?.1 {
+                            let expected = ChartTestingUtilities.loadChart()
+                            if let expected = expected {
+                                let config = (try? JSONDecoder().decode(ChartingConfiguration.self, from: UserDefaults.standard.data(forKey: "ChartingConfiguration") ?? Data())) ?? ChartingConfiguration()
+                                let actual = ChartTestingUtilities.parseTranscript(text: text, config: config)
+                                let diffs = ChartTestingUtilities.compareCharts(expected: expected, actual: actual)
+                                if diffs.isEmpty {
+                                    alertMessage = "✅ Regression Test PASSED: No differences found."
+                                } else {
+                                    alertMessage = "❌ Regression Test FAILED:\n" + diffs.joined(separator: "\n")
+                                }
+                            } else {
+                                alertMessage = "⚠️ No ground truth found. Please save it first."
+                            }
+                            showAlert = true
+                        }
                     }
                 }
                 
@@ -73,6 +129,11 @@ struct SelectionDebugMenu: View {
                         dismiss()
                     }
                 }
+            }
+            .alert("Regression Test", isPresented: $showAlert) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(alertMessage)
             }
         }
     }

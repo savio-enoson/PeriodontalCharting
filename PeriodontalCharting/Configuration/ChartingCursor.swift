@@ -13,6 +13,16 @@ struct ChartingCursor: Equatable {
     private(set) var sequenceIndex: Int = 0
     private(set) var currentSequence: [Int] = []
     
+    var currentJaw: JawType {
+        if configuration.primaryOrder == .jawFirst {
+            return configuration.jawOrder[primaryIndex]
+        } else {
+            let aspectEnum = configuration.aspectOrder[primaryIndex]
+            let jawOrder = aspectEnum == .buccal ? configuration.buccalJawOrder : configuration.palatalJawOrder
+            return jawOrder[secondaryIndex]
+        }
+    }
+    
     init(configuration: ChartingConfiguration) {
         self.configuration = configuration
         self.currentTooth = 18
@@ -125,12 +135,27 @@ struct ChartingCursor: Equatable {
     }
     
     mutating func jumpTo(aspect: AspectType) -> Bool {
+        let prevTooth = currentTooth
         if configuration.primaryOrder == .jawFirst {
             let jaw = configuration.jawOrder[primaryIndex]
             let order = jaw == .upper ? configuration.upperAspectOrder : configuration.lowerAspectOrder
             if let idx = order.firstIndex(of: aspect) {
                 secondaryIndex = idx
                 setupSequence()
+                if let newIdx = currentSequence.firstIndex(of: prevTooth) {
+                    sequenceIndex = newIdx
+                    currentTooth = prevTooth
+                }
+                return true
+            }
+        } else {
+            if let idx = configuration.aspectOrder.firstIndex(of: aspect) {
+                primaryIndex = idx
+                setupSequence()
+                if let newIdx = currentSequence.firstIndex(of: prevTooth) {
+                    sequenceIndex = newIdx
+                    currentTooth = prevTooth
+                }
                 return true
             }
         }
@@ -202,5 +227,11 @@ struct ChartingCursor: Equatable {
         currentAspect = originalAspect
         currentTooth = originalTooth
         return false
+    }
+    
+    mutating func resyncToothToSequence() {
+        if sequenceIndex >= 0 && sequenceIndex < currentSequence.count {
+            currentTooth = currentSequence[sequenceIndex]
+        }
     }
 }

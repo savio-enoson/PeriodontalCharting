@@ -8,12 +8,12 @@ resesi dari mesio bukal 17 sampai disto bukal 15 minus 1
 BOP dari bukal 16 hingga bukal 15
 
 Lanjut
-2 2 2 
+2 2 2
 2 2 2
 2 2 2
 
 2 2 2
-2 2 2 
+2 2 2
 2 2 2
 3 4 5
 5 5 5
@@ -29,7 +29,7 @@ Lanjut palatal
 4 4 4
 4 2 2
 
-BOP dari Mesio Bukal 26 sampai Disto bukal 24.
+BOP dari Mesio palatal 26 sampai Disto palatal 24.
 Lanjut, 23.
 2 2 2
 2 2 2
@@ -44,14 +44,14 @@ Lanjut, 23.
 3 3 2
 
 15 palatal. Resesi palatal dan disto palatal 1.
-16 Resesi Mesio bukal 2. Bukal 4. Distol bukal 2
-17 resesi mesio bukal 1
+16 Resesi Mesio palatal 2. palatal 4. Disto palatal 2
+17 resesi mesio palatal 1
 BOP dimulai dari disto lingual 15 hingga palatal 16
 plaque pada semua gigi
 
 rahang bawah
 38 gak ada
-2 2 2 
+2 2 2
 2 2 2
 2 2 2
 2 2 2
@@ -63,15 +63,15 @@ rahang bawah
 2 2 2
 Resesi 2 mili pada labial 31, 32, 41, 42
 
-Lanjut 43, 
-2 2 2 
-2 2 2 
-2 2 2 
+Lanjut 43,
+2 2 2
+2 2 2
+2 2 2
 
 Resesi 1 mili, distal 45
 46 tidak ada
 
-3, 2, 2 
+3, 2, 2
 
 Resesi 1 mili Mesial 47
 
@@ -83,7 +83,7 @@ Resesi 1 mili Mesial
 2 2 2
 Resesi satu mili distal
 
-2 2 2 
+2 2 2
 2 2 2
 2 2 2
 2 2 2

@@ -14,6 +14,10 @@ class AIVoiceViewModel: ObservableObject {
     @Published var pendingValues: [String] = []
     @Published var wpm: Double = 100.0
     
+    @Published var selectedTestTranscriptName: String = TestTranscripts.all.first?.0 ?? ""
+    var selectedTestTranscript: String {
+        return TestTranscripts.all.first(where: { $0.0 == selectedTestTranscriptName })?.1 ?? ""
+    }
     private var simulationTask: Task<Void, Never>?
     private var flushTimer: Timer?
     private var words: [String] = []
@@ -128,15 +132,46 @@ Plaque pada semua gigi
     /// Toggles the live dictation feed simulation. If paused, it resumes.
     func toggleSimulation(from text: String? = nil) {
         if isListening {
-            stopSimulation()
+            internalStopSimulation()
         } else {
             startSimulation(from: text)
         }
     }
     
+    func stopSimulation() {
+        simulationTask?.cancel()
+        flushTimer?.invalidate()
+        isListening = false
+    }
+    
+    func parseInstant(text: String) {
+        stopSimulation()
+        liveTranscription = text
+        let parser = VoiceCommandParser(configuration: self.getConfiguration())
+        let parsedFinal = parser.parse(text: text, isFinal: true)
+        
+        self.commandHistory = parsedFinal
+        if let last = parsedFinal.last, last.operation == parser.cursor.currentMetric {
+            self.currentCommand = last
+        } else {
+            self.currentCommand = nil
+        }
+        self.currentCursor = parser.cursor
+        self.activeSelection = parser.activeSelection
+        self.pendingValues = parser.pendingValues
+    }
+    
+    private func internalStopSimulation() {
+        stopSimulation()
+    }
+
     private func startSimulation(from text: String?) {
         if let newText = text {
-            self.words = newText.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
+            let spaced = newText
+                .replacingOccurrences(of: "\n", with: " \n ")
+                .replacingOccurrences(of: ".", with: " . ")
+                .replacingOccurrences(of: ",", with: " , ")
+            self.words = spaced.components(separatedBy: " ").filter { !$0.isEmpty }
             self.currentWordIndex = 0
             self.liveTranscription = ""
             self.commandHistory = []
@@ -151,7 +186,7 @@ Plaque pada semua gigi
                 if Task.isCancelled { break }
                 
                 let word = words[currentWordIndex]
-                if !liveTranscription.isEmpty {
+                if !liveTranscription.isEmpty && word != "\n" && word != "." && word != "," {
                     liveTranscription += " "
                 }
                 liveTranscription += word
@@ -173,26 +208,27 @@ Plaque pada semua gigi
                 
                 self.flushTimer?.invalidate()
                 self.flushTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: false) { [weak self] _ in
-                    guard let self = self else { return }
-                    let parserFinal = VoiceCommandParser(configuration: self.getConfiguration())
-                    let parsedFinal = parserFinal.parse(text: self.liveTranscription, isFinal: true)
-                    self.commandHistory = parsedFinal
-                    if let last = parsedFinal.last, last.operation == parserFinal.cursor.currentMetric {
-                        self.currentCommand = last
-                    } else {
-                        self.currentCommand = nil
+                    Task { @MainActor [weak self] in
+                        guard let self = self else { return }
+                        let parserFinal = VoiceCommandParser(configuration: self.getConfiguration())
+                        let parsedFinal = parserFinal.parse(text: self.liveTranscription, isFinal: true)
+                        self.commandHistory = parsedFinal
+                        if let last = parsedFinal.last, last.operation == parserFinal.cursor.currentMetric {
+                            self.currentCommand = last
+                        } else {
+                            self.currentCommand = nil
+                        }
+                        self.currentCursor = parserFinal.cursor
+                        self.activeSelection = parserFinal.activeSelection
+                        self.pendingValues = parserFinal.pendingValues
                     }
-                    self.currentCursor = parserFinal.cursor
-                    self.activeSelection = parserFinal.activeSelection
-                    self.pendingValues = parserFinal.pendingValues
                 }
                 
                 currentWordIndex += 1
                 
                 let wordsPerSecond = wpm / 60.0
                 let secondsPerWord = 1.0 / wordsPerSecond
-                let nanosecondsPerWord = UInt64(secondsPerWord * 1_000_000_000)
-                try? await Task.sleep(nanoseconds: nanosecondsPerWord)
+                try? await Task.sleep(for: .seconds(secondsPerWord))
             }
             
             // Final flush when completely done
@@ -211,11 +247,6 @@ Plaque pada semua gigi
             
             isListening = false
         }
-    }
-    
-    func stopSimulation() {
-        simulationTask?.cancel()
-        isListening = false
     }
     
     private func getConfiguration() -> ChartingConfiguration {

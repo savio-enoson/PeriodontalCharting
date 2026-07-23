@@ -24,7 +24,7 @@ struct AIListeningView: View {
                     
                     // DEBUG: Start Simulation
                     Button(action: {
-                        viewModel.toggleSimulation(from: AIVoiceViewModel.debugTranscript)
+                        viewModel.toggleSimulation(from: viewModel.selectedTestTranscript)
                     }) {
                         Image(systemName: viewModel.isListening ? "stop.circle.fill" : "play.circle.fill")
                             .font(.title2)
@@ -39,15 +39,23 @@ struct AIListeningView: View {
                         .font(.caption.weight(.bold))
                         .foregroundStyle(.secondary)
                     
-                    ScrollView {
-                        Text(viewModel.liveTranscription.isEmpty ? "Waiting for dictation..." : viewModel.liveTranscription)
-                            .font(.system(.footnote, design: .monospaced))
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .foregroundStyle(viewModel.liveTranscription.isEmpty ? .tertiary : .primary)
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            Text(viewModel.liveTranscription.isEmpty ? "Waiting for dictation..." : viewModel.liveTranscription)
+                                .font(.system(.footnote, design: .monospaced))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .foregroundStyle(viewModel.liveTranscription.isEmpty ? .tertiary : .primary)
+                                .id("transcriptText")
+                        }
+                        .onChange(of: viewModel.liveTranscription) { _, _ in
+                            withAnimation(.easeOut(duration: 0.2)) {
+                                proxy.scrollTo("transcriptText", anchor: .bottom)
+                            }
+                        }
+                        .padding()
+                        .frame(height: 120) // Fixed height for ~5 lines
+                        .background(Color.white, in: RoundedRectangle(cornerRadius: 12))
                     }
-                    .padding()
-                    .frame(minHeight: 120) // Roughly 5 lines of monospace text
-                    .background(Color.white, in: RoundedRectangle(cornerRadius: 12))
                 }
                 
                 // Section 2: Current Command

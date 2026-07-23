@@ -26,7 +26,7 @@ class AudioManager: NSObject, ObservableObject {
     }
     
     func requestPermission(completion: @escaping (Bool) -> Void) {
-        AVAudioSession.sharedInstance().requestRecordPermission { granted in
+        AVAudioApplication.requestRecordPermission { granted in
             DispatchQueue.main.async {
                 completion(granted)
             }
@@ -36,7 +36,7 @@ class AudioManager: NSObject, ObservableObject {
     func startRecording(filename: String = "voice_sample.wav") {
         let session = AVAudioSession.sharedInstance()
         do {
-            try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth])
+            try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothHFP])
             try session.setActive(true)
             
             let documentPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]

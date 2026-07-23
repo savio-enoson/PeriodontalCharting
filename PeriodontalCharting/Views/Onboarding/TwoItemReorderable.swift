@@ -62,7 +62,7 @@ struct TwoItemReorderable<Item: Hashable, Content: View>: View {
                                 .onAppear {
                                     if geo.size.height > 10 { itemHeight = geo.size.height }
                                 }
-                                .onChange(of: geo.size.height) { newH in
+                                .onChange(of: geo.size.height) { _, newH in
                                     if newH > 10 { itemHeight = newH }
                                 }
                         }

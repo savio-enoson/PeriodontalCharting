@@ -48,10 +48,11 @@ struct ChartingConfiguration: Codable, Equatable {
     var palatalJawOrder: [JawType] = [.upper, .lower]
     
     // Direction mapping: e.g. "Upper-Buccal" -> .leftToRight
+    // Default follows a continuous zig-zag pattern around the mouth
     var directionMapping: [String: AnnotationDirection] = [
         "Upper-Buccal": .leftToRight,
-        "Upper-Palatal": .leftToRight,
-        "Lower-Buccal": .leftToRight,
+        "Upper-Palatal": .rightToLeft,
+        "Lower-Buccal": .rightToLeft,
         "Lower-Palatal": .leftToRight
     ]
     

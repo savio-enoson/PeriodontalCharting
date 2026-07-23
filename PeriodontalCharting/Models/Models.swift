@@ -1,32 +1,32 @@
 import SwiftUI
 import Combine
 
-enum MobilityClass: Int, CaseIterable {
+enum MobilityClass: Int, CaseIterable, Codable {
     case zero = 0
     case one = 1
     case two = 2
     case three = 3
 }
 
-enum FurcationClass: Int, CaseIterable {
+enum FurcationClass: Int, CaseIterable, Codable {
     case zero = 0
     case one = 1
     case two = 2
     case three = 3
 }
 
-struct FurcationData: Equatable {
+struct FurcationData: Equatable, Codable {
     var outer: [FurcationClass]
     var inner: [FurcationClass]
 }
 
-struct AspectData<T: Equatable>: Equatable {
+struct AspectData<T: Equatable & Codable>: Equatable, Codable {
     var outer: [T]
     var inner: [T]
 }
 
-struct ToothObject: Identifiable, Equatable {
-    let id = UUID()
+struct ToothObject: Identifiable, Equatable, Codable {
+    var id = UUID()
     var toothNumber: Int
     var probingDepth: AspectData<Int> = AspectData(outer: [0,0,0], inner: [0,0,0])
     var gingivalMargin: AspectData<Int> = AspectData(outer: [0,0,0], inner: [0,0,0])
@@ -106,7 +106,7 @@ struct ChartAnatomyResolver {
         case .mesioBuccal, .mesioLingual, .mesioPalatal, .mesial: isMesial = true
         case .distoBuccal, .distoLingual, .distoPalatal, .distal: isMesial = false
         case .buccal, .labial, .lingual, .palatal:
-            return (aspect, nil)
+            return (aspect, 1)
         default: return nil
         }
         
