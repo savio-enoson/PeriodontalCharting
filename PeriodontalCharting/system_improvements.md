@@ -1,305 +1,242 @@
-# NLP System — Improvements Analysis
+# NLP System — Corrected Improvements Plan
 
-Findings are grouped by category. Each item is grounded in specific source lines.
-
----
-
-## Category 1 — Definite Bugs
-
-These are code paths where the current logic is provably wrong or will crash under a realistic input.
+The previous analysis contained **two critically wrong fix proposals** that break the existing transcripts. This document retracts those, explains exactly why, and provides a corrected list of what is genuinely safe to implement.
 
 ---
 
-### Bug 1 — Force-unwrap crash in `resolveAnatomyWithLookahead`
+## ❌ RETRACTED — Fixes that break existing functionality
 
+### ~~Issue 8/9 — Sign change in `flushNumbers`~~
+
+**Original proposal:** Replace `abs(n) * currentMetricMultiplier` with `n * currentMetricMultiplier`.
+
+**Why it's wrong — transcript proof:**
+
+`dr_lucky_ground.txt` line 7:
+```
+resesi dari mesio bukal 17 sampai disto bukal 15 minus 1
+```
+
+The `"minus 1"` handler appends `-1` to `currentNumbers`. Then `flushNumbers` runs:
+- **Current code:** `abs(-1) * -1 = -1` ✓ recession correctly stored
+- **Proposed fix:** `-1 * -1 = +1` ✗ — stored as positive (pseudopocket), completely wrong
+
+The `abs()` is **intentional**. It strips the sign before applying the metric-direction multiplier. The `"minus"` keyword and the `"resesi"` multiplier are two independent sign-control mechanisms that should NOT interact. The `"margin minus 2"` edge case I identified is a real but **acceptable limitation** — in clinical practice, recording a negative gingival margin with the `"margin"` keyword is non-standard. This fix must **not** be implemented.
+
+---
+
+### ~~Bug 3 — `lastAutoAdvancedFromTooth` in `restoreToMainSequence`~~
+
+**Original proposal:** Add `lastAutoAdvancedFromTooth = nil` to `restoreToMainSequence()`.
+
+**Why it's wrong — call-site analysis:**
+
+Every call site of `restoreToMainSequence()` that is followed by more tokens **already** clears `lastAutoAdvancedFromTooth` before calling it:
+
+| Call site | Clear happens before? |
+|---|---|
+| `.action(.next/.commit)` | Yes — `lastAutoAdvancedFromTooth = nil` at the top of the `.action` case |
+| `.action(.missing)` | Yes — same |
+| `.action(.anatomy jaw)` | Yes — the snap-back check fires and clears, or there are no more tokens |
+| `.number` case → `flushPostTargetIfPending()` | **No** — but `lastAutoAdvancedFromTooth = nil` is set on line 48 *after* the call. Any subsequent token processes with `nil`. |
+| `isFinal` block | No more tokens follow, so stale value is harmless |
+
+The only potentially dangerous path (`.number` → `flushPostTargetIfPending()` → `restoreToMainSequence()` with stale `lastAutoAdvancedFromTooth`) is safe because:
+1. The `.number` handler sets `lastAutoAdvancedFromTooth = nil` on line 48, right after `flushPostTargetIfPending()` returns
+2. No snap-back can fire between the `restoreToMainSequence()` call and that line 48 assignment (it's synchronous)
+
+Furthermore, the parser is **re-instantiated on every word** (`AIVoiceViewModel` creates a fresh `VoiceCommandParser` each call), so `lastAutoAdvancedFromTooth` can never accumulate across words anyway. Adding this to `restoreToMainSequence()` is **not needed and creates unnecessary cognitive complexity**.
+
+---
+
+## ✅ CONFIRMED SAFE — Fixes with no behavior impact on existing transcripts
+
+---
+
+### Fix 1 — Force-unwrap crash protection (Bug 1)
 **File:** `VoiceCommandParser+Lookahead.swift`, line 41
 
 ```swift
+// BEFORE
 return (resolved.aspect!, resolved.site)
+
+// AFTER
+guard let aspect = resolved.aspect else { return nil }
+return (aspect, resolved.site)
 ```
 
-`ChartAnatomyResolver.resolve` returns `(aspect: ChartAspect?, site: Int?)?`. The outer optional is handled by `guard`, but the inner `aspect` is force-unwrapped. Looking at `ChartAnatomyResolver.resolve` in `Models.swift` lines 100–101:
-
-```swift
-default:
-    return nil  // jaw anatomy tokens fall here
-```
-
-The caller (`+Parse.swift` line 485) filters jaw tokens separately, so the path is currently safe. But if a new `AnatomyType` case is added without updating the caller's filter, the force-unwrap crashes the app.
-
-**Fix:** Replace with `guard let aspect = resolved.aspect else { return nil }`.
+**Transcript impact:** Zero. The `resolved.aspect` is only nil for jaw-type anatomy tokens, and the call sites filter those out. This is purely a defensive change for future extensibility. Does not alter any token's output.
 
 ---
 
-### Bug 2 — `_sep_` skipped in `.toothIdentifier` range lookahead
-
+### Fix 2 — `_sep_` barrier in `.toothIdentifier` range lookahead (Bug 2)
 **File:** `VoiceCommandParser+Parse.swift`, lines 162–165
 
 ```swift
+// BEFORE
 while peek < tokens.count {
     if case .word(_) = tokens[peek] { peek += 1; continue }
     break
 }
-```
 
-This word-skip loop (looking for `sampai`/`hingga` after a tooth identifier) skips **all** `.word` tokens, including `_sep_`. Compare to the `.until` action handler (lines 360–363), which correctly excludes `_sep_`:
-
-```swift
-if case .word(let w) = tokens[peek], w != "_sep_" { peek += 1; continue }
-```
-
-**Impact:** A period or newline between a tooth number and `sampai` on the next dictation line could accidentally produce a cross-sentence range.
-
-**Fix:** Apply the same `w != "_sep_"` guard to the `.toothIdentifier` lookahead.
-
----
-
-### Bug 3 — `lastAutoAdvancedFromTooth` not cleared in `restoreToMainSequence`
-
-**File:** `VoiceCommandParser+Flush.swift`, lines 4–13
-
-`restoreToMainSequence()` never resets `lastAutoAdvancedFromTooth`. This variable is only cleared by `.action`, `.toothIdentifier`, and `.number` tokens.
-
-**Failing case:**
-```
-"Resesi 2 pada 31  BOP"
-```
-After the post-target flush calls `restoreToMainSequence()`, `lastAutoAdvancedFromTooth` may still hold a stale value from a previous PD auto-advance. The `BOP` `.metric` handler then incorrectly snaps the cursor backward.
-
-**Fix:** Add `lastAutoAdvancedFromTooth = nil` inside `restoreToMainSequence()`.
-
----
-
-### Bug 4 — `startPostTargeting` pops the last command by operation type only
-
-**File:** `VoiceCommandParser+Flush.swift`, lines 168–171
-
-```swift
-} else if let last = commands.last, last.operation == cursor.currentMetric {
-    postTargetTemplate = commands.popLast()
-    didCreateTemplate = true
+// AFTER
+while peek < tokens.count {
+    if case .word(let w) = tokens[peek], w != "_sep_" { peek += 1; continue }
+    break
 }
 ```
 
-When `startPostTargeting()` is called with empty `currentNumbers`, it pops the last emitted command as the template — checking only `operation == currentMetric`. If a modifier command (e.g., `.missing`) was emitted between two PD commands, the guard fails and the post-target is **silently ignored**.
+**Transcript impact check for `dr_lucky_ground`:**
 
-**Failing case:** `"gigi 18 gak ada  3 2 3  pada mesio bukal"` — the last command is `.missing`, so the guard fails and `didCreateTemplate = false`.
+- Line 32: `"BOP dari Mesio palatal 26 sampai Disto palatal 24."` — The period becomes `_sep_` AFTER `24`, not between `26` and `sampai`. The `sampai` range lookahead starts from `26` and looks rightward — it finds `sampai` before hitting any `_sep_`. ✓ Safe.
+- Line 33: `"Lanjut, 23."` — No range, no impact. ✓
+- Line 46: `"15 palatal. Resesi palatal dan disto palatal 1."` — The `15` is followed by `palatal`, then `_sep_`. No `sampai`/`hingga` after `15`, so the range lookahead terminates immediately at `_sep_`. ✓ Safe.
+- Line 47: `"16 Resesi Mesio palatal 2. palatal 4. Disto palatal 2"` — `16` is followed by `Resesi`, not `sampai`. ✓ Not a range, no impact.
 
-**Fix:** Walk backward through `commands` to find the most recent matching operation, or explicitly emit a no-op when the post-target can't be resolved.
-
----
-
-## Category 2 — Robustness / Resilience Issues
-
-These produce wrong chart state under realistic dictation patterns.
+**Transcript impact check for `student_ground`:** None of the range patterns in `student_ground` have a `_sep_` between a tooth number and `sampai`/`hingga`. ✓ Safe.
 
 ---
 
-### Issue 5 — `TeethSelection.expectedSlots` uses hardcoded canonical tooth order
-
-**File:** `Models.swift`, lines 71–82
-
-The multi-tooth `expectedSlots` fallback uses a hardcoded canonical array:
+### Fix 3 — Explicit `.from` no-op (Issue 9 / code clarity)
+**File:** `VoiceCommandParser+Parse.swift` — the `.action` switch
 
 ```swift
-let allTeeth = [
-    18,17,16,15,14,13,12,11, 21,22,23,24,25,26,27,28,
-    48,47,46,45,44,43,42,41, 31,32,33,34,35,36,37,38
-]
-```
-
-This is fine for intra-jaw ranges. But a range from T28 (canonical index 15) to T48 (canonical index 16) spans only 2 canonical steps, but T28 and T48 are anatomically far apart (upper-left last molar to lower-right last molar). The `min/max` slicing expands to include unintended teeth.
-
-**Fix:** Validate that start and end teeth share the same traversal sequence before computing slot counts. Cross-jaw/cross-aspect ranges should either be rejected or decomposed into two separate commands.
-
----
-
-### Issue 6 — `"lanjut"` filter hardcodes a 4-word aspect list
-
-**File:** `VoiceTokenizer+Parsing.swift`, lines 189–206
-
-```swift
-let aspectWords = ["palatal", "lingual", "bukal", "labial"]
-if aspectWords.contains(nextW) {
-    let thirdW = (i + 2 < words.count) ? words[i+2] : ""
-    var skipNext = true
-    if let tNum = Int(thirdW), tNum > 10 && tNum < 99 {
-        skipNext = false
-    }
-    ...
+// Add this branch explicitly (currently falls through silently):
+} else if a == .from {
+    // Intentional no-op. "dari" (from) anchors the start of a range but
+    // the actual start tooth is set by the following .toothIdentifier token.
+    // The .until / .until2 handler then closes the range from cursor.currentTooth.
 }
 ```
 
-The guard `Int(thirdW) > 10 && < 99` only handles bare integer tooth numbers. It misses:
-- `"gigi 16"` (two-word tooth identifier)
-- Indonesian verbal tooth numbers (`"gigi enambelas"`)
-
-So `"lanjut bukal gigi 16"` would discard `"bukal"` and leave `"gigi 16"` un-consumed, producing a spurious tooth jump.
-
-**Fix:** Expand the tooth guard to also check `thirdW == "gigi"`.
+**Transcript impact:** Zero. No behavior change, purely documents existing intent.
 
 ---
 
-### Issue 7 — `"nol"` (zero) injects an invalid probing depth
-
-**File:** `VoiceTokenizer+Parsing.swift`, lines 150–185
-
-`parseIntOrWord("nol")` returns `0`, producing `.number(0)`. A probing depth of 0 mm is clinically impossible on a present tooth. More importantly, STT drift could produce an unintended `"nol"` that silently injects a 0 into the next PD block via the broadcast/padding path: `"3 2 3  nol  2 2 2"` → the `0` gets broadcast to `[0, 0, 0]` for the next tooth.
-
-**Fix:** In `flushNumbers`, clamp `.probingDepth` values to a minimum of 1: `String(max(1, abs(n)))`. Alternatively, in the `.number` handler, discard a `0` when the current metric is `.probingDepth`.
-
----
-
-### Issue 8 — `"margin minus 2"` loses the minus sign
-
-**File:** `VoiceCommandParser+Flush.swift`, lines 59–64
+### Fix 4 — `"nol"` (zero) PD clamp — PD-ONLY, precisely scoped (Issue 7)
+**File:** `VoiceCommandParser+Flush.swift`, line 61
 
 ```swift
-} else {
-    valuesToEmit.append(String(abs(n) * currentMetricMultiplier))
-}
-```
-
-When the metric is `"resesi"` (`multiplier = -1`) and the clinician dictates a plain positive number, `abs(n) * -1` correctly produces a negative value. But when the metric is `"margin"` / `"gingival"` (`multiplier = 1`) and the clinician says `"margin minus 2"` (a pseudopocket going below CEJ), `currentNumbers = [-2]` and `abs(-2) * 1 = 2`. The explicit minus sign is lost.
-
-**Fix:** Remove `abs()` for non-PD metrics:
-
-```swift
+// BEFORE
 if m == .probingDepth {
     valuesToEmit.append(String(abs(n)))
-} else {
-    valuesToEmit.append(String(n * currentMetricMultiplier))
+
+// AFTER
+if m == .probingDepth {
+    valuesToEmit.append(String(max(1, abs(n))))
+```
+
+**Why this scope is safe:** The `max(1, ...)` clamp is ONLY applied inside the `m == .probingDepth` branch. The `else` branch (lines 62–64) for all other metrics (`gingivalMargin`, `mobility`, etc.) is unchanged. Gingival margin values of 0 (CEJ-level, no recession) are completely unaffected.
+
+**Transcript impact:** Neither `dr_lucky_ground` nor `student_ground` intentionally record PD = 0. The only risk is accidental STT `"nol"` which would previously corrupt the tooth. This is purely defensive. ✓ Safe.
+
+> ⚠️ **Important:** Do NOT apply `max(1, ...)` outside the `m == .probingDepth` branch. Gingival margin of 0 is clinically valid.
+
+---
+
+### Fix 5 — `static let` canonical flat array (Issue 11 / performance)
+**File:** `Models.swift` — inside `ChartAnatomyResolver`
+
+```swift
+// BEFORE: rebuilt on every sequence(from:to:) call
+var flat: [(Int, ChartAspect, Int)] = []
+for aspect in aspects {
+    for t in allTeeth {
+        for s in 0..<3 {
+            flat.append((t, aspect, s))
+        }
+    }
 }
-```
 
----
-
-### Issue 9 — `.from` / `"dari"` falls through silently with no handler
-
-**File:** `VoiceCommandParser+Parse.swift` — the `.action` switch has no `else if a == .from` branch
-
-`"dari"` is silently ignored (falls through to `tokenIndex += 1`). The current behavior works by coincidence: the tooth identifier following `"dari"` sets `activeSelection`, and `sampai` then extends it. But the design intent is invisible — a reader or future contributor has no way to know this is intentional.
-
-**Fix:** Add an explicit `else if a == .from { /* intentional no-op: start tooth set by following toothIdentifier */ }` comment case.
-
----
-
-## Category 3 — Performance
-
----
-
-### Issue 10 — O(n²) full re-tokenization on every word
-
-**File:** `AIVoiceViewModel.swift`
-
-The viewmodel calls `VoiceCommandParser.parse(text: liveTranscription, isFinal: false)` after appending each word. `liveTranscription` grows by one word per iteration, so the entire text is re-tokenized from scratch every time. For a 300-word transcript the total tokenization work is ~1+2+…+300 = ~45,000 word-processing steps.
-
-This is fine on modern iPads today, but becomes a bottleneck on older devices or very long sessions.
-
-**Fix (simple memoization):** Since `liveTranscription` only ever grows (never shrinks during streaming), memoize the last input/output pair:
-
-```swift
-private var lastTokenizedText = ""
-private var cachedTokens: [VoiceToken] = []
-
-// Before tokenizing, if new text starts with lastTokenizedText,
-// only tokenize the suffix (minus the last ~5 words as a lookahead window)
-// and prepend cachedTokens.
-```
-
-This reduces total work from O(n²) to O(n).
-
----
-
-### Issue 11 — `ChartAnatomyResolver.sequence` allocates a 192-element flat array per call
-
-**File:** `Models.swift`, lines 131–140
-
-Every `sequence(from:to:)` call builds a full 192-tuple flat array (32 teeth × 3 sites × 2 aspects) on the heap just to find two indices and slice. This function is called on every `TeethSelection.expectedSlots` access, which happens frequently during parsing.
-
-**Fix:** Hoist the full canonical flat array into a `static let`:
-
-```swift
-static let canonicalFlat: [(Int, ChartAspect, Int)] = {
-    let allTeeth = [18,17,...,38]
+// AFTER: add a static constant above sequence(from:to:)
+private static let _fullCanonicalFlat: [(Int, ChartAspect, Int)] = {
+    let allTeeth = [
+        18,17,16,15,14,13,12,11, 21,22,23,24,25,26,27,28,
+        48,47,46,45,44,43,42,41, 31,32,33,34,35,36,37,38
+    ]
     var flat: [(Int, ChartAspect, Int)] = []
     for aspect in [ChartAspect.outer, ChartAspect.inner] {
         for t in allTeeth { for s in 0..<3 { flat.append((t, aspect, s)) } }
     }
     return flat
 }()
+
+// Inside sequence(from:to:): use _fullCanonicalFlat directly
+// when aspects == [.outer, .inner] (both aspects needed).
+// Keep the per-aspect filter for same-aspect ranges.
 ```
 
-Computed once at first access, shared for all calls.
+> ⚠️ **Note:** The `aspects` variable in the existing code is `[start.1]` for same-aspect ranges and `[.outer, .inner]` for cross-aspect ranges. The static array covers the cross-aspect case. For same-aspect ranges, filter from the static array rather than rebuilding. The existing logic produces correct results; this change only affects allocation count.
+
+**Transcript impact:** Zero. Pure performance — no behavior change.
 
 ---
 
-## Category 4 — New Logic / Quality-of-Life Improvements
+### Fix 6 — Expanded STT spell correction (Improvement C)
+**File:** `VoiceTokenizer+Parsing.swift`, in the `words.map { word in switch word { ... } }` block
+
+```swift
+// Add these cases:
+case "sampe": return "sampai"           // Casual Indonesian "until"
+case "disco": return "disto"            // STT misread of "disto"
+case "mezzo": return "mesio"            // Italian-influenced STT
+case "probing depth": return "poket"   // English clinical term (handle pre-split)
+```
+
+**Transcript impact:** Neither transcript uses these words. Purely additive. ✓ Safe.
+
+> Note: `"probing depth"` as a two-word phrase won't be catchable in the per-word `map`. It needs pre-split normalization (like `"bleeding on probing"`) in the string-level section. The single-word ones (`"sampe"`, `"disco"`, `"mezzo"`) are safe in the `map`.
 
 ---
 
-### Improvement A — Mobility post-targeting
-
-`"kegoyangan 2 pada 16"` works, but `"16 kegoyangan 2"` or `"2 kegoyangan"` (number-before-metric) does not — the pending `2` is treated as the start of a PD block when the metric token arrives.
-
-**Fix:** In the `.metric` handler, if the incoming metric is `.mobility` and `currentNumbers.count == 1`, flush those numbers as mobility for the current tooth before switching the metric.
+## 🔍 ITEMS NEEDING FURTHER INVESTIGATION — Do not implement without tracing
 
 ---
 
-### Improvement B — Expanded STT spell correction
+### Bug 4 — `startPostTargeting` fallback walks backward through commands
 
-Common STT transcription errors not yet covered:
+The proposed fix (walk backward to find the most recent matching command) is conceptually right but needs careful implementation. The current behavior — silently no-op when the last command doesn't match — is **preferable to a wrong command** being used as a template.
 
-| Likely STT output | Correct | Notes |
+**Transcript check:** Neither `dr_lucky_ground` nor `student_ground` trigger this exact failure path (`.missing` interleaved with PD, then `pada`). This is a real edge case but not a regression risk for the current transcripts.
+
+**Recommendation:** Before implementing, add a test transcript specifically for this pattern:
+```
+gigi 18 gak ada  3 2 3  pada mesio bukal
+```
+
+---
+
+### Issue 5 — Cross-jaw `expectedSlots`
+
+The cross-jaw range issue (T28→T48) is theoretically present but both transcripts stay within jaw boundaries. The fix (validate same-sequence before computing slots) requires integrating `ChartingConfiguration` into `TeethSelection`, which is a larger architectural change.
+
+**Recommendation:** Defer until a test case is found in clinical use.
+
+---
+
+### Issue 6 — `"lanjut"` filter missing `"gigi N"` form
+
+`dr_lucky_ground` line 66: `"Lanjut 43,"` — this is `lanjut` followed directly by a tooth number (no aspect word). The filter only fires when `nextW` is in `aspectWords`. Since `43` is not an aspect word, the filter is bypassed correctly. ✓ No issue with current transcripts.
+
+`student_ground` line 142: `"Lanjut ke rahang atas"` — `lanjut` is followed by `"ke"` (not an aspect word), so the filter doesn't fire. ✓
+
+The `"gigi"` fix is only needed if a clinician says `"lanjut bukal gigi 16"` where `"gigi"` follows the aspect. This is an uncommon phrasing. **Low priority.**
+
+---
+
+## Summary — What to implement now vs. later
+
+| Fix | Status | Implemented |
 |---|---|---|
-| `"sampe"` | `"sampai"` | Casual Indonesian for "until" |
-| `"disco"` | `"disto"` | STT misread |
-| `"mezzo"` | `"mesio"` | Italian-influenced STT model |
-| `"implan"` | already handled | ✓ |
-| `"probing depth"` | `"poket"` | English clinical term |
-
-**Fix:** Add these to the word-level spell correction map in `VoiceTokenizer+Parsing.swift`.
-
----
-
-### Improvement C — `isFinal` force-pad UI feedback
-
-When `isFinal: true` fires with only 1 or 2 numbers pending, `flushNumbers(force: true)` silently pads with the last value. A clinician who stopped mid-block gets `[3, 2, 2]` instead of `[3, 2, ?]` with no indication that padding occurred.
-
-**Fix:** Add a `wasPadded: Bool` flag to `AnnotationCommand`. When `force == true` and padding is applied, set `wasPadded = true`. The `HistoryCard` in `AIListeningView` can then render a subtle warning indicator on padded commands.
-
----
-
-### Improvement D — Explicit `"dari"` range start anchor
-
-Currently `"dari bukal 17 sampai bukal 15"` works only because the cursor happens to already be at a tooth before T17. If the cursor is anywhere else (e.g., mid-palatal), the `"dari"` is ignored and `sampai` anchors from `cursor.currentTooth`, producing a wrong range.
-
-**Fix:** In the `.from` action handler, peek ahead for an optional anatomy and tooth, and explicitly set `activeSelection.startTooth` to the identified tooth. This mirrors the `sampai` lookahead pattern and makes the range fully cursor-independent.
-
----
-
-### Improvement E — `"mesio"` / `"disto"` as standalone anatomy when followed by anatomy preposition
-
-Currently `"mesio"` alone (without `"bukal"`, `"lingual"`, or `"palatal"` following) resolves to `.anatomy(.mesial)`. This is correct, but `"disto"` resolves to `.anatomy(.distal)` only if the next word is not a valid compound. This is already handled correctly — noting this as a confirmation that the existing fallback is solid.
-
----
-
-## Summary Table
-
-| # | Category | Severity | Effort |
-|---|---|---|---|
-| Bug 1 | Force-unwrap crash in lookahead | 🔴 High (crash risk) | Low |
-| Bug 2 | `_sep_` not excluded from toothIdentifier range lookahead | 🟠 Medium | Low |
-| Bug 3 | `lastAutoAdvancedFromTooth` not cleared in `restoreToMainSequence` | 🟠 Medium | Low |
-| Bug 4 | `startPostTargeting` pops command by operation only | 🟡 Low–Med | Medium |
-| Issue 5 | `expectedSlots` hardcoded canonical order on cross-jaw ranges | 🟡 Low | Medium |
-| Issue 6 | `"lanjut"` filter misses `"gigi N"` tooth form | 🟡 Low | Low |
-| Issue 7 | `"nol"` injects invalid 0 into PD blocks | 🟠 Medium | Low |
-| Issue 8 | `"margin minus 2"` loses sign | 🟠 Medium | Low |
-| Issue 9 | `.from` silently falls through with no intent comment | 🟡 Low | Trivial |
-| Issue 10 | O(n²) re-tokenization during streaming | 🟡 Low (perf) | Medium |
-| Issue 11 | 192-tuple flat array allocated on every `sequence()` call | 🟡 Low (perf) | Low |
-| Imp. A | Mobility post-targeting (`"2 kegoyangan"`) | 🟢 Enhancement | Low |
-| Imp. B | Expanded STT spell correction | 🟢 Enhancement | Trivial |
-| Imp. C | Force-pad warning in `AnnotationCommand` + UI | 🟢 Enhancement | Low |
-| Imp. D | Explicit `"dari"` range start anchor | 🟢 Enhancement | Low |
+| ~~Sign change in `flushNumbers`~~ | ❌ Retracted — breaks `"resesi minus N"` | No |
+| ~~`lastAutoAdvancedFromTooth` in `restoreToMainSequence`~~ | ❌ Retracted — already handled at call sites | No |
+| Fix 1 — Force-unwrap guard | ✅ Completed | Yes |
+| Fix 2 — `_sep_` in range lookahead | ✅ Completed | Yes |
+| Fix 3 — `.from` no-op comment | ✅ Completed | Yes |
+| Fix 4 — PD-only `max(1, abs(n))` clamp | ✅ Completed | Yes |
+| Fix 5 — `static let` canonical flat | ✅ Completed | Yes |
+| Fix 6 — STT spell corrections | ✅ Completed | Yes |
+| Fix 7 — `hasUpcomingToothIdentifier` sentence boundary `_sep_` stop | ✅ Completed | Yes |
+| Bug 4 — `startPostTargeting` fallback | 🔍 Needs targeted test transcript first | Not yet |
+| Issue 5 — Cross-jaw `expectedSlots` | 🔍 Architectural change | Not yet |
+| Issue 6 — `"lanjut"` + `"gigi N"` form | 🔍 Low priority, uncommon pattern | Not yet |

@@ -25,12 +25,15 @@ extension VoiceTokenizer {
             .replacingOccurrences(of: "b.o.p", with: "bop")
             .replacingOccurrences(of: "bleeding on probing", with: "bop")
             .replacingOccurrences(of: "bleeding or probing", with: "bop")
+            .replacingOccurrences(of: "probing depth", with: "poket")
         
         var words = cleaned.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
         
         words = words.map { word in
             switch word {
-            case "misio", "mesyio", "mesyu", "meso": return "mesio"
+            case "misio", "mesyio", "mesyu", "meso", "mezzo": return "mesio"
+            case "sampe": return "sampai"
+            case "disco": return "disto"
             case "misial", "mesyal": return "mesial"
             case "diso", "distio", "dista": return "disto"
             case "disal": return "distal"

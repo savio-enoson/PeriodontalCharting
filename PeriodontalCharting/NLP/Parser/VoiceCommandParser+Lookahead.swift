@@ -9,6 +9,9 @@ extension VoiceCommandParser {
                 return true
             case .metric(_, _), .action(_), .number(_):
                 return false
+            case .word(let w):
+                if w == "_sep_" { return false }
+                j += 1
             default:
                 j += 1
             }
@@ -38,7 +41,8 @@ extension VoiceCommandParser {
                 resolved.site = 1
             }
         }
-        return (resolved.aspect!, resolved.site)
+        guard let aspect = resolved.aspect else { return nil }
+        return (aspect, resolved.site)
     }
     
     func isContinuingList(after index: Int, in tokens: [VoiceToken]) -> Bool {

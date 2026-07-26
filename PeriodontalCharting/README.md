@@ -559,7 +559,7 @@ The intricate state machine for token parsing is divided across `VoiceCommandPar
 - **`VoiceCommandParser.swift`**: Stores the mutable execution state (e.g. `currentNumbers`, `activeSelection`).
 - **`VoiceCommandParser+Parse.swift`**: The core parsing orchestrator handling the `[VoiceToken]` stream. It iterates tokens and mutates `ChartingCursor`, `activeSelection`, and `currentNumbers`. Crucially handles deferred lookahead aggregation for consecutive anatomy tokens before a tooth identifier (buffering multiple anatomies via `hasUpcomingToothIdentifier` and applying them as a contiguous bounds range). Handles range formation logic for `.until`.
 - **`VoiceCommandParser+Flush.swift`**: Logic for flushing buffers, committing values, and emitting boolean metrics.
-- **`VoiceCommandParser+Lookahead.swift`**: Disambiguation logic that peeks ahead in the token stream (e.g., resolving anatomical sequences).
+- **`VoiceCommandParser+Lookahead.swift`**: Disambiguation logic that peeks ahead in the token stream (e.g., resolving anatomical sequences and enforcing sentence boundaries).
 
 *(Note: `ChartingCursor.swift` manages the logical sequence traversal and lives in `Configuration/`)*
 

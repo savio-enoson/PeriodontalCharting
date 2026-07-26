@@ -328,9 +328,6 @@ gigi 1-6 bukal dan mesiobukal
 gigi 1-5
 pada di distobukal dan bukal
 
-gigi 2-4
-mesiobukal, bukal distobukal
-
 gigi 24
 mesio bukal
 bukal

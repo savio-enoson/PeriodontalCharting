@@ -58,7 +58,7 @@ extension VoiceCommandParser {
             let m = cursor.currentMetric
             for n in values {
                 if m == .probingDepth {
-                    valuesToEmit.append(String(abs(n)))
+                    valuesToEmit.append(String(max(1, abs(n))))
                 } else {
                     valuesToEmit.append(String(abs(n) * currentMetricMultiplier))
                 }

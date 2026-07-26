@@ -160,7 +160,7 @@ extension VoiceCommandParser {
                 var peek = tokenIndex + 1
                 
                 while peek < tokens.count {
-                    if case .word(_) = tokens[peek] { peek += 1; continue }
+                    if case .word(let w) = tokens[peek], w != "_sep_" { peek += 1; continue }
                     break
                 }
                 
@@ -462,6 +462,10 @@ extension VoiceCommandParser {
                         tokenIndex = peek
                         continue
                     }
+                } else if a == .from {
+                    // Intentional no-op. "dari" (from) anchors the start of a range but
+                    // the actual start tooth is set by the following .toothIdentifier token.
+                    // The .until / .until2 handler then closes the range from cursor.currentTooth.
                 }
                 tokenIndex += 1
                 

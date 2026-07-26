@@ -122,21 +122,27 @@ struct ChartAnatomyResolver {
         return (aspect, siteIndex)
     }
     
-    static func sequence(from start: (Int, ChartAspect, Int?), to end: (Int, ChartAspect, Int?)) -> [(Int, ChartAspect, Int)] {
+    private static let _fullCanonicalFlat: [(Int, ChartAspect, Int)] = {
         let allTeeth = [
             18,17,16,15,14,13,12,11, 21,22,23,24,25,26,27,28,
             48,47,46,45,44,43,42,41, 31,32,33,34,35,36,37,38
         ]
-        
         var flat: [(Int, ChartAspect, Int)] = []
+        for aspect in [ChartAspect.outer, ChartAspect.inner] {
+            for t in allTeeth { for s in 0..<3 { flat.append((t, aspect, s)) } }
+        }
+        return flat
+    }()
+
+    static func sequence(from start: (Int, ChartAspect, Int?), to end: (Int, ChartAspect, Int?)) -> [(Int, ChartAspect, Int)] {
+        let flat: [(Int, ChartAspect, Int)]
         let aspects: [ChartAspect] = start.1 == end.1 ? [start.1] : [ChartAspect.outer, ChartAspect.inner]
         
-        for aspect in aspects {
-            for t in allTeeth {
-                for s in 0..<3 {
-                    flat.append((t, aspect, s))
-                }
-            }
+        if aspects.count == 2 {
+            flat = _fullCanonicalFlat
+        } else {
+            let targetAspect = aspects[0]
+            flat = _fullCanonicalFlat.filter { $0.1 == targetAspect }
         }
         
         var startIndices: [Int] = []
