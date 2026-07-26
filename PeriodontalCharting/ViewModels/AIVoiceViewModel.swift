@@ -12,14 +12,13 @@ class AIVoiceViewModel: ObservableObject {
     @Published var currentCursor: ChartingCursor? = nil
     @Published var activeSelection: TeethSelection? = nil
     @Published var pendingValues: [String] = []
-    @Published var wpm: Double = 100.0
+    @Published var wpm: Double = 180.0
     
     @Published var selectedTestTranscriptName: String = TestTranscripts.all.first?.0 ?? ""
     var selectedTestTranscript: String {
         return TestTranscripts.all.first(where: { $0.0 == selectedTestTranscriptName })?.1 ?? ""
     }
     private var simulationTask: Task<Void, Never>?
-    private var flushTimer: Timer?
     private var words: [String] = []
     private var currentWordIndex: Int = 0
     
@@ -140,7 +139,6 @@ Plaque pada semua gigi
     
     func stopSimulation() {
         simulationTask?.cancel()
-        flushTimer?.invalidate()
         isListening = false
     }
     
@@ -206,24 +204,6 @@ Plaque pada semua gigi
                 self.activeSelection = parser.activeSelection
                 self.pendingValues = parser.pendingValues
                 
-                self.flushTimer?.invalidate()
-                self.flushTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: false) { [weak self] _ in
-                    Task { @MainActor [weak self] in
-                        guard let self = self else { return }
-                        let parserFinal = VoiceCommandParser(configuration: self.getConfiguration())
-                        let parsedFinal = parserFinal.parse(text: self.liveTranscription, isFinal: true)
-                        self.commandHistory = parsedFinal
-                        if let last = parsedFinal.last, last.operation == parserFinal.cursor.currentMetric {
-                            self.currentCommand = last
-                        } else {
-                            self.currentCommand = nil
-                        }
-                        self.currentCursor = parserFinal.cursor
-                        self.activeSelection = parserFinal.activeSelection
-                        self.pendingValues = parserFinal.pendingValues
-                    }
-                }
-                
                 currentWordIndex += 1
                 
                 let wordsPerSecond = wpm / 60.0
@@ -232,7 +212,6 @@ Plaque pada semua gigi
             }
             
             // Final flush when completely done
-            self.flushTimer?.invalidate()
             let parserFinal = VoiceCommandParser(configuration: self.getConfiguration())
             let parsedFinal = parserFinal.parse(text: self.liveTranscription, isFinal: true)
             self.commandHistory = parsedFinal

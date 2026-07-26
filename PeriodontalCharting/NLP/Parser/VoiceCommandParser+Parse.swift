@@ -12,6 +12,7 @@ extension VoiceCommandParser {
         var consumedIndices = Set<Int>()
         
         while tokenIndex < tokens.count {
+            print("PROCESSING INDEX", tokenIndex, tokens[tokenIndex])
             let token = tokens[tokenIndex]
             
             switch token {
@@ -19,7 +20,7 @@ extension VoiceCommandParser {
                 flushPostTargetIfPending()
                 isPostTargeting = false
                 
-                if let sel = activeSelection, sel.expectedSlots == 1, cursor.currentMetric == .probingDepth {
+                if let sel = activeSelection, sel.expectedSlots == 1, self.cursor.currentMetric == .probingDepth {
                     var numCount = 0
                     var j = tokenIndex
                     while j < tokens.count && numCount < 3 {
@@ -40,8 +41,8 @@ extension VoiceCommandParser {
                     }
                 }
                 
-                if cursor.currentMetric == .bleeding || cursor.currentMetric == .plaque || cursor.currentMetric == .implant {
-                    emitBoolIfPending()
+                if self.cursor.currentMetric == .bleeding || self.cursor.currentMetric == .plaque || self.cursor.currentMetric == .implant {
+                    print("BEFORE EMIT METRIC:", self.cursor.currentMetric, "SELECTION:", activeSelection?.startTooth.toothNumber ?? -1, activeSelection?.startSite ?? -2, activeSelection?.endTooth.toothNumber ?? -1, activeSelection?.endSite ?? -2); emitBoolIfPending()
                     restoreToMainSequence()
                 }
                 lastAutoAdvancedFromTooth = nil
@@ -59,7 +60,7 @@ extension VoiceCommandParser {
                     var endAnatomy: AnatomyType? = nil
                     var endTooth: Int? = nil
                     
-                    if peek < tokens.count, case .action(let act) = tokens[peek], (act == .until || act == .until2 || act == .until3) {
+                    if peek < tokens.count, case .action(let act) = tokens[peek], (act == .until || act == .until2) {
                         isRange = true
                         peek += 1
                     }
@@ -80,7 +81,7 @@ extension VoiceCommandParser {
                     if let et = endTooth {
                         var sAspect = template.teethSelection.startAspect
                         var sSite = template.teethSelection.startSite
-                        if let pa = postTargetAnatomy, var resolved = ChartAnatomyResolver.resolve(anatomy: pa, for: tooth, currentAspect: cursor.currentAspect) {
+                        if let pa = postTargetAnatomy, var resolved = ChartAnatomyResolver.resolve(anatomy: pa, for: tooth, currentAspect: self.cursor.currentAspect) {
                             let isFull = (pa == .buccal || pa == .labial || pa == .lingual || pa == .palatal)
                             if isFull && template.values.count < 3 { resolved.site = 1 }
                             sAspect = resolved.aspect; sSite = resolved.site
@@ -88,7 +89,7 @@ extension VoiceCommandParser {
                         
                         var eAspect = template.teethSelection.endAspect
                         var eSite = template.teethSelection.endSite
-                        if let ea = endAnatomy, var resolved = ChartAnatomyResolver.resolve(anatomy: ea, for: et, currentAspect: cursor.currentAspect) {
+                        if let ea = endAnatomy, var resolved = ChartAnatomyResolver.resolve(anatomy: ea, for: et, currentAspect: self.cursor.currentAspect) {
                             let isFull = (ea == .buccal || ea == .labial || ea == .lingual || ea == .palatal)
                             if isFull && template.values.count < 3 { resolved.site = 1 }
                             eAspect = resolved.aspect; eSite = resolved.site
@@ -105,7 +106,7 @@ extension VoiceCommandParser {
                         var eAspect = template.teethSelection.endAspect
                         var eSite = template.teethSelection.endSite
                         
-                        if let pa = postTargetAnatomy, var resolved = ChartAnatomyResolver.resolve(anatomy: pa, for: tooth, currentAspect: cursor.currentAspect) {
+                        if let pa = postTargetAnatomy, var resolved = ChartAnatomyResolver.resolve(anatomy: pa, for: tooth, currentAspect: self.cursor.currentAspect) {
                             let isFull = (pa == .buccal || pa == .labial || pa == .lingual || pa == .palatal)
                             if isFull && template.values.count < 3 { resolved.site = 1 }
                             sAspect = resolved.aspect
@@ -117,7 +118,7 @@ extension VoiceCommandParser {
                         finalSel = TeethSelection(startTooth: ToothObject.create(number: tooth), startAspect: sAspect, startSite: sSite, endTooth: ToothObject.create(number: tooth), endAspect: eAspect, endSite: eSite)
                         
                         if isRange && endTooth == nil && endAnatomy != nil {
-                            if let resolved = ChartAnatomyResolver.resolve(anatomy: endAnatomy!, for: tooth, currentAspect: cursor.currentAspect) {
+                            if let resolved = ChartAnatomyResolver.resolve(anatomy: endAnatomy!, for: tooth, currentAspect: self.cursor.currentAspect) {
                                 finalSel.endAspect = resolved.aspect
                                 finalSel.endSite = resolved.site
                             }
@@ -135,7 +136,7 @@ extension VoiceCommandParser {
                     commands.append(cmd)
                     
                     if let targetTooth = endTooth ?? Optional(tooth) {
-                        _ = cursor.jumpTo(tooth: targetTooth, aspect: finalSel.startAspect ?? cursor.currentAspect, updateSequenceIndex: cursor.currentMetric == .probingDepth)
+                        _ = self.cursor.jumpTo(tooth: targetTooth, aspect: finalSel.startAspect ?? self.cursor.currentAspect, updateSequenceIndex: self.cursor.currentMetric == .probingDepth)
                     }
                     
                     consumedIndices.insert(originalToothIndex)
@@ -150,10 +151,10 @@ extension VoiceCommandParser {
                     continue
                 }
                 
-                emitBoolIfPending()
+                print("BEFORE EMIT METRIC:", self.cursor.currentMetric, "SELECTION:", activeSelection?.startTooth.toothNumber ?? -1, activeSelection?.startSite ?? -2, activeSelection?.endTooth.toothNumber ?? -1, activeSelection?.endSite ?? -2); emitBoolIfPending()
                 flushNumbers(force: true)
                 
-                _ = cursor.jumpTo(tooth: tooth, aspect: cursor.currentAspect, updateSequenceIndex: cursor.currentMetric == .probingDepth)
+                _ = self.cursor.jumpTo(tooth: tooth, aspect: self.cursor.currentAspect, updateSequenceIndex: self.cursor.currentMetric == .probingDepth)
                 
                 var isRange = false
                 var peek = tokenIndex + 1
@@ -163,7 +164,7 @@ extension VoiceCommandParser {
                     break
                 }
                 
-                if peek < tokens.count, case .action(let act) = tokens[peek], (act == .until || act == .until2 || act == .until3) {
+                if peek < tokens.count, case .action(let act) = tokens[peek], (act == .until || act == .until2) {
                     isRange = true
                     peek += 1
                 }
@@ -173,7 +174,7 @@ extension VoiceCommandParser {
                 
                 if isRange {
                     while peek < tokens.count {
-                        if case .word(_) = tokens[peek] { peek += 1; continue }
+                        if case .word(let w) = tokens[peek], w != "_sep_" { peek += 1; continue }
                         break
                     }
                     if peek < tokens.count, case .anatomy(let anat) = tokens[peek] {
@@ -181,7 +182,7 @@ extension VoiceCommandParser {
                         peek += 1
                     }
                     while peek < tokens.count {
-                        if case .word(_) = tokens[peek] { peek += 1; continue }
+                        if case .word(let w) = tokens[peek], w != "_sep_" { peek += 1; continue }
                         break
                     }
                     if peek < tokens.count, case .toothIdentifier(let et) = tokens[peek] {
@@ -190,15 +191,23 @@ extension VoiceCommandParser {
                     }
                 }
                 
-                var startAnatomy: AnatomyType? = nil
-                if tokenIndex > 0, case .anatomy(let anat) = tokens[tokenIndex-1] {
-                    startAnatomy = anat
+                var startAnatomies: [AnatomyType] = []
+                var searchIdx = tokenIndex - 1
+                while searchIdx >= 0 {
+                    if case .anatomy(let anat) = tokens[searchIdx] {
+                        startAnatomies.insert(anat, at: 0)
+                        searchIdx -= 1
+                    } else if case .word(let w) = tokens[searchIdx], w != "_sep_" {
+                        searchIdx -= 1
+                    } else {
+                        break
+                    }
                 }
                 
                 if let et = endTooth {
                     var sAspect: ChartAspect?
                     var sSite: Int?
-                    if let sa = startAnatomy, let resolved = resolveAnatomyWithLookahead(anatomy: sa, for: tooth, toothIndex: tokenIndex, tokens: tokens) {
+                    if let sa = startAnatomies.first, let resolved = resolveAnatomyWithLookahead(anatomy: sa, for: tooth, toothIndex: tokenIndex, tokens: tokens) {
                         sAspect = resolved.aspect; sSite = resolved.site
                     }
                     var eAspect: ChartAspect?
@@ -212,7 +221,7 @@ extension VoiceCommandParser {
                     for i in tokenIndex..<peek { consumedIndices.insert(i) }
                     tokenIndex = peek
                 } else if isRange {
-                    if let sa = startAnatomy, let resolved = resolveAnatomyWithLookahead(anatomy: sa, for: tooth, toothIndex: tokenIndex, tokens: tokens) {
+                    if let sa = startAnatomies.first, let resolved = resolveAnatomyWithLookahead(anatomy: sa, for: tooth, toothIndex: tokenIndex, tokens: tokens) {
                         self.activeSelection = TeethSelection(startTooth: ToothObject.create(number: tooth), startAspect: resolved.aspect, startSite: resolved.site, endTooth: ToothObject.create(number: tooth), endAspect: resolved.aspect, endSite: resolved.site)
                     } else {
                         self.activeSelection = TeethSelection(startTooth: ToothObject.create(number: tooth), startAspect: nil, startSite: nil, endTooth: ToothObject.create(number: tooth), endAspect: nil, endSite: nil)
@@ -220,8 +229,32 @@ extension VoiceCommandParser {
                     for i in tokenIndex..<peek { consumedIndices.insert(i) }
                     tokenIndex = peek
                 } else {
-                    if let sa = startAnatomy, let resolved = resolveAnatomyWithLookahead(anatomy: sa, for: tooth, toothIndex: tokenIndex, tokens: tokens) {
+                    if let sa = startAnatomies.first, let resolved = resolveAnatomyWithLookahead(anatomy: sa, for: tooth, toothIndex: tokenIndex, tokens: tokens) {
                         self.activeSelection = TeethSelection(startTooth: ToothObject.create(number: tooth), startAspect: resolved.aspect, startSite: resolved.site, endTooth: ToothObject.create(number: tooth), endAspect: resolved.aspect, endSite: resolved.site)
+                        
+                        // Aggregate multiple anatomies
+                        if startAnatomies.count > 1 {
+                            for anat in startAnatomies.dropFirst() {
+                                if let resolvedNext = resolveAnatomyWithLookahead(anatomy: anat, for: tooth, toothIndex: tokenIndex, tokens: tokens) {
+                                    if self.activeSelection?.startAspect == resolvedNext.aspect {
+                                        let currentStart = self.activeSelection?.startSite
+                                        let currentEnd = self.activeSelection?.endSite
+                                        if let s = currentStart, let e = currentEnd, let es = resolvedNext.site {
+                                            self.activeSelection?.startSite = min(s, min(e, es))
+                                            self.activeSelection?.endSite = max(s, max(e, es))
+                                        } else {
+                                            self.activeSelection?.startSite = nil
+                                            self.activeSelection?.endSite = nil
+                                        }
+                                    } else {
+                                        self.activeSelection?.startAspect = resolvedNext.aspect
+                                        self.activeSelection?.endAspect = resolvedNext.aspect
+                                        self.activeSelection?.startSite = resolvedNext.site
+                                        self.activeSelection?.endSite = resolvedNext.site
+                                    }
+                                }
+                            }
+                        }
                     } else {
                         self.activeSelection = TeethSelection(startTooth: ToothObject.create(number: tooth), startAspect: nil, startSite: nil, endTooth: ToothObject.create(number: tooth), endAspect: nil, endSite: nil)
                     }
@@ -230,17 +263,17 @@ extension VoiceCommandParser {
                 
             case .metric(let m, let mult):
                 if let last = lastAutoAdvancedFromTooth, !hasUpcomingToothIdentifier(from: tokenIndex, in: tokens) {
-                    _ = cursor.jumpTo(tooth: last, aspect: cursor.currentAspect, updateSequenceIndex: false)
+                    _ = self.cursor.jumpTo(tooth: last, aspect: self.cursor.currentAspect, updateSequenceIndex: false)
                     lastAutoAdvancedFromTooth = nil
                 }
                 isPostTargeting = false
                 postTargetTemplate = nil
                 postTargetAnatomy = nil
-                emitBoolIfPending()
+                print("BEFORE EMIT METRIC:", self.cursor.currentMetric, "SELECTION:", activeSelection?.startTooth.toothNumber ?? -1, activeSelection?.startSite ?? -2, activeSelection?.endTooth.toothNumber ?? -1, activeSelection?.endSite ?? -2); emitBoolIfPending()
                 flushNumbers(force: true)
                 
-                if cursor.currentMetric == .plaque && !metricHadSpecificTargets {
-                    if let first = cursor.currentSequence.first, let last = cursor.currentSequence.last {
+                if self.cursor.currentMetric == .plaque && !metricHadSpecificTargets {
+                    if let first = self.cursor.currentSequence.first, let last = self.cursor.currentSequence.last {
                         let sel = TeethSelection(startTooth: ToothObject.create(number: first), startAspect: nil, startSite: nil, endTooth: ToothObject.create(number: last), endAspect: nil, endSite: nil)
                         let cmd = AnnotationCommand(operation: .plaque, teethSelection: sel, aspect: nil, values: Array(repeating: "True", count: sel.expectedSlots))
                         commands.append(cmd)
@@ -248,11 +281,11 @@ extension VoiceCommandParser {
                 }
                 
                 if currentNumbers.isEmpty, let sel = activeSelection {
-                    _ = cursor.jumpTo(tooth: sel.startTooth.toothNumber, aspect: sel.startAspect ?? cursor.currentAspect, updateSequenceIndex: false)
+                    _ = self.cursor.jumpTo(tooth: sel.startTooth.toothNumber, aspect: sel.startAspect ?? self.cursor.currentAspect, updateSequenceIndex: false)
                 }
                 
-                self.activeSelection = nil
-                cursor.setMetric(m)
+                print("SETTING METRIC TO", m)
+                self.cursor.setMetric(m)
                 currentMetricMultiplier = mult
                 metricHadSpecificTargets = false
                 tokenIndex += 1
@@ -260,24 +293,33 @@ extension VoiceCommandParser {
             case .action(let a):
                 lastAutoAdvancedFromTooth = nil
                 if a == .at || a == .at2 {
-                    startPostTargeting()
+                    let isBoolMetric = cursor.currentMetric == .bleeding || cursor.currentMetric == .plaque || cursor.currentMetric == .implant
+                    if !isBoolMetric {
+                        startPostTargeting()
+                    }
                 } else if a == .all {
                     metricHadSpecificTargets = true
-                    if let first = cursor.currentSequence.first, let last = cursor.currentSequence.last {
-                        let sel = TeethSelection(startTooth: ToothObject.create(number: first), startAspect: nil, startSite: nil, endTooth: ToothObject.create(number: last), endAspect: nil, endSite: nil)
-                        if isPostTargeting, let template = postTargetTemplate {
-                            let cmd = AnnotationCommand(operation: template.operation, teethSelection: sel, aspect: nil, values: Array(repeating: template.values.first ?? "True", count: sel.expectedSlots))
-                            commands.append(cmd)
-                        } else {
-                            self.activeSelection = sel
-                            emitBoolIfPending()
-                            flushNumbers(force: true)
+                    
+                    let selUpper = TeethSelection(startTooth: ToothObject.create(number: 18), startAspect: nil, startSite: nil, endTooth: ToothObject.create(number: 28), endAspect: nil, endSite: nil)
+                    let selLower = TeethSelection(startTooth: ToothObject.create(number: 48), startAspect: nil, startSite: nil, endTooth: ToothObject.create(number: 38), endAspect: nil, endSite: nil)
+                    
+                    if isPostTargeting, let template = postTargetTemplate {
+                        let cmdUpper = AnnotationCommand(operation: template.operation, teethSelection: selUpper, aspect: nil, values: Array(repeating: template.values.first ?? "True", count: selUpper.expectedSlots))
+                        let cmdLower = AnnotationCommand(operation: template.operation, teethSelection: selLower, aspect: nil, values: Array(repeating: template.values.first ?? "True", count: selLower.expectedSlots))
+                        commands.append(cmdUpper)
+                        commands.append(cmdLower)
+                    } else {
+                        if cursor.currentMetric == .bleeding || cursor.currentMetric == .plaque || cursor.currentMetric == .implant {
+                            let cmdUpper = AnnotationCommand(operation: cursor.currentMetric, teethSelection: selUpper, aspect: nil, values: Array(repeating: "True", count: selUpper.expectedSlots))
+                            let cmdLower = AnnotationCommand(operation: cursor.currentMetric, teethSelection: selLower, aspect: nil, values: Array(repeating: "True", count: selLower.expectedSlots))
+                            commands.append(cmdUpper)
+                            commands.append(cmdLower)
                         }
                     }
                     isPostTargeting = false
                     postTargetTemplate = nil
                     postTargetAnatomy = nil
-                } else if a == .next {
+                } else if a == .next || a == .commit {
                     flushPostTargetIfPending()
                     isPostTargeting = false
                     postTargetTemplate = nil
@@ -285,8 +327,8 @@ extension VoiceCommandParser {
                     emitBoolIfPending()
                     flushNumbers(force: true)
                     
-                    if cursor.currentMetric == .plaque && !metricHadSpecificTargets {
-                        if let first = cursor.currentSequence.first, let last = cursor.currentSequence.last {
+                    if self.cursor.currentMetric == .plaque && !metricHadSpecificTargets {
+                        if let first = self.cursor.currentSequence.first, let last = self.cursor.currentSequence.last {
                             let sel = TeethSelection(startTooth: ToothObject.create(number: first), startAspect: nil, startSite: nil, endTooth: ToothObject.create(number: last), endAspect: nil, endSite: nil)
                             let cmd = AnnotationCommand(operation: .plaque, teethSelection: sel, aspect: nil, values: Array(repeating: "True", count: sel.expectedSlots))
                             commands.append(cmd)
@@ -296,7 +338,7 @@ extension VoiceCommandParser {
                     restoreToMainSequence()
                 } else if a == .missing || a == .missing2 {
                     flushPostTargetIfPending()
-                    emitBoolIfPending()
+                    print("BEFORE EMIT METRIC:", self.cursor.currentMetric, "SELECTION:", activeSelection?.startTooth.toothNumber ?? -1, activeSelection?.startSite ?? -2, activeSelection?.endTooth.toothNumber ?? -1, activeSelection?.endSite ?? -2); emitBoolIfPending()
                     flushNumbers(force: true)
                     
                     var targets: [Int] = []
@@ -315,7 +357,7 @@ extension VoiceCommandParser {
                     }
                     
                     if targets.isEmpty {
-                        targets = [activeSelection?.startTooth.toothNumber ?? cursor.currentTooth]
+                        targets = [activeSelection?.startTooth.toothNumber ?? self.cursor.currentTooth]
                     }
                     
                     for targetTooth in targets {
@@ -324,7 +366,7 @@ extension VoiceCommandParser {
                         let cmd = AnnotationCommand(
                             operation: .missing,
                             teethSelection: TeethSelection(startTooth: ToothObject.create(number: targetTooth), startAspect: nil, startSite: nil, endTooth: ToothObject.create(number: targetTooth), endAspect: nil, endSite: nil),
-                            aspect: cursor.currentAspect,
+                            aspect: self.cursor.currentAspect,
                             values: ["True"]
                         )
                         commands.append(cmd)
@@ -332,23 +374,23 @@ extension VoiceCommandParser {
                     
                     self.activeSelection = nil
                     
-                    if let lastTarget = targets.last, lastTarget == cursor.currentTooth {
-                        _ = cursor.advanceToNextTooth()
-                        while missingTeeth.contains(cursor.currentTooth) {
-                            if !cursor.advanceToNextTooth() { break }
+                    if let lastTarget = targets.last, lastTarget == self.cursor.currentTooth {
+                        _ = self.cursor.advanceToNextTooth()
+                        while missingTeeth.contains(self.cursor.currentTooth) {
+                            if !self.cursor.advanceToNextTooth() { break }
                         }
                     }
                     
                     restoreToMainSequence()
-                } else if a == .until || a == .until2 || a == .until3 {
-                    emitBoolIfPending()
+                } else if a == .until || a == .until2 {
+                    print("BEFORE EMIT METRIC:", self.cursor.currentMetric, "SELECTION:", activeSelection?.startTooth.toothNumber ?? -1, activeSelection?.startSite ?? -2, activeSelection?.endTooth.toothNumber ?? -1, activeSelection?.endSite ?? -2); emitBoolIfPending()
                     flushNumbers(force: true)
                     var peek = tokenIndex + 1
                     var endAnatomy: AnatomyType? = nil
                     var endTooth: Int? = nil
                     
                     while peek < tokens.count {
-                        if case .word(_) = tokens[peek] { peek += 1; continue }
+                        if case .word(let w) = tokens[peek], w != "_sep_" { peek += 1; continue }
                         break
                     }
                     if peek < tokens.count, case .anatomy(let anat) = tokens[peek] {
@@ -356,7 +398,7 @@ extension VoiceCommandParser {
                         peek += 1
                     }
                     while peek < tokens.count {
-                        if case .word(_) = tokens[peek] { peek += 1; continue }
+                        if case .word(let w) = tokens[peek], w != "_sep_" { peek += 1; continue }
                         break
                     }
                     if peek < tokens.count, case .toothIdentifier(let et) = tokens[peek] {
@@ -365,15 +407,15 @@ extension VoiceCommandParser {
                     }
                     
                     if let et = endTooth {
-                        var eAspect: ChartAspect? = cursor.currentAspect
+                        var eAspect: ChartAspect? = self.cursor.currentAspect
                         var eSite: Int? = nil
-                        if let ea = endAnatomy, let resolved = ChartAnatomyResolver.resolve(anatomy: ea, for: et, currentAspect: cursor.currentAspect) {
+                        if let ea = endAnatomy, let resolved = ChartAnatomyResolver.resolve(anatomy: ea, for: et, currentAspect: self.cursor.currentAspect) {
                             eAspect = resolved.aspect; eSite = resolved.site
                         }
                         
                         self.activeSelection = TeethSelection(
-                            startTooth: ToothObject.create(number: cursor.currentTooth), 
-                            startAspect: cursor.currentAspect, 
+                            startTooth: ToothObject.create(number: self.cursor.currentTooth), 
+                            startAspect: self.cursor.currentAspect, 
                             startSite: nil, 
                             endTooth: ToothObject.create(number: et), 
                             endAspect: eAspect, 
@@ -383,18 +425,24 @@ extension VoiceCommandParser {
                         tokenIndex = peek
                         continue
                     } else if let ea = endAnatomy {
-                        let refTooth = self.activeSelection?.startTooth.toothNumber ?? cursor.currentTooth
-                        var sAspect: ChartAspect? = cursor.currentAspect
+                        let refTooth = self.activeSelection?.startTooth.toothNumber ?? self.cursor.currentTooth
+                        var sAspect: ChartAspect? = self.cursor.currentAspect
+                        
+                        var eAspect: ChartAspect? = self.cursor.currentAspect
+                        var eSite: Int? = nil
+                        if let resolved = ChartAnatomyResolver.resolve(anatomy: ea, for: refTooth, currentAspect: self.cursor.currentAspect) {
+                            eAspect = resolved.aspect; eSite = resolved.site
+                        }
+                        
                         var sSite: Int? = nil
                         if let active = self.activeSelection, let sa = active.startAspect {
                             sAspect = sa
-                            sSite = active.startSite
-                        }
-                        
-                        var eAspect: ChartAspect? = cursor.currentAspect
-                        var eSite: Int? = nil
-                        if let resolved = ChartAnatomyResolver.resolve(anatomy: ea, for: refTooth, currentAspect: cursor.currentAspect) {
-                            eAspect = resolved.aspect; eSite = resolved.site
+                            if let s = active.startSite, let e = active.endSite, let es = eSite {
+                                sSite = min(s, min(e, es))
+                                eSite = max(s, max(e, es))
+                            } else {
+                                sSite = active.startSite
+                            }
                         }
                         
                         self.activeSelection = TeethSelection(
@@ -419,7 +467,7 @@ extension VoiceCommandParser {
                 
             case .anatomy(let a):
                 if let last = lastAutoAdvancedFromTooth, !hasUpcomingToothIdentifier(from: tokenIndex, in: tokens) {
-                    _ = cursor.jumpTo(tooth: last, aspect: cursor.currentAspect, updateSequenceIndex: false)
+                    _ = self.cursor.jumpTo(tooth: last, aspect: self.cursor.currentAspect, updateSequenceIndex: false)
                     lastAutoAdvancedFromTooth = nil
                 }
                 metricHadSpecificTargets = true
@@ -431,7 +479,12 @@ extension VoiceCommandParser {
                     postTargetAnatomy = nil
                 } else {
                     if !currentNumbers.isEmpty && !isPostTargeting {
-                        startPostTargeting()
+                        if self.activeSelection?.startAspect == nil && self.activeSelection?.startSite == nil {
+                            startPostTargeting()
+                        } else {
+                            print("BEFORE EMIT METRIC:", self.cursor.currentMetric, "SELECTION:", activeSelection?.startTooth.toothNumber ?? -1, activeSelection?.startSite ?? -2, activeSelection?.endTooth.toothNumber ?? -1, activeSelection?.endSite ?? -2); emitBoolIfPending()
+                            flushNumbers(force: true)
+                        }
                     }
                 }
                 
@@ -442,43 +495,51 @@ extension VoiceCommandParser {
                 }
                 
                 if a == .lowerJaw {
-                    emitBoolIfPending()
+                    print("BEFORE EMIT METRIC:", self.cursor.currentMetric, "SELECTION:", activeSelection?.startTooth.toothNumber ?? -1, activeSelection?.startSite ?? -2, activeSelection?.endTooth.toothNumber ?? -1, activeSelection?.endSite ?? -2); emitBoolIfPending()
                     flushNumbers(force: true)
                     self.activeSelection = nil
-                    _ = cursor.jumpTo(jaw: .lower)
+                    _ = self.cursor.jumpTo(jaw: .lower)
                 } else if a == .upperJaw {
-                    emitBoolIfPending()
+                    print("BEFORE EMIT METRIC:", self.cursor.currentMetric, "SELECTION:", activeSelection?.startTooth.toothNumber ?? -1, activeSelection?.startSite ?? -2, activeSelection?.endTooth.toothNumber ?? -1, activeSelection?.endSite ?? -2); emitBoolIfPending()
                     flushNumbers(force: true)
                     self.activeSelection = nil
-                    _ = cursor.jumpTo(jaw: .upper)
+                    _ = self.cursor.jumpTo(jaw: .upper)
                 } else {
-                    if tokenIndex + 1 < tokens.count, case .toothIdentifier(_) = tokens[tokenIndex+1] {
+                    if hasUpcomingToothIdentifier(from: tokenIndex, in: tokens) {
                         // Defer selection until the following tooth identifier is processed
                     } else {
-                        var refTooth = cursor.currentTooth
-                        var isModifyingExisting = false
+                        var refTooth = self.cursor.currentTooth
                         
                         if let sel = activeSelection, tokenIndex > 0, case .toothIdentifier(_) = tokens[tokenIndex-1] {
                             refTooth = sel.startTooth.toothNumber
-                            isModifyingExisting = true
                         }
                         
                         if let resolved = resolveAnatomyWithLookahead(anatomy: a, for: refTooth, toothIndex: tokenIndex, tokens: tokens) {
-                            
-                            if resolved.aspect != cursor.currentAspect {
-                                emitBoolIfPending()
-                                flushNumbers(force: true)
+                            if resolved.aspect != self.cursor.currentAspect {
+                                if let active = self.activeSelection, active.startSite == nil && active.endSite == nil {
+                                    // Do not emit full face for a newly targeted tooth just because the aspect changed
+                                } else {
+                                    emitBoolIfPending()
+                                    flushNumbers(force: true)
+                                }
                                 let aspectType: AspectType = (resolved.aspect == .outer) ? .buccal : .palatal
-                                _ = cursor.jumpTo(aspect: aspectType)
+                                _ = self.cursor.jumpTo(aspect: aspectType)
                             }
                             
                             if resolved.site == nil {
                                 self.activeSelection = nil
                             } else {
-                                if isModifyingExisting {
-                                    self.activeSelection = TeethSelection(startTooth: ToothObject.create(number: refTooth), startAspect: resolved.aspect, startSite: resolved.site, endTooth: ToothObject.create(number: refTooth), endAspect: resolved.aspect, endSite: resolved.site)
+                                if let existingSel = self.activeSelection,
+                                   existingSel.startTooth.toothNumber == refTooth,
+                                   existingSel.startAspect == resolved.aspect,
+                                   existingSel.endTooth.toothNumber == refTooth,
+                                   existingSel.endAspect == resolved.aspect,
+                                   self.currentNumbers.isEmpty {
+                                    let sSite = min(existingSel.startSite ?? resolved.site!, resolved.site!)
+                                    let eSite = max(existingSel.endSite ?? resolved.site!, resolved.site!)
+                                    self.activeSelection = TeethSelection(startTooth: existingSel.startTooth, startAspect: existingSel.startAspect, startSite: sSite, endTooth: existingSel.endTooth, endAspect: existingSel.endAspect, endSite: eSite)
                                 } else {
-                                    self.activeSelection = TeethSelection(startTooth: ToothObject.create(number: cursor.currentTooth), startAspect: resolved.aspect, startSite: resolved.site, endTooth: ToothObject.create(number: cursor.currentTooth), endAspect: resolved.aspect, endSite: resolved.site)
+                                    self.activeSelection = TeethSelection(startTooth: ToothObject.create(number: refTooth), startAspect: resolved.aspect, startSite: resolved.site, endTooth: ToothObject.create(number: refTooth), endAspect: resolved.aspect, endSite: resolved.site)
                                 }
                             }
                         }
@@ -500,11 +561,11 @@ extension VoiceCommandParser {
         
         if isFinal {
             flushPostTargetIfPending()
-            emitBoolIfPending()
+            print("BEFORE EMIT METRIC:", self.cursor.currentMetric, "SELECTION:", activeSelection?.startTooth.toothNumber ?? -1, activeSelection?.startSite ?? -2, activeSelection?.endTooth.toothNumber ?? -1, activeSelection?.endSite ?? -2); emitBoolIfPending()
             flushNumbers(force: true)
             
-            if cursor.currentMetric == .plaque && !metricHadSpecificTargets {
-                if let first = cursor.currentSequence.first, let last = cursor.currentSequence.last {
+            if self.cursor.currentMetric == .plaque && !metricHadSpecificTargets {
+                if let first = self.cursor.currentSequence.first, let last = self.cursor.currentSequence.last {
                     let sel = TeethSelection(startTooth: ToothObject.create(number: first), startAspect: nil, startSite: nil, endTooth: ToothObject.create(number: last), endAspect: nil, endSite: nil)
                     let cmd = AnnotationCommand(operation: .plaque, teethSelection: sel, aspect: nil, values: Array(repeating: "True", count: sel.expectedSlots))
                     commands.append(cmd)

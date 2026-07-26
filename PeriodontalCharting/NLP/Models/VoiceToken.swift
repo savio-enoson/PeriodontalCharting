@@ -7,10 +7,11 @@ enum ActionType: String, Equatable {
     case from = "dari"
     case until = "sampai"
     case until2 = "hingga"
-    case until3 = "dan"
+    // case until3 = "dan"
     case at = "pada"
     case at2 = "di"
     case all = "semua"
+    case commit = "selesai"
 }
 
 enum AnatomyType: String, Equatable {
@@ -26,6 +27,10 @@ enum AnatomyType: String, Equatable {
     case distoLingual = "disto lingual"
     case mesioPalatal = "mesio palatal"
     case distoPalatal = "disto palatal"
+    case midBuccal = "tengah bukal"
+    case midLabial = "tengah labial"
+    case midLingual = "tengah lingual"
+    case midPalatal = "tengah palatal"
     case upperJaw = "rahang atas"
     case lowerJaw = "rahang bawah"
 }

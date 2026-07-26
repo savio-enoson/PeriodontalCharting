@@ -2,7 +2,7 @@ import Foundation
 
 class VoiceCommandParser {
     var cursor: ChartingCursor
-    var activeSelection: TeethSelection?
+    var activeSelection: TeethSelection? { didSet { print("ACTIVE SEL CHANGED TO:", activeSelection?.startTooth.toothNumber ?? -1, activeSelection?.startSite ?? -2, "TO", activeSelection?.endTooth.toothNumber ?? -1, activeSelection?.endSite ?? -2) } }
     var pendingValues: [String] = []
     var missingTeeth: Set<Int> = []
     

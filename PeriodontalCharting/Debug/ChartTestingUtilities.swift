@@ -56,6 +56,15 @@ struct ChartTestingUtilities {
                 differences.append("Missing tooth \(toothNum) in actual chart")
                 continue
             }
+            if expectedTooth.missing != actualTooth.missing {
+                differences.append("Tooth \(toothNum) Missing status mismatch.")
+                continue // If they mismatch on missing status, further detailed comparison is often noisy.
+            }
+            
+            if expectedTooth.missing {
+                continue // If both are missing, we don't care about the other values.
+            }
+            
             if expectedTooth.probingDepth != actualTooth.probingDepth {
                 differences.append("Tooth \(toothNum) PD mismatch. Expected: \(expectedTooth.probingDepth), Actual: \(actualTooth.probingDepth)")
             }
@@ -67,9 +76,6 @@ struct ChartTestingUtilities {
             }
             if expectedTooth.plaque != actualTooth.plaque {
                 differences.append("Tooth \(toothNum) Plaque mismatch.")
-            }
-            if expectedTooth.missing != actualTooth.missing {
-                differences.append("Tooth \(toothNum) Missing status mismatch.")
             }
         }
         return differences

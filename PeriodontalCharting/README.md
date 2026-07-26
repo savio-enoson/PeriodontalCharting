@@ -388,7 +388,7 @@ A unified configuration interface for both initial onboarding and in-app setting
 - Each aspect card contains a nested `TwoItemReorderable` for jaw order (Upper/Lower).
 - Same direction picker per row.
 
-**`AnnotationVisualizerView`** (extracted to `AnnotationVisualizerView.swift`) — a live top-down teeth preview re-rendering on every config change. Shows two `JawVisualizer` instances (upper/lower), each displaying a 16-block placeholder tooth strip flanked by traversal arrows. The step number (e.g. "1.", "2.") is computed by `ChartingConfiguration.sequenceIndex(for:aspect:)`.
+**`AnnotationVisualizerView`** (extracted to `AnnotationVisualizerView.swift`) — a live top-down teeth preview re-rendering on every config change. Shows two `JawVisualizer` instances (upper/lower), each displaying a 16-block placeholder tooth strip flanked by traversal arrows. The view accurately reflects the standard WHO periodontal chart format by rendering the upper jaw with the Outer Side (top) to Inner Side (bottom), and the lower jaw with the Inner Side (top) to Outer Side (bottom). The step number (e.g. "1.", "2.") is computed by `ChartingConfiguration.sequenceIndex(for:aspect:)`.
 
 **Configuration persistence:** Encoded with `JSONEncoder` and stored in `UserDefaults` under key `"ChartingConfiguration"`. Read back in `OnboardingView.onAppear` and `AIVoiceViewModel.getConfiguration()`.
 
@@ -557,7 +557,7 @@ The text-to-token phase is managed by `VoiceTokenizer` which is split into:
 ### 3. `NLP/Parser/`
 The intricate state machine for token parsing is divided across `VoiceCommandParser` extensions for readability:
 - **`VoiceCommandParser.swift`**: Stores the mutable execution state (e.g. `currentNumbers`, `activeSelection`).
-- **`VoiceCommandParser+Parse.swift`**: The core parsing orchestrator handling the `[VoiceToken]` stream.
+- **`VoiceCommandParser+Parse.swift`**: The core parsing orchestrator handling the `[VoiceToken]` stream. It iterates tokens and mutates `ChartingCursor`, `activeSelection`, and `currentNumbers`. Crucially handles deferred lookahead aggregation for consecutive anatomy tokens before a tooth identifier (buffering multiple anatomies via `hasUpcomingToothIdentifier` and applying them as a contiguous bounds range). Handles range formation logic for `.until`.
 - **`VoiceCommandParser+Flush.swift`**: Logic for flushing buffers, committing values, and emitting boolean metrics.
 - **`VoiceCommandParser+Lookahead.swift`**: Disambiguation logic that peeks ahead in the token stream (e.g., resolving anatomical sequences).
 

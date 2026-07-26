@@ -5,24 +5,36 @@ extension VoiceTokenizer {
         var tokens: [VoiceToken] = []
         let cleaned = text.lowercased()
             .replacingOccurrences(of: ".", with: " _sep_ ")
-            .replacingOccurrences(of: ",", with: " _sep_ ")
+            .replacingOccurrences(of: ",", with: " ")
             .replacingOccurrences(of: "\n", with: " _sep_ ")
             .replacingOccurrences(of: "\r", with: " ")
+            .replacingOccurrences(of: "{", with: " ")
+            .replacingOccurrences(of: "}", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .replacingOccurrences(of: "mesiolingual", with: "mesio lingual")
+            .replacingOccurrences(of: "distolingual", with: "disto lingual")
+            .replacingOccurrences(of: "mesiobukal", with: "mesio bukal")
+            .replacingOccurrences(of: "distobukal", with: "disto bukal")
+            .replacingOccurrences(of: "mesiopalatal", with: "mesio palatal")
+            .replacingOccurrences(of: "distopalatal", with: "disto palatal")
+            .replacingOccurrences(of: "mesiolabial", with: "mesio labial")
+            .replacingOccurrences(of: "distolabial", with: "disto labial")
             .replacingOccurrences(of: "mid-", with: "mid ")
             .replacingOccurrences(of: "mid ", with: "mid")
             .replacingOccurrences(of: "b o p", with: "bop")
             .replacingOccurrences(of: "b.o.p", with: "bop")
             .replacingOccurrences(of: "bleeding on probing", with: "bop")
+            .replacingOccurrences(of: "bleeding or probing", with: "bop")
         
         var words = cleaned.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
         
         words = words.map { word in
             switch word {
-            case "misio", "mesyio": return "mesio"
+            case "misio", "mesyio", "mesyu", "meso": return "mesio"
             case "misial", "mesyal": return "mesial"
             case "diso", "distio", "dista": return "disto"
             case "disal": return "distal"
-            case "bocal", "vocal", "buka", "buckal": return "bukal"
+            case "bocal", "vocal", "buka", "buckal", "buk": return "bukal"
             case "plat", "plug", "flak", "plek", "flek", "black", "flag": return "plak"
             case "pocket", "poke", "poked": return "poket"
             case "beope", "biopi", "tiopi", "bleeding": return "bop"
@@ -41,7 +53,7 @@ extension VoiceTokenizer {
         
         func updateExpectedValues(for anatomy: AnatomyType) {
             switch anatomy {
-            case .mesioBuccal, .distoBuccal, .mesioLingual, .distoLingual, .mesioPalatal, .distoPalatal, .mesial, .distal:
+            case .mesioBuccal, .distoBuccal, .mesioLingual, .distoLingual, .mesioPalatal, .distoPalatal, .mesial, .distal, .midBuccal, .midLingual, .midPalatal, .midLabial:
                 expectedValues = 1
             case .buccal, .lingual, .palatal, .labial, .upperJaw, .lowerJaw:
                 expectedValues = 3
@@ -82,12 +94,19 @@ extension VoiceTokenizer {
                 expectedValues = 3; currentValues = 0
                 i += 1; continue
             }
-            if w == "mid" {
-                if let anatomy = AnatomyType(rawValue: nextW) {
-                    tokens.append(.anatomy(anatomy))
-                    updateExpectedValues(for: anatomy)
-                    i += 2; continue
-                }
+            if w == "semua" || w == "semuanya" || w == "seluruh" || w == "seluruhnya" { tokens.append(.action(.all)); i += 1; continue }
+            if w == "lanjut" || w == "selesai" || w == "kemudian" || w == "selanjutnya" || w == "berikutnya" { tokens.append(.action(.commit)); i += 1; continue }
+            
+            if w == "midlingual" || w == "tengahlingual" { tokens.append(.anatomy(.midLingual)); updateExpectedValues(for: .midLingual); i += 1; continue }
+            if w == "midbukal" || w == "tengahbukal" { tokens.append(.anatomy(.midBuccal)); updateExpectedValues(for: .midBuccal); i += 1; continue }
+            if w == "midpalatal" || w == "tengahpalatal" { tokens.append(.anatomy(.midPalatal)); updateExpectedValues(for: .midPalatal); i += 1; continue }
+            if w == "midlabial" || w == "tengahlabial" { tokens.append(.anatomy(.midLabial)); updateExpectedValues(for: .midLabial); i += 1; continue }
+
+            if w == "mid" || w == "tengah" {
+                if nextW == "lingual" { tokens.append(.anatomy(.midLingual)); updateExpectedValues(for: .midLingual); i += 2; continue }
+                if nextW == "bukal" { tokens.append(.anatomy(.midBuccal)); updateExpectedValues(for: .midBuccal); i += 2; continue }
+                if nextW == "palatal" { tokens.append(.anatomy(.midPalatal)); updateExpectedValues(for: .midPalatal); i += 2; continue }
+                if nextW == "labial" { tokens.append(.anatomy(.midLabial)); updateExpectedValues(for: .midLabial); i += 2; continue }
             }
             
             if w == "mesio" || w == "mesial" {
@@ -148,7 +167,7 @@ extension VoiceTokenizer {
                             isStreamEnd = true
                         }
                         
-                        let isStartOfBlock = expectedValues == 0 || (currentValues % expectedValues == 0 && expectedValues >= 3)
+                        let isStartOfBlock = currentValues == 0 || (currentValues % expectedValues == 0 && expectedValues >= 3)
                         
                         if !thirdIsSingleDigit && isStartOfBlock {
                             if isStreamEnd && !isFinal {

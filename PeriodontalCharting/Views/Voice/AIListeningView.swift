@@ -178,14 +178,22 @@ struct CommandRow: View {
 struct HistoryCard: View {
     let operation: String
     let selection: String
+    var wasPadded: Bool = false
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(operation)
-                .font(.headline)
-            Text(selection)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(operation)
+                    .font(.headline)
+                Text(selection)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            if wasPadded {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundColor(.orange)
+            }
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)

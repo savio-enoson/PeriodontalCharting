@@ -2,6 +2,8 @@ import Foundation
 
 struct ChartProcessor {
     static func apply(command: AnnotationCommand, to mouthState: inout [Int: ToothObject]) {
+        print("APPLY: \(command)")
+        
         let ts = command.teethSelection
         
         if let sAspect = ts.startAspect, let eAspect = ts.endAspect {
@@ -35,7 +37,8 @@ struct ChartProcessor {
                 }
             }
             return
-        } else if let sSite = ts.startSite, let eSite = ts.endSite, ts.startTooth.toothNumber == ts.endTooth.toothNumber {
+        } else if let sSite = ts.startSite, ts.startTooth.toothNumber == ts.endTooth.toothNumber {
+            let eSite = ts.endSite ?? sSite
             let aspectsToIterate: [ChartAspect] = ts.startAspect == nil ? [.outer, .inner] : [ts.startAspect!]
             let t = ts.startTooth.toothNumber
             var valIdx = 0

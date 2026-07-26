@@ -91,9 +91,9 @@ struct ChartAnatomyResolver {
         
         let aspect: ChartAspect?
         switch anatomy {
-        case .mesioBuccal, .distoBuccal, .buccal, .labial:
+        case .mesioBuccal, .distoBuccal, .midBuccal, .buccal, .midLabial, .labial:
             aspect = .outer
-        case .mesioLingual, .distoLingual, .mesioPalatal, .distoPalatal, .lingual, .palatal:
+        case .mesioLingual, .distoLingual, .midLingual, .mesioPalatal, .distoPalatal, .midPalatal, .lingual, .palatal:
             aspect = .inner
         case .mesial, .distal:
             aspect = currentAspect
@@ -105,8 +105,10 @@ struct ChartAnatomyResolver {
         switch anatomy {
         case .mesioBuccal, .mesioLingual, .mesioPalatal, .mesial: isMesial = true
         case .distoBuccal, .distoLingual, .distoPalatal, .distal: isMesial = false
-        case .buccal, .labial, .lingual, .palatal:
+        case .midBuccal, .midLingual, .midPalatal, .midLabial:
             return (aspect, 1)
+        case .buccal, .labial, .lingual, .palatal:
+            return (aspect, nil)
         default: return nil
         }
         

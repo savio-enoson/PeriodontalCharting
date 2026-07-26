@@ -22,29 +22,35 @@ struct JawVisualizer: View {
                 .font(.subheadline)
                 .fontWeight(.bold)
             
-            // Inner Side (Top)
-            visualizerOverlay(for: .palatal)
-            
-            // Teeth Placeholder
-            HStack(spacing: 4) {
-                ForEach(0..<16, id: \.self) { _ in
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Color(.systemGray4))
-                        .frame(height: 32)
-                }
+            if jaw == .upper {
+                // Upper Jaw: Outer (Top) to Inner (Bottom)
+                visualizerOverlay(for: .buccal, label: "Outer Side")
+                teethPlaceholder
+                visualizerOverlay(for: .palatal, label: "Inner Side")
+            } else {
+                // Lower Jaw: Inner (Top) to Outer (Bottom)
+                visualizerOverlay(for: .palatal, label: "Inner Side")
+                teethPlaceholder
+                visualizerOverlay(for: .buccal, label: "Outer Side")
             }
-            .frame(height: 48)
-            
-            // Outer Side (Bottom)
-            visualizerOverlay(for: .buccal)
         }
     }
     
+    private var teethPlaceholder: some View {
+        HStack(spacing: 4) {
+            ForEach(0..<16, id: \.self) { _ in
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(Color(.systemGray4))
+                    .frame(height: 32)
+            }
+        }
+        .frame(height: 48)
+    }
+    
     @ViewBuilder
-    private func visualizerOverlay(for aspect: AspectType) -> some View {
+    private func visualizerOverlay(for aspect: AspectType, label sideText: String) -> some View {
         let index = config.sequenceIndex(for: jaw, aspect: aspect)
         let direction = config.direction(for: jaw, aspect: aspect)
-        let sideText = aspect == .buccal ? "Outer Side" : "Inner Side"
         let isLeftToRight = direction == .leftToRight
         
         VStack(alignment: isLeftToRight ? .leading : .trailing, spacing: 4) {
