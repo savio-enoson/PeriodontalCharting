@@ -227,6 +227,12 @@ enum ClinicalConfig {
         // stray "lingual"
         (#"\b(?:limual|limoal|lungwal|lingwal|linguah|linguard|bistur)\b"#, "lingual"),
         (#"\b(?:4 cation|furukasih|forcation|furukashi)\b"#, "furcation"),
+        // "minus satu" (recession value -1) gets merged/garbled by STT into one
+        // non-corpus word ("minosato" / "minusatu"), so the value is lost entirely.
+        // Split it back so "satu" -> 1 survives (the sign still comes from the
+        // metric, e.g. resesi). Matches the merged form only; leaves the correct
+        // spaced "minus satu"/"minus dua" untouched. Add sibling numbers as observed.
+        (#"\bmin[ou]sat[ou]o?\b"#, "minus satu"),
         // Compound site terms: normalize to the SPACED form.
         //
         // Both spellings mean the same site, and both occur in dictation and in

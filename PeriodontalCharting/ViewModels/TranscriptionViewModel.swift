@@ -324,14 +324,21 @@ final class TranscriptionViewModel: LiveCaptureDriver {
             tokenizer: tokenizer,
             audioProcessor: whisper.audioProcessor,
             decodingOptions: options,
-            // Bound the live buffer to the most recent 60 s. Without this the
-            // streamer keeps every sample of the session and re-processes the
-            // whole thing each 100 ms tick — ~46 MB and climbing on a 12-minute
-            // charting session, and a long internal silence gets re-fed to the
-            // decoder every pass (which is what let the biased-vocabulary runaway
-            // reappear repeatedly on the live path). 60 s keeps ample decode
-            // context beyond Whisper's 30 s window while capping retained audio.
-            maxRetainedAudioSeconds: 60
+            // [LATENCY Tier 2] Confirm a segment after only 1 following segment
+            // instead of 2 (WhisperKit default). The chart commits off *confirmed*
+            // text, so this removes a whole spoken phrase of lag. Safe here because
+            // charting utterances are short and rarely revised, and the parser is
+            // idempotent (re-derives the whole chart from the full transcript each
+            // call) so the rare late correction is absorbed. Revert to 2 if you see
+            // segments freezing on a wrong value.
+            requiredSegmentsForConfirmation: 1,
+            // [LATENCY Tier 1] Bound the live buffer. The streamer re-decodes the
+            // ENTIRE retained buffer every ~100 ms tick, so 60 s = two full 30 s
+            // Whisper windows decoded per tick. 32 s keeps a full 30 s window (+
+            // margin) while ~halving per-tick decode cost, and retains less silence
+            // (which is what fed the biased-vocabulary runaway) — strictly safer.
+            // Do NOT drop below ~30 s: that truncates Whisper's own decode window.
+            maxRetainedAudioSeconds: 32
         ) { [weak self] _, newState in
             // Callback is @Sendable / off the main actor — hop back to update UI state.
             //
