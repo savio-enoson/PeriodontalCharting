@@ -11,6 +11,7 @@ struct ChartDashboard: View {
     @State private var showDebugMenu = false
     @State private var showAIMode = false
     @State private var showSettings = false
+    @State private var showTranscription = false
     @State private var highlightTask: Task<Void, Never>?
     @Binding var columnVisibility: NavigationSplitViewVisibility
 
@@ -162,6 +163,12 @@ struct ChartDashboard: View {
                 }
                 
                 Button {
+                    showTranscription = true
+                } label: {
+                    Label("Transcribe", systemImage: "waveform")
+                }
+
+                Button {
                     // Export logic placeholder
                 } label: {
                     Label("Export", systemImage: "square.and.arrow.up")
@@ -219,6 +226,9 @@ struct ChartDashboard: View {
         }
         .sheet(isPresented: $showSettings) {
             OnboardingView(hasCompletedOnboarding: .constant(true), isSettingsMode: true)
+        }
+        .sheet(isPresented: $showTranscription) {
+            LiveTranscriptionView()
         }
         .onChange(of: aiViewModel.commandHistory) { _, newHistory in
             var newMouth = ToothObject.fullMouthEmpty()

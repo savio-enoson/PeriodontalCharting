@@ -6,6 +6,11 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		9B4C62B230136AD0008BE63F /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 9B4C62B130136AD0008BE63F /* WhisperKit */; };
+		9B4C62B530136AF5008BE63F /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 9B4C62B430136AF5008BE63F /* WhisperKit */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		2C11C7B3300DF29D00D797E6 /* PeriodontalCharting.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PeriodontalCharting.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -23,6 +28,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				9B4C62B530136AF5008BE63F /* WhisperKit in Frameworks */,
+				9B4C62B230136AD0008BE63F /* WhisperKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -65,6 +72,8 @@
 			);
 			name = PeriodontalCharting;
 			packageProductDependencies = (
+				9B4C62B130136AD0008BE63F /* WhisperKit */,
+				9B4C62B430136AF5008BE63F /* WhisperKit */,
 			);
 			productName = PeriodontalCharting;
 			productReference = 2C11C7B3300DF29D00D797E6 /* PeriodontalCharting.app */;
@@ -94,6 +103,9 @@
 			);
 			mainGroup = 2C11C7AA300DF29D00D797E6;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				9B4C62B330136AF5008BE63F /* XCLocalSwiftPackageReference "../argmax-oss-swift" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 2C11C7B4300DF29D00D797E6 /* Products */;
 			projectDirPath = "";
@@ -253,9 +265,10 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 54XZ73U5GW;
+				DEVELOPMENT_TEAM = 8K59B5RZ46;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSAppleMusicUsageDescription = "Allow this for access to full app feature";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Microphone access is required for real-time dictation.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -286,9 +299,10 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 54XZ73U5GW;
+				DEVELOPMENT_TEAM = 8K59B5RZ46;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSAppleMusicUsageDescription = "Allow this for access to full app feature";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Microphone access is required for real-time dictation.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -334,6 +348,24 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		9B4C62B330136AF5008BE63F /* XCLocalSwiftPackageReference "../argmax-oss-swift" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "../argmax-oss-swift";
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		9B4C62B130136AD0008BE63F /* WhisperKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = WhisperKit;
+		};
+		9B4C62B430136AF5008BE63F /* WhisperKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = WhisperKit;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 2C11C7AB300DF29D00D797E6 /* Project object */;
 }
