@@ -5,6 +5,14 @@ import Combine
 class AIVoiceViewModel: ObservableObject {
     @Published var liveTranscription: String = ""
     @Published var isListening: Bool = false
+    /// True while real Whisper dictation is feeding the parser (vs. the debug
+    /// simulation, which sets `isListening`). Kept separate so both controls can
+    /// show independent state; the two are mutually exclusive at runtime.
+    @Published var isDictating: Bool = false
+
+    /// Real on-device transcription. AI Mode drives it and consumes its confirmed
+    /// chunks; the standalone LiveTranscriptionView uses its own instance.
+    private let transcriber = TranscriptionViewModel()
     
     // Stubs for future parsing architecture
     @Published var currentCommand: AnnotationCommand? = nil
@@ -163,7 +171,71 @@ Plaque pada semua gigi
         stopSimulation()
     }
 
+    // MARK: - Live dictation (real Whisper transcription → annotation parser)
+
+    func toggleLiveDictation() {
+        if isDictating { stopLiveDictation() } else { startLiveDictation() }
+    }
+
+    /// Begin real on-device dictation. Whisper's running text mirrors into the
+    /// panel immediately, but the annotation parser only runs when a chunk is
+    /// *confirmed* (see `onConfirmedTranscript`) — so the chart updates a chunk at
+    /// a time, never on hypotheses Whisper may still revise.
+    func startLiveDictation() {
+        stopSimulation()          // the two feeds are mutually exclusive
+        isDictating = true
+        liveTranscription = ""
+        commandHistory = []
+        currentCommand = nil
+        initializeCursorIfNeeded()
+
+        transcriber.inputMode = .live
+        transcriber.onLiveTranscript = { [weak self] text in
+            self?.liveTranscription = text
+        }
+        transcriber.onConfirmedTranscript = { [weak self] confirmed in
+            self?.ingestConfirmed(confirmed)
+        }
+
+        Task { [weak self] in
+            guard let self else { return }
+            await self.transcriber.loadModel()
+            guard self.isDictating else { return }  // stopped during model load
+            self.transcriber.startLive()
+        }
+    }
+
+    func stopLiveDictation() {
+        guard isDictating else { return }
+        isDictating = false
+        transcriber.stopLive()
+        transcriber.onLiveTranscript = nil
+        transcriber.onConfirmedTranscript = nil
+        // Final flush over everything captured, so trailing (not-yet-confirmed)
+        // words still land as commands when the clinician stops.
+        ingestConfirmed(liveTranscription, isFinal: true)
+    }
+
+    /// Run the annotation parser over `text` and publish the resulting chart state.
+    /// Shared by the confirmed-chunk feed and the final flush.
+    private func ingestConfirmed(_ text: String, isFinal: Bool = false) {
+        guard !text.isEmpty else { return }
+        let parser = VoiceCommandParser(configuration: getConfiguration())
+        let parsed = parser.parse(text: text, isFinal: isFinal)
+
+        self.commandHistory = parsed
+        if let last = parsed.last, last.operation == parser.cursor.currentMetric {
+            self.currentCommand = last
+        } else {
+            self.currentCommand = nil
+        }
+        self.currentCursor = parser.cursor
+        self.activeSelection = parser.activeSelection
+        self.pendingValues = parser.pendingValues
+    }
+
     private func startSimulation(from text: String?) {
+        stopLiveDictation()   // the two feeds are mutually exclusive
         if let newText = text {
             let spaced = newText
                 .replacingOccurrences(of: "\n", with: " \n ")

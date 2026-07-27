@@ -21,7 +21,15 @@ struct AIListeningView: View {
                         .symbolEffect(.pulse)
                     
                     Spacer()
-                    
+
+                    // Real live dictation (Whisper → annotation parser per chunk).
+                    Button(action: { viewModel.toggleLiveDictation() }) {
+                        Image(systemName: viewModel.isDictating ? "mic.fill" : "mic")
+                            .font(.title2)
+                            .foregroundStyle(viewModel.isDictating ? .red : .blue)
+                            .symbolEffect(.pulse, isActive: viewModel.isDictating)
+                    }
+
                     // DEBUG: Start Simulation
                     Button(action: {
                         viewModel.toggleSimulation(from: viewModel.selectedTestTranscript)

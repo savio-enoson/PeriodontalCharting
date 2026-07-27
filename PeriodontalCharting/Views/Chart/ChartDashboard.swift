@@ -95,6 +95,9 @@ struct ChartDashboard: View {
                         }
                     }
                 } else {
+                    // Leaving AI Mode stops any live dictation so the mic isn't
+                    // left hot behind a closed panel.
+                    aiViewModel.stopLiveDictation()
                     withAnimation(.easeInOut(duration: 0.5)) {
                         finalScale = 1.0
                     }

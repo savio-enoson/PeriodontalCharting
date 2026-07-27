@@ -78,6 +78,25 @@ final class TranscriptionViewModel: LiveCaptureDriver {
     // here and prepend it, so a Bluetooth blip mid-session doesn't wipe the note.
     private var liveCarryOver = ""
 
+    // MARK: - Live event hooks (for AI Mode)
+
+    /// Fired on every live update with the running display transcript (confirmed +
+    /// unconfirmed). AI Mode mirrors this into its panel for immediate feedback.
+    var onLiveTranscript: ((String) -> Void)?
+
+    /// Fired ONLY when Whisper confirms a new chunk, with the cumulative confirmed
+    /// transcript so far. AI Mode runs the annotation parser off this — so the chart
+    /// only updates once a chunk is finalized, never on volatile partial hypotheses
+    /// that Whisper may still revise.
+    var onConfirmedTranscript: ((String) -> Void)?
+
+    // Confirmed-chunk tracking backing `onConfirmedTranscript`. `count` gates the
+    // fire; `cumulative`/`carryOver` mirror liveCarryOver so a mid-session restart
+    // doesn't drop already-parsed commands.
+    private var lastConfirmedSegmentCount = 0
+    private var lastConfirmedCumulative = ""
+    private var liveConfirmedCarryOver = ""
+
     /// WhisperKit decodes a fixed 30 s window; batch speech is packed into chunks
     /// no larger than this so each decode fills the window (not one pass per burst).
     private static let maxChunkSamples = 30 * SileroVADEngine.sampleRate
@@ -272,6 +291,11 @@ final class TranscriptionViewModel: LiveCaptureDriver {
         else { startLiveTranscription() }
     }
 
+    /// State-agnostic start/stop used by callers that drive live mode externally
+    /// (AI Mode), where a plain toggle would be ambiguous.
+    func startLive() { if !isRecording { startLiveTranscription() } }
+    func stopLive()  { if isRecording { stopLiveTranscription() } }
+
     private func startLiveTranscription() {
         guard let whisper = whisperKit, whisper.tokenizer != nil else {
             statusMessage = "Model not ready."
@@ -280,6 +304,9 @@ final class TranscriptionViewModel: LiveCaptureDriver {
 
         transcript = ""
         liveCarryOver = ""
+        liveConfirmedCarryOver = ""
+        lastConfirmedCumulative = ""
+        lastConfirmedSegmentCount = 0
         benchmarkTime = 0
         rtfValue = 0
         isRecording = true
@@ -377,6 +404,24 @@ final class TranscriptionViewModel: LiveCaptureDriver {
                 self.transcript = self.liveCarryOver.isEmpty
                     ? cleaned
                     : (self.liveCarryOver + " " + cleaned).trimmingCharacters(in: .whitespaces)
+                self.onLiveTranscript?(self.transcript)
+
+                // Confirmed-chunk gate: fire onConfirmedTranscript only when Whisper
+                // has finalized a new segment (its confirmed count advanced), passing
+                // the cumulative *confirmed* text. Downstream (AI Mode) parses off this
+                // so annotations never react to unconfirmed hypotheses.
+                if newState.confirmedSegments.count != self.lastConfirmedSegmentCount {
+                    self.lastConfirmedSegmentCount = newState.confirmedSegments.count
+                    let cleanedConfirmed = ClinicalConfig.clean(confirmed)
+                    let confirmedCumulative = self.liveConfirmedCarryOver.isEmpty
+                        ? cleanedConfirmed
+                        : (self.liveConfirmedCarryOver + " " + cleanedConfirmed).trimmingCharacters(in: .whitespaces)
+                    if !confirmedCumulative.isEmpty {
+                        self.lastConfirmedCumulative = confirmedCumulative
+                        self.onConfirmedTranscript?(confirmedCumulative)
+                    }
+                }
+
                 // `currentText` is the framework's live status signal ("Waiting for
                 // speech...", or interim decode progress) — without this the UI gives
                 // zero feedback between "Listening…" and the first *confirmed* segment
@@ -426,6 +471,11 @@ final class TranscriptionViewModel: LiveCaptureDriver {
         guard isRecording else { return }
         // Keep what's been transcribed so far; the new transcriber starts empty.
         liveCarryOver = transcript
+        // Same for the confirmed-only stream feeding the annotation parser, so a
+        // restart mid-dictation doesn't re-emit a shorter transcript and drop
+        // already-applied commands.
+        liveConfirmedCarryOver = lastConfirmedCumulative
+        lastConfirmedSegmentCount = 0
         lastLiveUpdateTime = nil
         lastLiveConfirmedSeconds = 0
         await streamTranscriber?.stopStreamTranscription()
