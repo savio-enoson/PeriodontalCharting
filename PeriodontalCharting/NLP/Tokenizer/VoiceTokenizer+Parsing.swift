@@ -151,6 +151,20 @@ extension VoiceTokenizer {
             }
             
             if let num = parseIntOrWord(w) {
+                // Whisper often concatenates a spoken run of single-digit values
+                // ("3 3 3") into one number ("333"). No valid tooth id (11–48) or
+                // per-site metric value is ≥ 100, so a 3+ digit number here is
+                // unambiguously a run of individual values — split it back into
+                // single-digit `.number` tokens so it charts exactly as "3 3 3" would.
+                if num >= 100 {
+                    for ch in String(num) {
+                        guard let d = ch.wholeNumberValue else { continue }
+                        tokens.append(.number(d))
+                        currentValues += 1
+                    }
+                    i += 1; continue
+                }
+
                 if num > 10 && num < 99 {
                     tokens.append(.toothIdentifier(num))
                     expectedValues = 3; currentValues = 0
