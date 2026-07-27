@@ -221,9 +221,10 @@ Each anatomy context carries an `expectedValues` count that tells the tokenizer 
 #### `.number(n)`
 
 1. If a pending post-target template exists, flush it first (`flushPostTargetIfPending`) and exit post-targeting mode.
-2. **Single-site escape hatch:** If `activeSelection.expectedSlots == 1` and the current metric is `.probingDepth`, peek ahead — if 3 or more numbers are coming, clear `activeSelection` (the clinician is dictating a full-tooth sequence, not a single-site correction).
-3. If the current metric is boolean (bleeding/plaque/implant), emit any pending bool command and restore to main sequence before treating the number as a probing depth value.
-4. Append `n` to `currentNumbers`, then attempt `flushNumbers(force: false)`.
+2. **Array-Lookahead Fallback:** If `currentNumbers` is empty, look ahead in the token stream. If 3 or more contiguous numbers (ignoring `_sep_`) follow, and the current metric expects fewer than 3 values (e.g. `furcation` or `mobility`), the metric is automatically overridden to `.probingDepth`. This self-corrects cases where a user dictates 3 numbers sequentially for a 1-value metric without explicitly declaring the switch back to Probing Depth.
+3. **Single-site escape hatch:** If `activeSelection.expectedSlots == 1` and the current metric is `.probingDepth`, peek ahead — if 3 or more numbers are coming, clear `activeSelection` (the clinician is dictating a full-tooth sequence, not a single-site correction).
+4. If the current metric is boolean (bleeding/plaque/implant), emit any pending bool command and restore to main sequence before treating the number as a probing depth value.
+5. Append `n` to `currentNumbers`, then attempt `flushNumbers(force: false)`.
 
 #### `.toothIdentifier(tooth)`
 

@@ -1,0 +1,1882 @@
+[
+  {
+    "probingDepth" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "missing" : false,
+    "mobility" : 0,
+    "toothNumber" : 11,
+    "plaque" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    },
+    "gingivalMargin" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "id" : "DACDCC39-960A-41FC-A64C-C6908AB8B95B",
+    "implant" : false,
+    "bleeding" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  {
+    "probingDepth" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "missing" : false,
+    "mobility" : 0,
+    "toothNumber" : 12,
+    "plaque" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    },
+    "gingivalMargin" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "id" : "13119D8D-B723-4F64-96FE-02E7EC432730",
+    "implant" : false,
+    "bleeding" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  {
+    "probingDepth" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "missing" : false,
+    "mobility" : 0,
+    "toothNumber" : 13,
+    "plaque" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    },
+    "gingivalMargin" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "id" : "BC38050E-055A-4D9E-8751-5B722A76843A",
+    "implant" : false,
+    "bleeding" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  {
+    "probingDepth" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "missing" : false,
+    "mobility" : 0,
+    "furcation" : {
+      "outer" : [
+
+      ],
+      "inner" : [
+        0,
+        0
+      ]
+    },
+    "toothNumber" : 14,
+    "plaque" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    },
+    "gingivalMargin" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "id" : "534173CD-FE34-41E3-911F-7557B0C678DF",
+    "implant" : false,
+    "bleeding" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  {
+    "probingDepth" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "missing" : false,
+    "mobility" : 0,
+    "toothNumber" : 15,
+    "plaque" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    },
+    "gingivalMargin" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "id" : "53D72C6D-1F16-40AA-9F62-86AA4810155E",
+    "implant" : false,
+    "bleeding" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  {
+    "probingDepth" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "missing" : false,
+    "mobility" : 1,
+    "furcation" : {
+      "outer" : [
+        1
+      ],
+      "inner" : [
+        0,
+        0
+      ]
+    },
+    "toothNumber" : 16,
+    "plaque" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    },
+    "gingivalMargin" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "id" : "4B6E564E-C9FD-4BD5-A413-F6267435F2E2",
+    "implant" : false,
+    "bleeding" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  {
+    "probingDepth" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "missing" : false,
+    "mobility" : 0,
+    "furcation" : {
+      "outer" : [
+        0
+      ],
+      "inner" : [
+        0,
+        0
+      ]
+    },
+    "toothNumber" : 17,
+    "plaque" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    },
+    "gingivalMargin" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "id" : "2C94A9BD-DF7D-4AD0-8624-DED0CDCC6E8E",
+    "implant" : false,
+    "bleeding" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  {
+    "probingDepth" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "missing" : false,
+    "mobility" : 0,
+    "furcation" : {
+      "outer" : [
+        0
+      ],
+      "inner" : [
+        0,
+        0
+      ]
+    },
+    "toothNumber" : 18,
+    "plaque" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    },
+    "gingivalMargin" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "id" : "A68443F3-2A24-47B5-B676-4B6FF4E137D2",
+    "implant" : false,
+    "bleeding" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  {
+    "probingDepth" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "missing" : false,
+    "mobility" : 0,
+    "toothNumber" : 21,
+    "plaque" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    },
+    "gingivalMargin" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "id" : "3739B6C4-1716-4D3D-88D4-780E353BF454",
+    "implant" : false,
+    "bleeding" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  {
+    "probingDepth" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "missing" : false,
+    "mobility" : 0,
+    "toothNumber" : 22,
+    "plaque" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    },
+    "gingivalMargin" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "id" : "8B460283-8D97-44F3-962A-FD3636B848A5",
+    "implant" : false,
+    "bleeding" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  {
+    "probingDepth" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "missing" : false,
+    "mobility" : 0,
+    "toothNumber" : 23,
+    "plaque" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    },
+    "gingivalMargin" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "id" : "07F5DE85-255A-43C8-BF6D-F698C472C5EF",
+    "implant" : false,
+    "bleeding" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  {
+    "probingDepth" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "missing" : false,
+    "mobility" : 0,
+    "furcation" : {
+      "outer" : [
+
+      ],
+      "inner" : [
+        0,
+        0
+      ]
+    },
+    "toothNumber" : 24,
+    "plaque" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    },
+    "gingivalMargin" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "id" : "AE061136-3397-4634-B47A-EE4E5A7080B4",
+    "implant" : false,
+    "bleeding" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  {
+    "probingDepth" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "missing" : false,
+    "mobility" : 0,
+    "toothNumber" : 25,
+    "plaque" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    },
+    "gingivalMargin" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "id" : "3931126E-85D8-4702-9EFC-74DFA77B02D0",
+    "implant" : false,
+    "bleeding" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  {
+    "probingDepth" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "missing" : false,
+    "mobility" : 0,
+    "furcation" : {
+      "outer" : [
+        0
+      ],
+      "inner" : [
+        0,
+        0
+      ]
+    },
+    "toothNumber" : 26,
+    "plaque" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    },
+    "gingivalMargin" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "id" : "5C89D411-E344-4C50-99F5-11F94B4DC587",
+    "implant" : false,
+    "bleeding" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  {
+    "probingDepth" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "missing" : false,
+    "mobility" : 0,
+    "furcation" : {
+      "outer" : [
+        0
+      ],
+      "inner" : [
+        0,
+        0
+      ]
+    },
+    "toothNumber" : 27,
+    "plaque" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    },
+    "gingivalMargin" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "id" : "DDBFD6F1-1022-4C0F-8556-22F9E0469D1F",
+    "implant" : false,
+    "bleeding" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  {
+    "probingDepth" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "missing" : false,
+    "mobility" : 0,
+    "furcation" : {
+      "outer" : [
+        0
+      ],
+      "inner" : [
+        0,
+        0
+      ]
+    },
+    "toothNumber" : 28,
+    "plaque" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    },
+    "gingivalMargin" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "id" : "F4627F5B-D0E1-4B63-BD0B-27ABE09A5B91",
+    "implant" : false,
+    "bleeding" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  {
+    "probingDepth" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "missing" : false,
+    "mobility" : 0,
+    "toothNumber" : 31,
+    "plaque" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    },
+    "gingivalMargin" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "id" : "771A4D42-1E53-4463-9CD0-C1DF74FF2EE5",
+    "implant" : false,
+    "bleeding" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  {
+    "probingDepth" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "missing" : false,
+    "mobility" : 0,
+    "toothNumber" : 32,
+    "plaque" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    },
+    "gingivalMargin" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "id" : "5ECE0ACD-E30F-4A24-B76D-BF8C15678E9E",
+    "implant" : false,
+    "bleeding" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  {
+    "probingDepth" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "missing" : false,
+    "mobility" : 0,
+    "toothNumber" : 33,
+    "plaque" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    },
+    "gingivalMargin" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "id" : "E8C74330-571A-4AD7-A1D6-A5830BD4E1EA",
+    "implant" : false,
+    "bleeding" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  {
+    "probingDepth" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "missing" : false,
+    "mobility" : 0,
+    "toothNumber" : 34,
+    "plaque" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    },
+    "gingivalMargin" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "id" : "90790557-D28B-4019-BD63-A5C19FA1CBAB",
+    "implant" : false,
+    "bleeding" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  {
+    "probingDepth" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "missing" : false,
+    "mobility" : 0,
+    "toothNumber" : 35,
+    "plaque" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    },
+    "gingivalMargin" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "id" : "715B4634-E688-4A96-88C2-1BCB95099F08",
+    "implant" : false,
+    "bleeding" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  {
+    "probingDepth" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "missing" : false,
+    "mobility" : 0,
+    "furcation" : {
+      "outer" : [
+        0
+      ],
+      "inner" : [
+        0
+      ]
+    },
+    "toothNumber" : 36,
+    "plaque" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    },
+    "gingivalMargin" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "id" : "5E0B1BA5-1B8C-4427-BEC9-D51DD124F49E",
+    "implant" : false,
+    "bleeding" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  {
+    "probingDepth" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "missing" : false,
+    "mobility" : 0,
+    "furcation" : {
+      "outer" : [
+        0
+      ],
+      "inner" : [
+        0
+      ]
+    },
+    "toothNumber" : 37,
+    "plaque" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    },
+    "gingivalMargin" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "id" : "DDBF3F7B-8385-4161-A472-5BE40EE7E33E",
+    "implant" : false,
+    "bleeding" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  {
+    "probingDepth" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "missing" : false,
+    "mobility" : 0,
+    "furcation" : {
+      "outer" : [
+        0
+      ],
+      "inner" : [
+        0
+      ]
+    },
+    "toothNumber" : 38,
+    "plaque" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    },
+    "gingivalMargin" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "id" : "AA45EACA-BACC-4038-80AA-3AB88D2B1C9E",
+    "implant" : false,
+    "bleeding" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  {
+    "probingDepth" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "missing" : false,
+    "mobility" : 0,
+    "toothNumber" : 41,
+    "plaque" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    },
+    "gingivalMargin" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "id" : "07343E42-3333-4E05-881F-28A248946405",
+    "implant" : false,
+    "bleeding" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  {
+    "probingDepth" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "missing" : false,
+    "mobility" : 0,
+    "toothNumber" : 42,
+    "plaque" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    },
+    "gingivalMargin" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "id" : "91130375-2759-4283-9483-D04EEF785247",
+    "implant" : false,
+    "bleeding" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  {
+    "probingDepth" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "missing" : false,
+    "mobility" : 0,
+    "toothNumber" : 43,
+    "plaque" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    },
+    "gingivalMargin" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "id" : "9300D48A-58F8-4E9B-A4F7-55E56227FE42",
+    "implant" : false,
+    "bleeding" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  {
+    "probingDepth" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "missing" : false,
+    "mobility" : 0,
+    "toothNumber" : 44,
+    "plaque" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    },
+    "gingivalMargin" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "id" : "02B7F357-6A6E-4A49-B39B-C9CDC8DF07AF",
+    "implant" : false,
+    "bleeding" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  {
+    "probingDepth" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "missing" : false,
+    "mobility" : 0,
+    "toothNumber" : 45,
+    "plaque" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    },
+    "gingivalMargin" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "id" : "5DEA9EEC-E3B6-4D26-B773-A5FC04F150E2",
+    "implant" : false,
+    "bleeding" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  {
+    "probingDepth" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "missing" : false,
+    "mobility" : 2,
+    "furcation" : {
+      "outer" : [
+        2
+      ],
+      "inner" : [
+        3
+      ]
+    },
+    "toothNumber" : 46,
+    "plaque" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    },
+    "gingivalMargin" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "id" : "477D5C7C-51E7-46AD-807D-1A41DFCB9EE0",
+    "implant" : false,
+    "bleeding" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  {
+    "probingDepth" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "missing" : false,
+    "mobility" : 1,
+    "furcation" : {
+      "outer" : [
+        1
+      ],
+      "inner" : [
+        1
+      ]
+    },
+    "toothNumber" : 47,
+    "plaque" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    },
+    "gingivalMargin" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "id" : "63430240-8201-48C4-9662-31A01D9E47A9",
+    "implant" : false,
+    "bleeding" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  {
+    "probingDepth" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "missing" : false,
+    "mobility" : 0,
+    "furcation" : {
+      "outer" : [
+        0
+      ],
+      "inner" : [
+        0
+      ]
+    },
+    "toothNumber" : 48,
+    "plaque" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    },
+    "gingivalMargin" : {
+      "outer" : [
+        0,
+        0,
+        0
+      ],
+      "inner" : [
+        0,
+        0,
+        0
+      ]
+    },
+    "id" : "16294E11-4DBF-41B7-A45D-F7010BCFA17E",
+    "implant" : false,
+    "bleeding" : {
+      "outer" : [
+        false,
+        false,
+        false
+      ],
+      "inner" : [
+        false,
+        false,
+        false
+      ]
+    }
+  }
+]

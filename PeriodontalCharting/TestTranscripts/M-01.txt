@@ -1,0 +1,11 @@
+Gigi 16
+kegoyangan 2
+
+Gigi 26
+kegoyangan 1
+
+Gigi 17
+kegoyangan 0
+
+Gigi 27
+kegoyangan 3

@@ -20,6 +20,26 @@ extension VoiceCommandParser {
                 flushPostTargetIfPending()
                 isPostTargeting = false
                 
+                if currentNumbers.isEmpty {
+                    var numCount = 0
+                    var lookaheadIdx = tokenIndex
+                    while lookaheadIdx < tokens.count {
+                        if case .number(_) = tokens[lookaheadIdx] {
+                            numCount += 1
+                            lookaheadIdx += 1
+                        } else if case .word(let w) = tokens[lookaheadIdx], w == "_sep_" {
+                            lookaheadIdx += 1
+                        } else {
+                            break
+                        }
+                    }
+                    
+                    let metric = self.cursor.currentMetric
+                    if numCount >= 3 && metric != .probingDepth && metric != .gingivalMargin {
+                        self.cursor.setMetric(.probingDepth)
+                    }
+                }
+                
                 if let sel = activeSelection, sel.expectedSlots == 1, self.cursor.currentMetric == .probingDepth {
                     var numCount = 0
                     var j = tokenIndex

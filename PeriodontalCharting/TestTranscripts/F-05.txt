@@ -1,0 +1,25 @@
+rahang atas
+
+Gigi 16                     
+furkasi bukal 2             
+furkasi mesial 1           
+kegoyangan 1                
+
+Gigi 17
+furkasi bukal 1
+furkasi distal 0
+kegoyangan 0
+
+---
+
+rahang bawah
+
+Gigi 46
+furkasi bukal 2
+furkasi lingual 3
+kegoyangan 2
+
+Gigi 47
+furkasi bukal 1
+furkasi lingual 1
+kegoyangan 1

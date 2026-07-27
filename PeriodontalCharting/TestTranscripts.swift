@@ -145,8 +145,6 @@ Bukal gigi 41, 2.
 bukal gigi 31 2,
 bukal gigi 32 2.
 
----
-
 Lanjut ke rahang atas
 
 {Bukal} gigi 17
@@ -219,8 +217,6 @@ Mesio bukal 3
 Bukal 2
 Disto Bukal 2
 
----
-
 Resesi
 
 Pada bukal
@@ -230,8 +226,6 @@ Gigi 17 Mesio bukal resesi 1
 Gigi 16 Mesyu Bukal. Bukal dan Disto Bukal 1
 
 Gigi 15 disto Bukal 1
-
----
 
 ke bagian lingual 
 probing depth
@@ -312,14 +306,10 @@ mesio lingual 3
 lingual 3
 disto lingual 2
 
----
-
 resesi mesiopalatal gigi 17 1 
 distal mesial gigi 16 2
 palatal gigi 16 4 
 distopalatal palatal gigi 15 1
-
----
 
 Bleeding on Probing
 
@@ -346,8 +336,6 @@ disto bukal.
 Gigi 27
 mesiobukal.
 
----
-
 Bleeding on probing
 
 Gigi 26
@@ -368,10 +356,7 @@ Gigi 16
 mid lingual
 mesiolingual
 
----
-
 Terdapat plaque pada seluruh permukaan gigi rang atas, rang bawah, baik bukal maupun lingual.
-
 """
 
     static let dr_lucky_ground = """
@@ -471,7 +456,6 @@ Resesi satu mili distal
 
 Sampai 37 2
 Plaque pada semua gigi
-
 """
 
     static let allTranscripts = ["dr_lucky_ground", "student_ground"]

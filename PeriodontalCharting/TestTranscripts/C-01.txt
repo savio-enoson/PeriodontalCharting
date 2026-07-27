@@ -1,0 +1,40 @@
+Gigi 18 gak ada
+
+Gigi 17
+3 2 3
+3 2 3
+furkasi bukal 1
+furkasi mesial 1
+kegoyangan 0
+BOP mesio bukal 17
+
+Gigi 16 implan
+3 4 5
+3 4 5
+furkasi bukal 2
+furkasi distal 1
+kegoyangan 1
+BOP dari mesio bukal 16 sampai disto bukal 16
+
+Gigi 15
+3 3 4
+3 3 4
+kegoyangan 1
+
+Gigi 14
+2 2 3
+2 2 3
+furkasi mesial 1
+kegoyangan 0
+
+Gigi 13
+2 2 2
+2 2 2
+
+Gigi 12
+2 2 2
+2 2 2
+
+Gigi 11
+2 2 3
+2 2 3

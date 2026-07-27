@@ -644,6 +644,7 @@ A class-bound state machine that is called on every new word. Its internal state
 
 **`.number(n)`**
 - If current metric is boolean (bleeding/plaque/implant): emit pending bool command, restore to main sequence, then append number.
+- **Array-Lookahead Fallback:** If `currentNumbers` is empty, look ahead in the token stream. If 3 or more contiguous numbers (ignoring `_sep_`) follow, and the current metric expects fewer than 3 values (like `furcation`), the metric is automatically overridden to `.probingDepth`. This self-corrects cases where a user overfills a 1-value metric without explicitly declaring the switch back to Probing Depth.
 - Append `n` to buffer, attempt `flushNumbers(force: false)`.
 
 **`.toothIdentifier(tooth)`**

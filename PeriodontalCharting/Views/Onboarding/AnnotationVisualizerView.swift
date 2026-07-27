@@ -5,46 +5,31 @@ struct AnnotationVisualizerView: View {
     
     var body: some View {
         VStack(spacing: 24) {
-            JawVisualizer(jaw: .upper, config: config)
-            JawVisualizer(jaw: .lower, config: config)
+            ChartSectionVisualizer(jaw: .upper, aspect: .buccal, imageName: "Upper-Outer", label: "Upper Outer", config: config)
+            ChartSectionVisualizer(jaw: .upper, aspect: .palatal, imageName: "Upper-Inner", label: "Upper Inner", config: config)
+            ChartSectionVisualizer(jaw: .lower, aspect: .palatal, imageName: "Lower-Inner", label: "Lower Inner", config: config)
+            ChartSectionVisualizer(jaw: .lower, aspect: .buccal, imageName: "Lower-Outer", label: "Lower Outer", config: config)
         }
         .padding()
     }
 }
 
-struct JawVisualizer: View {
+struct ChartSectionVisualizer: View {
     let jaw: JawType
+    let aspect: AspectType
+    let imageName: String
+    let label: String
     let config: ChartingConfiguration
     
     var body: some View {
         VStack(spacing: 8) {
-            Text("\(jaw.rawValue.capitalized) Jaw")
-                .font(.subheadline)
-                .fontWeight(.bold)
+            visualizerOverlay(for: aspect, label: label)
             
-            if jaw == .upper {
-                // Upper Jaw: Outer (Top) to Inner (Bottom)
-                visualizerOverlay(for: .buccal, label: "Outer Side")
-                teethPlaceholder
-                visualizerOverlay(for: .palatal, label: "Inner Side")
-            } else {
-                // Lower Jaw: Inner (Top) to Outer (Bottom)
-                visualizerOverlay(for: .palatal, label: "Inner Side")
-                teethPlaceholder
-                visualizerOverlay(for: .buccal, label: "Outer Side")
-            }
+            Image(imageName)
+                .resizable()
+                .scaledToFit()
+                .frame(maxWidth: .infinity)
         }
-    }
-    
-    private var teethPlaceholder: some View {
-        HStack(spacing: 4) {
-            ForEach(0..<16, id: \.self) { _ in
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(Color(.systemGray4))
-                    .frame(height: 32)
-            }
-        }
-        .frame(height: 48)
     }
     
     @ViewBuilder

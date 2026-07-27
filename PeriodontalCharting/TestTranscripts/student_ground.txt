@@ -55,7 +55,6 @@ Mesio Bukal 2
 Bukal 2
 Disto Bukal 2
 
-
 Gigi 36
 Mesio Bukal 2
 Bukal 2
@@ -70,17 +69,22 @@ Bagian lingual
 
 Disto lingual 37 2
 Lingual 2
-{Pukul} lingual 2
+mesiolingual 2
 
 Gigi 36
 Disto lingual 2
 Lingual 2
-{Pukul} lingual 2
+mesiolingual 2
 
 Gigi 3 5
 disto lingual 2
-bukal 2
+lingual 2
 misio lingual 2
+
+Gigi 34
+Disto lingual 2
+Lingual 2
+Mesio lingual 2
 
 Gigi 33
 Disto lingual 2
@@ -101,11 +105,6 @@ gigi 41
 disto lingual 2
 lingual 2
 mesial lingual 2
-
-gigi 41
-mesial lingual 2
-limual 2
-disto lingual 2
 
 gigi 42
 mesial lingual 2
@@ -132,12 +131,14 @@ Mesio lingual 3
 Lingual 2
 Disto lingual 2
 
-resesi bukal lingual gigi 47 1 distal gigi 45 1 
-Bukal gigi 42, 2. Bukal gigi 41, 2.
+resesi mesiobukal gigi 47 1
+mesiolingual gigi 47 1
+distobukal gigi 45 1
+distolingual gigi 45 1
+Bukal gigi 42, 2.
+Bukal gigi 41, 2.
 bukal gigi 31 2,
 bukal gigi 32 2.
-
----
 
 Lanjut ke rahang atas
 
@@ -157,7 +158,7 @@ Bukal 3
 Mesio bukal 3
 
 Gigi 1 4
-Mesio bukal 2
+disto bukal 2
 Bukal 2
 Mesio Bukal 2
 
@@ -191,11 +192,6 @@ Mesio Bukal 2
 Bukal 2
 Disto Bukal 2
 
-Gigi 23
-Mesio Bukal 2
-Bukal 2
-Disto Bukal 2
-
 Gigi 24
 Mesio Bukal 3
 Bukal 4
@@ -216,8 +212,6 @@ Mesio bukal 3
 Bukal 2
 Disto Bukal 2
 
----
-
 Resesi
 
 Pada bukal
@@ -228,9 +222,7 @@ Gigi 16 Mesyu Bukal. Bukal dan Disto Bukal 1
 
 Gigi 15 disto Bukal 1
 
----
-
-ke bagian lingual 
+ke bagian lingual
 probing depth
 
 gigi 27
@@ -255,7 +247,7 @@ Lingual 2
 Mesiolingual 2
 
 Gigi 23
-Mesiolingual 2
+Distolingual 2
 Lingual 2
 Mesiolingual 2
 
@@ -309,18 +301,17 @@ mesio lingual 3
 lingual 3
 disto lingual 2
 
----
+resesi mesiopalatal gigi 17 1
+distal mesial gigi 16 2
+palatal gigi 16 4
+distopalatal palatal gigi 15 1
 
 Bleeding on Probing
 
-pada bagian bukal
 gigi 1-6 bukal dan mesiobukal
 
 gigi 1-5
 pada di distobukal dan bukal
-
-gigi 2-4
-mesiobukal, bukal distobukal
 
 gigi 24
 mesio bukal
@@ -340,11 +331,7 @@ disto bukal.
 Gigi 27
 mesiobukal.
 
----
-
-Bleeding or probing bagian lingual
-
-pada gigi.
+Bleeding on probing
 
 Gigi 26
 mesiolingual
@@ -361,8 +348,7 @@ gigi 15
 distolingual
 
 Gigi 16
+mid lingual
 mesiolingual
-
----
 
 Terdapat plaque pada seluruh permukaan gigi rang atas, rang bawah, baik bukal maupun lingual.

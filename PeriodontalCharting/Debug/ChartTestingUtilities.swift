@@ -77,6 +77,15 @@ struct ChartTestingUtilities {
             if expectedTooth.plaque != actualTooth.plaque {
                 differences.append("Tooth \(toothNum) Plaque mismatch.")
             }
+            if expectedTooth.mobility != actualTooth.mobility {
+                differences.append("Tooth \(toothNum) Mobility mismatch. Expected: \(expectedTooth.mobility), Actual: \(actualTooth.mobility)")
+            }
+            if expectedTooth.furcation != actualTooth.furcation {
+                differences.append("Tooth \(toothNum) Furcation mismatch. Expected: \(String(describing: expectedTooth.furcation)), Actual: \(String(describing: actualTooth.furcation))")
+            }
+            if expectedTooth.implant != actualTooth.implant {
+                differences.append("Tooth \(toothNum) Implant mismatch. Expected: \(expectedTooth.implant), Actual: \(actualTooth.implant)")
+            }
         }
         return differences
     }

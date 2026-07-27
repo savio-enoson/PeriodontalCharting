@@ -1,0 +1,9 @@
+Gigi 47
+2 2 3
+2 2 2
+kegoyangan 2
+
+Gigi 46
+2 2 2
+2 2 2
+kegoyangan 1

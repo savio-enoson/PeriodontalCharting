@@ -1,0 +1,11 @@
+2 2 2
+2 2 2
+kegoyangan 2
+
+2 2 2
+2 2 2
+kegoyangan 1
+
+2 2 2
+2 2 2
+kegoyangan 0

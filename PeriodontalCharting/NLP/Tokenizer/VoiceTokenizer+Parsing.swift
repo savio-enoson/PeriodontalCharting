@@ -170,7 +170,7 @@ extension VoiceTokenizer {
                             isStreamEnd = true
                         }
                         
-                        let isStartOfBlock = currentValues == 0 || (currentValues % expectedValues == 0 && expectedValues >= 3)
+                        let isStartOfBlock = currentValues == 0 || (expectedValues >= 3 && currentValues % expectedValues == 0)
                         
                         if !thirdIsSingleDigit && isStartOfBlock {
                             if isStreamEnd && !isFinal {
