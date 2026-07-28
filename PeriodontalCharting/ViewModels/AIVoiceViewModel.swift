@@ -12,7 +12,7 @@ class AIVoiceViewModel: ObservableObject {
     @Published var currentCursor: ChartingCursor? = nil
     @Published var activeSelection: TeethSelection? = nil
     @Published var pendingValues: [String] = []
-    @Published var wpm: Double = 180.0
+    @Published var wpm: Double = 120.0
     
     @Published var selectedTestTranscriptName: String = TestTranscripts.all.first?.0 ?? ""
     var selectedTestTranscript: String {
@@ -179,7 +179,8 @@ Plaque pada semua gigi
         isListening = true
         simulationTask?.cancel()
         
-        simulationTask = Task {
+        simulationTask = Task { @MainActor in
+            let config = self.getConfiguration()
             while currentWordIndex < words.count {
                 if Task.isCancelled { break }
                 
@@ -189,20 +190,24 @@ Plaque pada semua gigi
                 }
                 liveTranscription += word
                 
-                let parser = VoiceCommandParser(configuration: self.getConfiguration())
-                let parsedCommands = parser.parse(text: self.liveTranscription, isFinal: false)
+                let currentText = self.liveTranscription
                 
-                self.commandHistory = parsedCommands
+                // Offload parsing to a background thread to prevent UI lag
+                let parsedResult = await Task.detached {
+                    return self.parseOffline(text: currentText, config: config, isFinal: false)
+                }.value
                 
-                if let last = parsedCommands.last, last.operation == parser.cursor.currentMetric {
+                self.commandHistory = parsedResult.0
+                
+                if let last = parsedResult.0.last, last.operation == parsedResult.1.currentMetric {
                     self.currentCommand = last
                 } else {
                     self.currentCommand = nil
                 }
                 
-                self.currentCursor = parser.cursor
-                self.activeSelection = parser.activeSelection
-                self.pendingValues = parser.pendingValues
+                self.currentCursor = parsedResult.1
+                self.activeSelection = parsedResult.2
+                self.pendingValues = parsedResult.3
                 
                 currentWordIndex += 1
                 
@@ -212,17 +217,20 @@ Plaque pada semua gigi
             }
             
             // Final flush when completely done
-            let parserFinal = VoiceCommandParser(configuration: self.getConfiguration())
-            let parsedFinal = parserFinal.parse(text: self.liveTranscription, isFinal: true)
-            self.commandHistory = parsedFinal
-            if let last = parsedFinal.last, last.operation == parserFinal.cursor.currentMetric {
+            let finalText = self.liveTranscription
+            let finalResult = await Task.detached {
+                return self.parseOffline(text: finalText, config: config, isFinal: true)
+            }.value
+            
+            self.commandHistory = finalResult.0
+            if let last = finalResult.0.last, last.operation == finalResult.1.currentMetric {
                 self.currentCommand = last
             } else {
                 self.currentCommand = nil
             }
-            self.currentCursor = parserFinal.cursor
-            self.activeSelection = parserFinal.activeSelection
-            self.pendingValues = parserFinal.pendingValues
+            self.currentCursor = finalResult.1
+            self.activeSelection = finalResult.2
+            self.pendingValues = finalResult.3
             
             isListening = false
         }
@@ -235,4 +243,17 @@ Plaque pada semua gigi
         }
         return ChartingConfiguration()
     }
+    nonisolated private func parseOffline(text: String, config: ChartingConfiguration, isFinal: Bool) -> ([AnnotationCommand], ChartingCursor, TeethSelection?, [String]) {
+        let parser = VoiceCommandParser(configuration: config)
+        let commands = parser.parse(text: text, isFinal: isFinal)
+        return (commands, parser.cursor, parser.activeSelection, parser.pendingValues)
+    }
 }
+
+// Silence strict concurrency warnings for struct models crossed through Task.detached
+extension ChartingConfiguration: @unchecked Sendable {}
+
+extension AnnotationCommand: @unchecked Sendable {}
+extension ChartingCursor: @unchecked Sendable {}
+extension TeethSelection: @unchecked Sendable {}
+

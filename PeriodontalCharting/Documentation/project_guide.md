@@ -112,7 +112,7 @@ All colors are system-adaptive — no manual Dark Mode handling is required. The
 - [x] **Custom Path rendering** — continuous GM and PD lines with inter-tooth blending and mirroring.
 - [x] **Furcation modelling** — per-tooth anatomical provisioning with hatched fallback.
 - [x] **Zoom Control** — custom dynamic vertical zoom slider instead of standard pinch-to-zoom for better one-handed usability; full `MagnificationGesture` support still available.
-- [x] **Native SwiftUI refactor** — all views use semantic system colors. Zero Catalyst references. Fully modernised for iOS 17+ and Swift 6 concurrency (zero warnings).
+- [x] **Native SwiftUI** — all views use semantic system colors and adaptive system fonts. Fully supports iOS 17+, Swift 6 strict concurrency (zero warnings), Dark Mode, and Dynamic Type out of the box.
 - [x] **Navigation style** — `NavigationSplitView` with navy chrome, custom floating toolbars, adaptive sidebar toggle.
 - [x] **Voice Pipeline Integration** — `AIListeningView` panel and `AIVoiceViewModel` simulate live transcription streaming.
 - [x] **Onboarding & Configuration** — `OnboardingView` with audio calibration, live anatomical visualiser, and drag-and-drop traversal config.

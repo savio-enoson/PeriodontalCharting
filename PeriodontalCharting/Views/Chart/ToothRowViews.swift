@@ -1,5 +1,33 @@
 import SwiftUI
 
+struct HighlightFramePreferenceKey: PreferenceKey {
+    static var defaultValue: CGRect? = nil
+    static func reduce(value: inout CGRect?, nextValue: () -> CGRect?) {
+        if let next = nextValue() {
+            if let current = value {
+                value = current.union(next)
+            } else {
+                value = next
+            }
+        }
+    }
+}
+
+struct HighlightBorder: View {
+    var body: some View {
+        Rectangle()
+            .strokeBorder(Color.orange, lineWidth: 2)
+            .background(
+                GeometryReader { geo in
+                    Color.clear.preference(
+                        key: HighlightFramePreferenceKey.self,
+                        value: geo.frame(in: .named("ChartSpace"))
+                    )
+                }
+            )
+    }
+}
+
 // MARK: - ImplantCheckCell
 
 struct ImplantCheckCell: View {
@@ -24,7 +52,7 @@ struct ImplantCheckCell: View {
                 }
             }
             if isSelected {
-                Rectangle().strokeBorder(Color.orange, lineWidth: 2)
+                HighlightBorder()
             }
         }
         .frame(height: 18)
@@ -49,7 +77,7 @@ struct SingleValueCell: View {
                     .foregroundStyle(.secondary)
             }
             if isSelected {
-                Rectangle().strokeBorder(Color.orange, lineWidth: 2)
+                HighlightBorder()
             }
         }
         .frame(height: 18)
@@ -99,7 +127,7 @@ struct FurcationCell: View {
                         }
                         
                         if i < selectedSites.count && selectedSites[i] {
-                            Rectangle().strokeBorder(Color.orange, lineWidth: 2)
+                            HighlightBorder()
                         }
 
                         if i < values.count - 1 {
@@ -146,7 +174,7 @@ struct TripleValueRow: View {
                         }
                     }
                     if i < selectedSites.count && selectedSites[i] {
-                        Rectangle().strokeBorder(Color.orange, lineWidth: 2)
+                        HighlightBorder()
                     }
                 }
                 .contentShape(Rectangle())
@@ -187,7 +215,7 @@ struct BoolDotRow: View {
                     }
                     
                     if i < selectedSites.count && selectedSites[i] {
-                        Rectangle().strokeBorder(Color.orange, lineWidth: 2)
+                        HighlightBorder()
                     }
                 }
                 .contentShape(Rectangle())

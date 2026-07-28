@@ -16,7 +16,7 @@ extension VoiceCommandParser {
         let m = cursor.currentMetric
         if m == .bleeding || m == .plaque || m == .implant {
             if let sel = activeSelection {
-                print("EMITTING SELECTION:", sel.startTooth.toothNumber, sel.startSite ?? -1, "TO", sel.endTooth.toothNumber, sel.endSite ?? -1); let targetSlots = sel.expectedSlots
+                /* print("EMITTING SELECTION..."); */ let targetSlots = sel.expectedSlots
                 let values = Array(repeating: "True", count: targetSlots)
                 let cmd = AnnotationCommand(operation: m, teethSelection: sel, aspect: cursor.currentAspect, values: values)
                 commands.append(cmd)
@@ -89,7 +89,7 @@ extension VoiceCommandParser {
     
     func finalizeValues(for sel: TeethSelection, baseValues: [String], isBoolMetric: Bool) -> [String] {
         var finalValues = baseValues
-        print("EMITTING SELECTION:", sel.startTooth.toothNumber, sel.startSite ?? -1, "TO", sel.endTooth.toothNumber, sel.endSite ?? -1); let targetSlots = sel.expectedSlots
+        /* print("EMITTING SELECTION..."); */ let targetSlots = sel.expectedSlots
         
         if finalValues.count == 1 && targetSlots > 1 {
             finalValues = Array(repeating: finalValues[0], count: targetSlots)

@@ -157,7 +157,7 @@ PeriodontalChartingApp
 ### State Flow
 
 - **`ChartDashboard`** owns `mouth: [Int: ToothObject]` (the entire clinical record) and two `@StateObject`s: `ChartSelectionModel` (which cells are highlighted orange) and `AIVoiceViewModel` (the voice pipeline state).
-- **`ChartSelectionModel`** is injected as an `@EnvironmentObject`, allowing `ToothColumnView` to read highlight state without prop-drilling.
+- **`ChartSelectionModel`** is injected as an `@EnvironmentObject`, allowing `ToothColumnView` to read highlight state without prop-drilling. It relies entirely on the native `@Published` wrapper for invalidation, avoiding manual `objectWillChange.send()` calls that can cause double-publishing SwiftUI warnings.
 - When `AIVoiceViewModel.commandHistory` changes, `ChartDashboard.onChange` rebuilds `mouth` from scratch by replaying all commands in order via `ChartProcessor.apply`. This ensures idempotency — replaying the full history always produces the same chart state regardless of mid-stream parsing artefacts.
 - **`ChartDashboard`** observes `aiViewModel.currentCursor` to keep the `ScrollViewProxy` camera in sync with the underlying parser tooth position. It deliberately does not listen to `activeSelection` changes directly during zoom operations to prevent jittery camera panning.
 
@@ -229,11 +229,11 @@ A custom `HStack` overlaid at `.topTrailing` on a dark navy pill (`RoundedRectan
 | Export | `square.and.arrow.up` | Placeholder (not yet implemented) |
 | Settings | `gear` | Open `OnboardingView` sheet |
 
-**`ZoomableContainer` and zoom implementation:**
+**`ZoomableScrollView` and zoom implementation:**
 
-The zoom logic lives in the extracted `ZoomableContainer<Content: View>` struct. `scaleEffect` scales visuals but not the layout frame. `ZoomableContainer` reads the pre-scale `baseSize` via a `GeometryReader` overlay and manually sets the content `frame` to `baseSize * scale`. When AI Mode is active, the frame expands by 1000pt in both dimensions so the `ScrollViewProxy` auto-scroller can freely pan to teeth that would otherwise be locked against the screen edges.
+The zoom and pan logic lives in `ZoomableScrollView<Content: View>`, a `UIViewRepresentable` wrapper around UIKit's `UIScrollView`. The native `UIScrollView` provides superior high-performance zooming and free-panning without SwiftUI layout thrashing. It manually sizes the `UIHostingController.view` to its intrinsic content size and completely bypasses Auto Layout constraints to prevent bounds-resizing glitches during scale transforms. The inner `RootWrapperView` also applies `.ignoresSafeArea()` to prevent coordinate drift.
 
-A `.highPriorityGesture(MagnificationGesture())` on `ChartDashboard` ensures reliable 2-finger pinch-to-zoom that overrides child scroll views.
+When AI Mode is active, massive content insets (`contentInset`) equal to the screen bounds are applied, and the camera automatically centers on the bounding rect emitted by `HighlightFramePreferenceKey` at the 30% mark from the left edge without any edge clamping.
 
 **Command application:**
 
@@ -264,7 +264,7 @@ The **layout orchestrator** for a single tooth column. Fixed to **72pt width**, 
 
 **Grid hairlines:** `VStack(spacing: 1)` gaps reveal the parent's `Color(.separator)` background, creating hairline grid lines without any explicit `Divider()` calls inside cells. Column dividers are a 1pt `Color(.separator)` overlaid on the trailing edge of each column (except the last).
 
-**Selection highlighting:** `ToothColumnView` reads `ChartSelectionModel` from the environment. Each sub-view receives a `selectedSites: [Bool]` array. When a site is selected, its `ZStack` overlays a 2pt orange `strokeBorder`. PD values ≥ 4 mm are rendered in `.red` (controlled by the `isProbingDepth` flag on `TripleValueRow`).
+**Selection highlighting:** `ToothColumnView` reads `ChartSelectionModel` from the environment. Each sub-view receives a `selectedSites: [Bool]` array. When a site is selected, its `ZStack` overlays a `HighlightBorder()`, which draws a 2pt orange border and emits its absolute coordinates via `HighlightFramePreferenceKey` for camera tracking. PD values ≥ 4 mm are rendered in `.red` (controlled by the `isProbingDepth` flag on `TripleValueRow`).
 
 **Manual editing:**
 - **Numeric data:** Tapping a numeric cell sets an `activePopover` state to bring up a `.fullScreenCover` containing the `NumberPadPopoverView`. Using `fullScreenCover` over a native `.popover` ensures that coordinate scaling from deep zoom magnifications doesn't break popover placement or cause rendering lag.
@@ -330,6 +330,7 @@ For upper jaw: outer (facial) is non-mirrored (top), inner (palatal) is mirrored
 When `tooth.implant == true`, the natural tooth asset is replaced with surgical implant screw assets:
 - Precision-mapped to each tooth's physical CEJ width using a computed `cejWidthRatios` lookup table derived from alpha-channel pixel analysis of the 64 raw PNG assets.
 - Differentiates anatomically between molars (using `implant_screw_end` at 85% and `implant_screw_body` at 80% width) and non-molars (using just `implant_screw_body` at 100% true CEJ width).
+- The screw body dynamically stretches down to the 10th grid row (full root depth) to ensure consistent lengths across all teeth, maintaining its calculated width without aspect-ratio distortion.
 - Aligned along the Y-axis to match the standard 0 CEJ baseline for the jaw.
 
 ---
@@ -420,10 +421,10 @@ An `@MainActor` `ObservableObject` that orchestrates the voice parsing simulatio
 **Key methods:**
 
 - **`toggleSimulation(from:)`** — If already listening, stops the simulation. Otherwise starts it.
-- **`startSimulation(from:)`** *(private)* — Splits the transcript into words (expanding `\n`, `.`, `,` as discrete tokens). Resets state, then spawns an `async Task` that appends one word per loop iteration and re-parses the full accumulated text on every word.
+- **`startSimulation(from:)`** *(private)* — Splits the transcript into words (expanding `\n`, `.`, `,` as discrete tokens). Resets state, then spawns an `@MainActor` bound `Task` that appends one word per loop iteration. The actual parsing is offloaded to a detached thread via `Task.detached` calling a `nonisolated` helper (`parseOffline`) to prevent UI hitching during dense token streams.
 - **`parseInstant(text:)`** — Stops any running simulation, sets `liveTranscription = text`, and runs a fresh `VoiceCommandParser` with `isFinal: true`. All state is committed immediately. Used by the Debug menu's **Fill Chart** button.
 - **`initializeCursorIfNeeded()`** — If `currentCursor == nil`, creates a new `VoiceCommandParser` and copies its initial cursor position. Called when AI Mode is first opened.
-- **Flush timer** — A 1.5-second inactivity timer. If no new words arrive, the timer fires and runs `parse(text:isFinal: true)` to force-flush any buffered values. After the last word in the array is consumed, a final flush also runs unconditionally. All UI updates are dispatched via `@MainActor Task` for Swift 6 concurrency compliance.
+- **Flush timer** — A 1.5-second inactivity timer. If no new words arrive, the timer fires and runs a detached parse (`isFinal: true`) to force-flush any buffered values. After the last word in the array is consumed, a final flush also runs unconditionally. All view state mutations safely rejoin the main thread. Model types and the `VoiceCommandParser` itself explicitly conform to `@unchecked Sendable` to safely cross isolation boundaries without triggering incorrect `@MainActor` inference in Swift 6.
 
 ---
 
@@ -557,7 +558,7 @@ struct AnnotationCommand: Equatable {
 
 #### `Models/ChartProcessor.swift`
 
-A shared, **UI-independent** `struct` that owns the canonical `apply(command:to:)` logic. Extracted from `ChartDashboard` so the same mutation logic can be executed headlessly (in tests and the CLI runner) without instantiating any SwiftUI views.
+A shared, **UI-independent** `struct` that owns the canonical `apply(command:to:)` logic. It can be executed headlessly (in tests and the CLI runner) without instantiating any SwiftUI views.
 
 ```swift
 struct ChartProcessor {

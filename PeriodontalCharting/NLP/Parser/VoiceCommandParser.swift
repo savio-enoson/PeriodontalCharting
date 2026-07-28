@@ -1,8 +1,8 @@
 import Foundation
 
-class VoiceCommandParser {
+final class VoiceCommandParser: @unchecked Sendable {
     var cursor: ChartingCursor
-    var activeSelection: TeethSelection? { didSet { print("ACTIVE SEL CHANGED TO:", activeSelection?.startTooth.toothNumber ?? -1, activeSelection?.startSite ?? -2, "TO", activeSelection?.endTooth.toothNumber ?? -1, activeSelection?.endSite ?? -2) } }
+    var activeSelection: TeethSelection? { didSet { /* print("ACTIVE SEL CHANGED") */ } }
     var pendingValues: [String] = []
     var missingTeeth: Set<Int> = []
     

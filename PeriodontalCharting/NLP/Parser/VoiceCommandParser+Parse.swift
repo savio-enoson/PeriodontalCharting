@@ -12,7 +12,7 @@ extension VoiceCommandParser {
         var consumedIndices = Set<Int>()
         
         while tokenIndex < tokens.count {
-            print("PROCESSING INDEX", tokenIndex, tokens[tokenIndex])
+            // print("PROCESSING INDEX", tokenIndex, tokens[tokenIndex])
             let token = tokens[tokenIndex]
             
             switch token {
@@ -62,7 +62,7 @@ extension VoiceCommandParser {
                 }
                 
                 if self.cursor.currentMetric == .bleeding || self.cursor.currentMetric == .plaque || self.cursor.currentMetric == .implant {
-                    print("BEFORE EMIT METRIC:", self.cursor.currentMetric, "SELECTION:", activeSelection?.startTooth.toothNumber ?? -1, activeSelection?.startSite ?? -2, activeSelection?.endTooth.toothNumber ?? -1, activeSelection?.endSite ?? -2); emitBoolIfPending()
+                    /* print("BEFORE EMIT METRIC..."); */ emitBoolIfPending()
                     restoreToMainSequence()
                 }
                 lastAutoAdvancedFromTooth = nil
@@ -171,7 +171,7 @@ extension VoiceCommandParser {
                     continue
                 }
                 
-                print("BEFORE EMIT METRIC:", self.cursor.currentMetric, "SELECTION:", activeSelection?.startTooth.toothNumber ?? -1, activeSelection?.startSite ?? -2, activeSelection?.endTooth.toothNumber ?? -1, activeSelection?.endSite ?? -2); emitBoolIfPending()
+                /* print("BEFORE EMIT METRIC..."); */ emitBoolIfPending()
                 flushNumbers(force: true)
                 
                 _ = self.cursor.jumpTo(tooth: tooth, aspect: self.cursor.currentAspect, updateSequenceIndex: self.cursor.currentMetric == .probingDepth)
@@ -289,7 +289,7 @@ extension VoiceCommandParser {
                 isPostTargeting = false
                 postTargetTemplate = nil
                 postTargetAnatomy = nil
-                print("BEFORE EMIT METRIC:", self.cursor.currentMetric, "SELECTION:", activeSelection?.startTooth.toothNumber ?? -1, activeSelection?.startSite ?? -2, activeSelection?.endTooth.toothNumber ?? -1, activeSelection?.endSite ?? -2); emitBoolIfPending()
+                /* print("BEFORE EMIT METRIC..."); */ emitBoolIfPending()
                 flushNumbers(force: true)
                 
                 if self.cursor.currentMetric == .plaque && !metricHadSpecificTargets {
@@ -304,7 +304,7 @@ extension VoiceCommandParser {
                     _ = self.cursor.jumpTo(tooth: sel.startTooth.toothNumber, aspect: sel.startAspect ?? self.cursor.currentAspect, updateSequenceIndex: false)
                 }
                 
-                print("SETTING METRIC TO", m)
+                // print("SETTING METRIC TO", m)
                 self.cursor.setMetric(m)
                 currentMetricMultiplier = mult
                 metricHadSpecificTargets = false
@@ -358,7 +358,7 @@ extension VoiceCommandParser {
                     restoreToMainSequence()
                 } else if a == .missing || a == .missing2 {
                     flushPostTargetIfPending()
-                    print("BEFORE EMIT METRIC:", self.cursor.currentMetric, "SELECTION:", activeSelection?.startTooth.toothNumber ?? -1, activeSelection?.startSite ?? -2, activeSelection?.endTooth.toothNumber ?? -1, activeSelection?.endSite ?? -2); emitBoolIfPending()
+                    /* print("BEFORE EMIT METRIC..."); */ emitBoolIfPending()
                     flushNumbers(force: true)
                     
                     var targets: [Int] = []
@@ -403,7 +403,7 @@ extension VoiceCommandParser {
                     
                     restoreToMainSequence()
                 } else if a == .until || a == .until2 {
-                    print("BEFORE EMIT METRIC:", self.cursor.currentMetric, "SELECTION:", activeSelection?.startTooth.toothNumber ?? -1, activeSelection?.startSite ?? -2, activeSelection?.endTooth.toothNumber ?? -1, activeSelection?.endSite ?? -2); emitBoolIfPending()
+                    /* print("BEFORE EMIT METRIC..."); */ emitBoolIfPending()
                     flushNumbers(force: true)
                     var peek = tokenIndex + 1
                     var endAnatomy: AnatomyType? = nil
@@ -506,7 +506,7 @@ extension VoiceCommandParser {
                         if self.activeSelection?.startAspect == nil && self.activeSelection?.startSite == nil {
                             startPostTargeting()
                         } else {
-                            print("BEFORE EMIT METRIC:", self.cursor.currentMetric, "SELECTION:", activeSelection?.startTooth.toothNumber ?? -1, activeSelection?.startSite ?? -2, activeSelection?.endTooth.toothNumber ?? -1, activeSelection?.endSite ?? -2); emitBoolIfPending()
+                            /* print("BEFORE EMIT METRIC..."); */ emitBoolIfPending()
                             flushNumbers(force: true)
                         }
                     }
@@ -519,12 +519,12 @@ extension VoiceCommandParser {
                 }
                 
                 if a == .lowerJaw {
-                    print("BEFORE EMIT METRIC:", self.cursor.currentMetric, "SELECTION:", activeSelection?.startTooth.toothNumber ?? -1, activeSelection?.startSite ?? -2, activeSelection?.endTooth.toothNumber ?? -1, activeSelection?.endSite ?? -2); emitBoolIfPending()
+                    /* print("BEFORE EMIT METRIC..."); */ emitBoolIfPending()
                     flushNumbers(force: true)
                     self.activeSelection = nil
                     _ = self.cursor.jumpTo(jaw: .lower)
                 } else if a == .upperJaw {
-                    print("BEFORE EMIT METRIC:", self.cursor.currentMetric, "SELECTION:", activeSelection?.startTooth.toothNumber ?? -1, activeSelection?.startSite ?? -2, activeSelection?.endTooth.toothNumber ?? -1, activeSelection?.endSite ?? -2); emitBoolIfPending()
+                    /* print("BEFORE EMIT METRIC..."); */ emitBoolIfPending()
                     flushNumbers(force: true)
                     self.activeSelection = nil
                     _ = self.cursor.jumpTo(jaw: .upper)
@@ -585,7 +585,7 @@ extension VoiceCommandParser {
         
         if isFinal {
             flushPostTargetIfPending()
-            print("BEFORE EMIT METRIC:", self.cursor.currentMetric, "SELECTION:", activeSelection?.startTooth.toothNumber ?? -1, activeSelection?.startSite ?? -2, activeSelection?.endTooth.toothNumber ?? -1, activeSelection?.endSite ?? -2); emitBoolIfPending()
+            /* print("BEFORE EMIT METRIC..."); */ emitBoolIfPending()
             flushNumbers(force: true)
             
             if self.cursor.currentMetric == .plaque && !metricHadSpecificTargets {

@@ -2,7 +2,7 @@ import Foundation
 
 struct ChartProcessor {
     static func apply(command: AnnotationCommand, to mouthState: inout [Int: ToothObject]) {
-        print("APPLY: \(command)")
+        // print("APPLY: \(command)")
         
         let ts = command.teethSelection
         

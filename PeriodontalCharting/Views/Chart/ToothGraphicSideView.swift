@@ -10,19 +10,19 @@ struct ToothAssetOffsets {
         "11_B": 0.8202, "11_P": 0.7086, "12_B": 0.693,  "12_P": 0.6792,
         "13_B": 0.7769, "13_P": 0.6217, "14_B": 0.7769, "14_P": 0.6639,
         "15_B": 0.7037, "15_P": 0.6861, "16_B": 0.8667, "16_P": 0.7832,
-        "17_B": 0.8133, "17_P": 0.6016, "18_B": 0.8246, "18_P": 0.7108,
+        "17_B": 0.8133, "17_P": 0.7016, "18_B": 0.8246, "18_P": 0.8108,
         "21_B": 0.8202, "21_P": 0.7086, "22_B": 0.693,  "22_P": 0.6792,
         "23_B": 0.7769, "23_P": 0.6217, "24_B": 0.7769, "24_P": 0.6639,
         "25_B": 0.7037, "25_P": 0.6861, "26_B": 0.8667, "26_P": 0.7832,
-        "27_B": 0.8133, "27_P": 0.6016, "28_B": 0.8246, "28_P": 0.7108,
+        "27_B": 0.8133, "27_P": 0.7016, "28_B": 0.8246, "28_P": 0.8108,
         "31_B": 0.6611, "31_L": 0.6258, "32_B": 0.6437, "32_L": 0.6139,
         "33_B": 0.6739, "33_L": 0.5867, "34_B": 0.5797, "34_L": 0.6278,
-        "35_B": 0.5945, "35_L": 0.6056, "36_B": 0.7919, "36_L": 0.8122,
-        "37_B": 0.8116, "37_L": 0.7184, "38_B": 0.8637, "38_L": 0.6296,
+        "35_B": 0.5945, "35_L": 0.6056, "36_B": 0.7119, "36_L": 0.8122,
+        "37_B": 0.7516, "37_L": 0.7184, "38_B": 0.7737, "38_L": 0.7296,
         "41_B": 0.6611, "41_L": 0.6258, "42_B": 0.6437, "42_L": 0.6139,
-        "43_B": 0.6739, "43_L": 0.5867, "44_B": 0.5797, "44_L": 0.6278,
-        "45_B": 0.5945, "45_L": 0.6056, "46_B": 0.7919, "46_L": 0.8122,
-        "47_B": 0.8116, "47_L": 0.7184, "48_B": 0.8637, "48_L": 0.6296,
+        "43_B": 0.7439, "43_L": 0.5867, "44_B": 0.5797, "44_L": 0.6278,
+        "45_B": 0.5945, "45_L": 0.6056, "46_B": 0.7159, "46_L": 0.8122,
+        "47_B": 0.7016, "47_L": 0.8184, "48_B": 0.7437, "48_L": 0.7296,
     ]
     
     // Arrays defining the custom scaling and horizontal offsets for implant screws.x 7 = 3rd molar).
@@ -37,7 +37,7 @@ struct ToothAssetOffsets {
     // Optional X offsets to horizontally align the implant screw with asymmetrical tooth crowns
     static let upperBuccalX: [CGFloat]  = [0, 0, 0, 0, 0, 0, 0, 0]
     static let upperPalatalX: [CGFloat] = [0, 0, 0, 0, 0, 0, 0, 0]
-    static let lowerBuccalX: [CGFloat]  = [0, 0, 0, 0, 0, 0, 0, 0]
+    static let lowerBuccalX: [CGFloat]  = [0, 0, 0, -2, -2, -2, -4, 1]
     static let lowerLingualX: [CGFloat] = [0, 0, 0, 0, 0, 0, 0, 0]
     
     // Optional scaling multipliers for the implant screw (default 1.0)
@@ -146,6 +146,13 @@ struct ToothGraphicSideView: View, Equatable {
                 }
 
                 if tooth.implant {
+                    let quadrant = tooth.toothNumber / 10
+                    let maxRootLength: CGFloat = (quadrant == 1 || quadrant == 2)
+                        ? (isOuter ? 111.4 : 104.2)
+                        : (isOuter ? 104.8 : 122.0)
+                    let lineSpacing = maxRootLength / 15.0
+                    let targetImplantHeight = 10.0 * lineSpacing
+                    
                     let screwXOffset = ToothAssetOffsets.offsetX(for: tooth, isOuter: isOuter)
                     let screwScale = ToothAssetOffsets.scale(for: tooth, isOuter: isOuter)
                     
@@ -168,7 +175,6 @@ struct ToothGraphicSideView: View, Equatable {
                                 VStack(spacing: -1) {
                                     Image("implant_screw_body")
                                         .resizable()
-                                        .scaledToFit()
                                         .frame(width: bodyWidth)
                                     
                                     if isMolar {
@@ -178,6 +184,7 @@ struct ToothGraphicSideView: View, Equatable {
                                             .frame(width: endWidth)
                                     }
                                 }
+                                .frame(height: targetImplantHeight)
                                 .offset(x: screwXOffset)
                             }
                             .frame(width: targetWidth, height: rootHeight)
@@ -192,7 +199,6 @@ struct ToothGraphicSideView: View, Equatable {
                                 VStack(spacing: -1) {
                                     Image("implant_screw_body")
                                         .resizable()
-                                        .scaledToFit()
                                         .frame(width: bodyWidth)
                                     
                                     if isMolar {
@@ -202,6 +208,7 @@ struct ToothGraphicSideView: View, Equatable {
                                             .frame(width: endWidth)
                                     }
                                 }
+                                .frame(height: targetImplantHeight)
                                 .scaleEffect(y: -1)
                                 .offset(x: screwXOffset)
                             }

@@ -26,7 +26,7 @@ struct AspectData<T: Equatable & Codable>: Equatable, Codable {
 }
 
 struct ToothObject: Identifiable, Equatable, Codable {
-    var id = UUID()
+    var id: Int { toothNumber }
     var toothNumber: Int
     var probingDepth: AspectData<Int> = AspectData(outer: [0,0,0], inner: [0,0,0]) {
         didSet {
@@ -228,13 +228,7 @@ struct ChartCellCoordinate: Hashable {
 }
 
 class ChartSelectionModel: ObservableObject {
-    let objectWillChange = ObservableObjectPublisher()
-    
-    @Published var selectedCells: Set<ChartCellCoordinate> = [] {
-        willSet {
-            objectWillChange.send()
-        }
-    }
+    @Published var selectedCells: Set<ChartCellCoordinate> = []
 }
 
 extension ToothObject {

@@ -98,7 +98,14 @@ struct ToothColumnView: View {
                 }
         }
         .frame(width: columnWidth)
-        .frame(width: columnWidth)
+        .background(
+            GeometryReader { geo in
+                Color.clear.preference(
+                    key: ToothFramePreferenceKey.self,
+                    value: [tooth.toothNumber: geo.frame(in: .named("ChartSpace"))]
+                )
+            }
+        )
         .fullScreenCover(item: $activePopover) { pop in
             ZStack {
                 Color.clear

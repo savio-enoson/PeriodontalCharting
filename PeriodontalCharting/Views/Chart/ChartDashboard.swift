@@ -1,57 +1,7 @@
 import SwiftUI
 import Combine
 
-class ZoomController: ObservableObject {
-    @Published var currentScale: CGFloat = 1.0
-    @Published var finalScale: CGFloat = 1.0
-    
-    func reset() {
-        withAnimation {
-            currentScale = 1.0
-            finalScale = 1.0
-        }
-    }
-    
-    func setAIScale(_ isAI: Bool) {
-        withAnimation(.easeInOut(duration: 0.5)) {
-            finalScale = isAI ? 1.75 : 1.0
-        }
-    }
-}
 
-struct ZoomableContainer<Content: View>: View {
-    @ObservedObject var zoomController: ZoomController
-    var isSingleColumn: Bool
-    var showAIMode: Bool
-    @ViewBuilder var content: () -> Content
-    
-    @State private var baseSize: CGSize = .zero
-    
-    var body: some View {
-        let scale = zoomController.finalScale * zoomController.currentScale * (isSingleColumn ? 1.35 : 1.0)
-        
-        content()
-            .fixedSize()
-            .background(
-                GeometryReader { geo in
-                    Color.clear
-                        .onAppear { baseSize = geo.size }
-                        .onChange(of: geo.size) { _, newSize in
-                            let widthDiff = abs(baseSize.width - newSize.width)
-                            let heightDiff = abs(baseSize.height - newSize.height)
-                            if widthDiff > 1.0 || heightDiff > 1.0 {
-                                DispatchQueue.main.async { baseSize = newSize }
-                            }
-                        }
-                }
-            )
-            .scaleEffect(scale)
-            .frame(
-                width:  baseSize == .zero ? nil : baseSize.width  * scale + (showAIMode ? 1000 : 0),
-                height: baseSize == .zero ? nil : baseSize.height * scale + (showAIMode ? 1000 : 0)
-            )
-    }
-}
 
 struct ChartContentView: View, Equatable {
     var isSingleColumn: Bool
@@ -95,8 +45,10 @@ struct ChartContentView: View, Equatable {
 struct ChartDashboard: View {
     @State private var mouth: [Int: ToothObject] = ToothObject.fullMouthEmpty()
     @State private var isSingleColumn = false
-    @StateObject private var zoomController = ZoomController()
     @StateObject private var selectionModel = ChartSelectionModel()
+    @State private var zoomScale: CGFloat = 1.0
+    @State private var targetRect: CGRect? = nil
+    @State private var toothFrames: [Int: CGRect] = [:]
     @StateObject private var aiViewModel = AIVoiceViewModel()
     @State private var showDebugMenu = false
     @State private var showAIMode = false
@@ -106,62 +58,23 @@ struct ChartDashboard: View {
     @Binding var columnVisibility: NavigationSplitViewVisibility
 
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView([.horizontal, .vertical]) {
-                ZoomableContainer(zoomController: zoomController, isSingleColumn: isSingleColumn, showAIMode: showAIMode) {
-                    ChartContentView(isSingleColumn: isSingleColumn, mouth: mouth, updateTooth: updateTooth)
-                        .equatable()
+        ZoomableScrollView(zoomScale: $zoomScale, targetRect: $targetRect, showAIMode: showAIMode) {
+            ChartContentView(isSingleColumn: isSingleColumn, mouth: mouth, updateTooth: updateTooth)
+                .equatable()
+                .coordinateSpace(name: "ChartSpace")
+                .onPreferenceChange(HighlightFramePreferenceKey.self) { frame in
+                    if let f = frame {
+                        self.targetRect = f
+                    }
                 }
-            }
-            .highPriorityGesture(
-                MagnificationGesture()
-                    .onChanged { val in
-                        zoomController.currentScale = val
-                    }
-                    .onEnded { val in
-                        withAnimation {
-                            zoomController.finalScale = min(max(zoomController.finalScale * val, 1.0), 3.0)
-                            zoomController.currentScale = 1.0
-                        }
-                    }
-            )
-            .onChange(of: showAIMode) { _, newValue in
-                if newValue {
+                .onPreferenceChange(ToothFramePreferenceKey.self) { frames in
+                    self.toothFrames = frames
+                }
+        }
+        .onChange(of: showAIMode) { _, newValue in
+            if newValue {
+                DispatchQueue.main.async {
                     aiViewModel.initializeCursorIfNeeded()
-                    zoomController.setAIScale(true)
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        let selTooth = aiViewModel.activeSelection?.startTooth.toothNumber
-                        let curTooth = aiViewModel.currentCursor?.currentTooth
-                        if let t = selTooth ?? curTooth {
-                            withAnimation(.easeInOut(duration: 0.5)) {
-                                proxy.scrollTo(t, anchor: UnitPoint(x: 0.3, y: 0.5))
-                            }
-                        }
-                    }
-                } else {
-                    zoomController.setAIScale(false)
-                }
-            }
-            .onChange(of: aiViewModel.currentCursor) { _, cur in
-                if showAIMode {
-                    if aiViewModel.activeSelection == nil, let cur = cur {
-                        withAnimation(.easeInOut(duration: 0.5)) {
-                            proxy.scrollTo(cur.currentTooth, anchor: UnitPoint(x: 0.3, y: 0.5))
-                        }
-                    }
-                }
-            }
-            .onChange(of: aiViewModel.activeSelection) { _, sel in
-                if showAIMode {
-                    if let sel = sel {
-                        withAnimation(.easeInOut(duration: 0.5)) {
-                            proxy.scrollTo(sel.startTooth.toothNumber, anchor: UnitPoint(x: 0.3, y: 0.5))
-                        }
-                    } else if let cur = aiViewModel.currentCursor {
-                        withAnimation(.easeInOut(duration: 0.5)) {
-                            proxy.scrollTo(cur.currentTooth, anchor: UnitPoint(x: 0.3, y: 0.5))
-                        }
-                    }
                 }
             }
         }
@@ -258,14 +171,14 @@ struct ChartDashboard: View {
                     
                     VStack(spacing: 8) {
                         Button {
-                            withAnimation { zoomController.finalScale = min(zoomController.finalScale + 0.25, 3.0) }
+                            withAnimation { zoomScale = min(zoomScale + 0.25, 3.0) }
                         } label: {
                             Image(systemName: "plus.magnifyingglass")
                         }
                         .font(.title3)
                         .foregroundStyle(.white)
 
-                        Slider(value: $zoomController.finalScale, in: 1.0...3.0)
+                        Slider(value: $zoomScale, in: 1.0...3.0)
                             .tint(.white)
                             .environment(\.colorScheme, .dark)
                             .frame(width: trackLength)
@@ -273,7 +186,7 @@ struct ChartDashboard: View {
                             .frame(width: 44, height: trackLength) // Constrain the layout bounding box width after rotation
 
                         Button {
-                            withAnimation { zoomController.finalScale = max(zoomController.finalScale - 0.25, 1.0) }
+                            withAnimation { zoomScale = max(zoomScale - 0.25, 1.0) }
                         } label: {
                             Image(systemName: "minus.magnifyingglass")
                         }
@@ -341,8 +254,11 @@ struct ChartDashboard: View {
                 ))
             }
         }
-        withAnimation(.easeInOut(duration: 0.2)) {
-            selectionModel.selectedCells = newSelection
+        
+        DispatchQueue.main.async {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                self.selectionModel.selectedCells = newSelection
+            }
         }
     }
     
