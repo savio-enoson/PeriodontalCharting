@@ -13,9 +13,15 @@ struct ImplantCheckCell: View {
                 HatchedPattern()
             } else {
                 Color(.systemBackground)
-                Image(systemName: isChecked ? "checkmark.square.fill" : "square")
-                    .font(.system(size: 10))
-                    .foregroundStyle(isChecked ? Color.blue : Color(.separator))
+                if isChecked {
+                    Rectangle()
+                        .fill(Color.black)
+                        .frame(width: 12, height: 12)
+                } else {
+                    Rectangle()
+                        .stroke(Color(.separator), lineWidth: 1)
+                        .frame(width: 12, height: 12)
+                }
             }
             if isSelected {
                 Rectangle().strokeBorder(Color.orange, lineWidth: 2)
@@ -56,6 +62,7 @@ struct FurcationCell: View {
     let furcation: [FurcationClass]?
     let selectedSites: [Bool]
     let isMissing: Bool
+    var onTap: ((Int) -> Void)?
 
     var body: some View {
         if let values = furcation, !values.isEmpty {
@@ -82,6 +89,9 @@ struct FurcationCell: View {
                             }
                         }
                     }
+                    .contentShape(Rectangle())
+                    .onTapGesture { onTap?(i) }
+                    .frame(maxWidth: .infinity)
                 }
             }
             .frame(height: 18)
@@ -104,6 +114,7 @@ struct TripleValueRow: View {
     let selectedSites: [Bool]
     let isMissing: Bool
     var isProbingDepth: Bool = false
+    var onTap: ((Int) -> Void)?
 
     var body: some View {
         HStack(spacing: 0) {
@@ -123,6 +134,9 @@ struct TripleValueRow: View {
                         Rectangle().strokeBorder(Color.orange, lineWidth: 2)
                     }
                 }
+                .contentShape(Rectangle())
+                .onTapGesture { onTap?(i) }
+                .frame(maxWidth: .infinity)
             }
         }
         .frame(height: 18)
@@ -136,6 +150,7 @@ struct BoolDotRow: View {
     let dotColor: Color
     let selectedSites: [Bool]
     let isMissing: Bool
+    var onTap: ((Int) -> Void)?
 
     var body: some View {
         HStack(spacing: 0) {
@@ -146,13 +161,13 @@ struct BoolDotRow: View {
                     } else {
                         Color(.systemBackground)
                         if i < values.count && values[i] {
-                            Circle()
+                            Rectangle()
                                 .fill(dotColor)
-                                .frame(width: 6, height: 6)
+                                .frame(width: 12, height: 12)
                         } else {
-                            Circle()
+                            Rectangle()
                                 .stroke(Color(.separator), lineWidth: 1)
-                                .frame(width: 6, height: 6)
+                                .frame(width: 12, height: 12)
                         }
                     }
                     
@@ -160,6 +175,9 @@ struct BoolDotRow: View {
                         Rectangle().strokeBorder(Color.orange, lineWidth: 2)
                     }
                 }
+                .contentShape(Rectangle())
+                .onTapGesture { onTap?(i) }
+                .frame(maxWidth: .infinity)
             }
         }
         .frame(height: 18)

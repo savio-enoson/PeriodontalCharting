@@ -76,7 +76,6 @@ struct ChartProcessor {
                             }
                         }
                     }
-                default: break
                 }
             }
             return
@@ -223,7 +222,6 @@ struct ChartProcessor {
                                 }
                             }
                         }
-                    default: break
                     }
                 }
             }
@@ -308,8 +306,6 @@ struct ChartProcessor {
             } else {
                 mouthState[tNum]?.plaque.inner = boolVals
             }
-        default:
-            break
         }
     }
 }

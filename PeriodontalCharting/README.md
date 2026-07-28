@@ -187,7 +187,7 @@ The **root interactive viewport** and sole owner of global chart state.
 |---|---|---|
 | `mouth` | `[Int: ToothObject]` | Complete clinical record. Initialised via `fullMouthEmpty()`. Rebuilt from `commandHistory` on every voice command emission. |
 | `isSingleColumn` | `Bool` | Toggles between 1-column (all quadrants stacked) and 2-column (upper/lower pairs side-by-side) layout. |
-| `currentScale` / `finalScale` | `CGFloat` | Two-part zoom accumulator. `currentScale` tracks the live `MagnifyGesture` delta; `finalScale` is the committed result. Combined as `finalScale * currentScale`. Single-column mode applies an extra x1.35 factor. |
+| `zoomController` | `ZoomController` | Dedicated zoom state manager controlling `finalScale`. Connected to a sticky, custom vertical slider anchored to the bottom right of the screen (dynamically scaled to half the screen height) which automatically hides when AI Mode is active. |
 | `baseSize` | `CGSize` | Pre-scale layout size captured via `GeometryReader`. Required because `scaleEffect` scales visuals but not the layout frame — `ChartDashboard` manually sets the `ScrollView` content `frame` to `baseSize * scale` so scroll extents are correct after zooming. |
 | `selectionModel` | `ChartSelectionModel` | `@StateObject` injected as `@EnvironmentObject`. Stores `Set<ChartCellCoordinate>` of highlighted cells. |
 | `aiViewModel` | `AIVoiceViewModel` | `@StateObject` for the voice pipeline. Observed via `.onChange` for cursor, selection, and command history updates. |
@@ -257,6 +257,8 @@ The **layout orchestrator** for a single tooth column. Fixed to **72pt width**, 
 
 **Selection highlighting:** `ToothColumnView` reads `ChartSelectionModel` from the environment. Each sub-view receives a `selectedSites: [Bool]` array. When a site is selected, its `ZStack` overlays a 2pt orange `strokeBorder`. PD values >= 4 mm are rendered in `.red` (controlled by the `isProbingDepth` flag on `TripleValueRow`).
 
+**Manual Editing (NumberPadPopoverView):** When a user taps a cell manually, `ToothColumnView` sets an `activePopover` state to bring up a `.fullScreenCover` containing the `NumberPadPopoverView`. Using a `fullScreenCover` over a `.popover` ensures that coordinate scaling from deep zoom magnifications doesn't break the popover placement or cause rendering lag.
+
 #### Row types (defined in `ToothRowViews.swift`)
 
 | Struct | Height | Appearance |
@@ -290,9 +292,9 @@ A reference grid of 11 horizontal lines (0-10mm) is drawn at opacity 0.5 / lineW
 The gingival margin line represents the gum line relative to the CEJ:
 
 - GM values are **negated** (`-gm[i]`) before Y mapping. Positive GM = pseudopocket (gum above CEJ) = should plot above the CEJ baseline. But SwiftUI Y increases downward, so without negation a positive GM would plot downward (i.e., look like recession). Negation corrects this to match the anatomical convention.
-- 5 X-positions: left edge (blended), `w/6`, `w/2`, `5w/6`, right edge (blended).
+- 5 X-positions: left edge (blended), `w/6`, `w/2`, `5w/6`, right edge (blended). If the neighboring tooth is `.missing`, the lines stretch smoothly all the way to the 0/full width boundaries to reflect a missing tooth space.
 - **Inter-tooth blending:** Left edge = average of current tooth's mesial GM and the previous tooth's distal GM. Right edge = average of current tooth's distal GM and next tooth's mesial GM. Produces a seamless continuous line across all teeth in the quadrant.
-- Rendered with `.red`, lineWidth 1.5, round cap/join.
+- Rendered with `.red`, lineWidth 1.5, round cap/join. Red GM lines explicitly render *above* the blue PD lines on the Z-axis.
 
 #### PD Line (blue) — `createPDPath`
 
@@ -309,6 +311,12 @@ The probing depth line represents the bottom of the periodontal pocket:
 - Mirrored: `y = crownHeight + val * lineSpacing` (root points up, crown at bottom).
 
 For upper jaw: outer (facial) is non-mirrored (top), inner (palatal) is mirrored (bottom). For lower jaw: reversed. This ensures roots always point toward the dental arch center, consistent with WHO charting convention.
+
+#### Implant Rendering
+
+When `tooth.implant == true`, the natural tooth asset is replaced by a surgical implant screw asset:
+- The screw scales to 80% of the normal tooth's width for realistic proportions.
+- It is physically aligned (touching) the standard 0 CEJ baseline for the jaw, rendering it exactly at the crest of the bone.
 
 ### `ViewModels/AIVoiceViewModel.swift`
 
@@ -425,6 +433,16 @@ A developer `.sheet` presented as a `NavigationStack` with `List` sections. It r
 - "Clear All Selections" (destructive) — empties `selectionModel.selectedCells`.
 
 All buttons call `dismiss()` after mutating state to close the sheet immediately.
+
+---
+
+## Performance Architecture
+
+Given the visual density of the chart (32 teeth, each with complex vector paths and dozens of data cells), rendering performance is critical. The app maintains a steady 60fps during zoom gestures and rapid AI cursor movements through three core architectural optimisations:
+
+1. **Chart Culling (`ChartContentView`)**: The entire layout of the 32 teeth (the 4 `QuadrantView`s) is encapsulated in a dedicated `ChartContentView` that conforms to `Equatable`. Because dragging the zoom slider continuously mutates state on the `ChartDashboard` view, SwiftUI relies on this `.equatable()` modifier to mathematically skip layout re-evaluations for the chart. This completely cuts out the CPU overhead of diffing teeth, rows, and text fields during a slider drag, rendering it buttery smooth at 60fps.
+2. **Equatable View Culling**: `ToothGraphicSideView` conforms to `Equatable`. When the AI Voice cursor highlights a new cell, `ToothColumnView` evaluates its layout but SwiftUI mathematically skips re-evaluating the expensive `ToothGraphicSideView` paths because the underlying tooth data hasn't changed.
+3. **Metal Hardware Acceleration**: The `ToothGraphicSideView` (which draws thousands of `Path` segments for GM, PD, and grid lines) has the `.drawingGroup()` modifier applied. This flattens the complex vector graphics into an off-thread Metal texture, drastically reducing CPU load during redraws.
 
 ---
 
@@ -933,7 +951,7 @@ Use the **Debug** (ladybug) toolbar button to open `SelectionDebugMenu`. Choose 
 - [x] **Full-mouth chart rendering** — all 32 teeth, 4 quadrants, WHO-standard layout.
 - [x] **Custom Path rendering** — continuous GM and PD lines with inter-tooth blending and mirroring.
 - [x] **Furcation modelling** — per-tooth anatomical provisioning with hatched fallback.
-- [x] **Pinch-to-zoom** — `MagnifyGesture` with correct `ScrollView` frame sizing.
+- [x] **Zoom Control** — Custom dynamic vertical zoom slider instead of standard Pinch-to-zoom for better one-handed usability.
 - [x] **Native SwiftUI refactor** — all views use semantic system colors. Zero Catalyst references. Fully modernized for iOS 17+ and Swift 6 concurrency (zero warnings).
 - [x] **Navigation style** — `NavigationSplitView` with navy chrome, custom floating toolbars, adaptive sidebar toggle.
 - [x] **Voice Pipeline Integration** — `AIListeningView` panel and `AIVoiceViewModel` simulate live transcription streaming.

@@ -1,11 +1,99 @@
 import SwiftUI
+import Combine
+
+class ZoomController: ObservableObject {
+    @Published var currentScale: CGFloat = 1.0
+    @Published var finalScale: CGFloat = 1.0
+    
+    func reset() {
+        withAnimation {
+            currentScale = 1.0
+            finalScale = 1.0
+        }
+    }
+    
+    func setAIScale(_ isAI: Bool) {
+        withAnimation(.easeInOut(duration: 0.5)) {
+            finalScale = isAI ? 1.75 : 1.0
+        }
+    }
+}
+
+struct ZoomableContainer<Content: View>: View {
+    @ObservedObject var zoomController: ZoomController
+    var isSingleColumn: Bool
+    var showAIMode: Bool
+    @ViewBuilder var content: () -> Content
+    
+    @State private var baseSize: CGSize = .zero
+    
+    var body: some View {
+        let scale = zoomController.finalScale * zoomController.currentScale * (isSingleColumn ? 1.35 : 1.0)
+        
+        content()
+            .fixedSize()
+            .background(
+                GeometryReader { geo in
+                    Color.clear
+                        .onAppear { baseSize = geo.size }
+                        .onChange(of: geo.size) { _, newSize in
+                            if baseSize != newSize {
+                                DispatchQueue.main.async { baseSize = newSize }
+                            }
+                        }
+                }
+            )
+            .scaleEffect(scale)
+            .frame(
+                width:  baseSize == .zero ? nil : baseSize.width  * scale + (showAIMode ? 1000 : 0),
+                height: baseSize == .zero ? nil : baseSize.height * scale + (showAIMode ? 1000 : 0)
+            )
+    }
+}
+
+struct ChartContentView: View, Equatable {
+    var isSingleColumn: Bool
+    var mouth: [Int: ToothObject]
+    var updateTooth: (ToothObject) -> Void
+    
+    static func == (lhs: ChartContentView, rhs: ChartContentView) -> Bool {
+        return lhs.isSingleColumn == rhs.isSingleColumn && lhs.mouth == rhs.mouth
+    }
+    
+    private var q1: [ToothObject] { [18,17,16,15,14,13,12,11].compactMap { mouth[$0] } }
+    private var q2: [ToothObject] { [21,22,23,24,25,26,27,28].compactMap { mouth[$0] } }
+    private var q4: [ToothObject] { [48,47,46,45,44,43,42,41].compactMap { mouth[$0] } }
+    private var q3: [ToothObject] { [31,32,33,34,35,36,37,38].compactMap { mouth[$0] } }
+    
+    var body: some View {
+        VStack(spacing: 40) {
+            if isSingleColumn {
+                QuadrantView(title: "Quadrant 1 (Upper Right)", teeth: q1, isUpperJaw: true,  showLeftLabels: true,  showRightLabels: false, onToothUpdate: updateTooth)
+                QuadrantView(title: "Quadrant 2 (Upper Left)",  teeth: q2, isUpperJaw: true,  showLeftLabels: true,  showRightLabels: false, onToothUpdate: updateTooth)
+                QuadrantView(title: "Quadrant 4 (Lower Right)", teeth: q4, isUpperJaw: false, showLeftLabels: true,  showRightLabels: false, onToothUpdate: updateTooth)
+                QuadrantView(title: "Quadrant 3 (Lower Left)",  teeth: q3, isUpperJaw: false, showLeftLabels: true,  showRightLabels: false, onToothUpdate: updateTooth)
+            } else {
+                // Upper Jaw
+                HStack(alignment: .top, spacing: 24) {
+                    QuadrantView(title: "Quadrant 1 (Upper Right)", teeth: q1, isUpperJaw: true, showLeftLabels: true,  showRightLabels: false, onToothUpdate: updateTooth)
+                    QuadrantView(title: "Quadrant 2 (Upper Left)",  teeth: q2, isUpperJaw: true, showLeftLabels: false, showRightLabels: true, onToothUpdate: updateTooth)
+                }
+                // Lower Jaw
+                HStack(alignment: .top, spacing: 24) {
+                    QuadrantView(title: "Quadrant 4 (Lower Right)", teeth: q4, isUpperJaw: false, showLeftLabels: true,  showRightLabels: false, onToothUpdate: updateTooth)
+                    QuadrantView(title: "Quadrant 3 (Lower Left)",  teeth: q3, isUpperJaw: false, showLeftLabels: false, showRightLabels: true, onToothUpdate: updateTooth)
+                }
+            }
+        }
+        .padding(24)
+        .padding(.top, 70) // Push content down to avoid overlapping with floating toolbar
+    }
+}
 
 struct ChartDashboard: View {
     @State private var mouth: [Int: ToothObject] = ToothObject.fullMouthEmpty()
     @State private var isSingleColumn = false
-    @State private var currentScale: CGFloat = 1.0
-    @State private var finalScale: CGFloat = 1.0
-    @State private var baseSize: CGSize = .zero
+    @StateObject private var zoomController = ZoomController()
     @StateObject private var selectionModel = ChartSelectionModel()
     @StateObject private var aiViewModel = AIVoiceViewModel()
     @State private var showDebugMenu = false
@@ -14,76 +102,18 @@ struct ChartDashboard: View {
     @State private var highlightTask: Task<Void, Never>?
     @Binding var columnVisibility: NavigationSplitViewVisibility
 
-    private var q1: [ToothObject] { [18,17,16,15,14,13,12,11].compactMap { mouth[$0] } }
-    private var q2: [ToothObject] { [21,22,23,24,25,26,27,28].compactMap { mouth[$0] } }
-    private var q4: [ToothObject] { [48,47,46,45,44,43,42,41].compactMap { mouth[$0] } }
-    private var q3: [ToothObject] { [31,32,33,34,35,36,37,38].compactMap { mouth[$0] } }
-
     var body: some View {
-        let scale = finalScale * currentScale * (isSingleColumn ? 1.35 : 1.0)
-
         ScrollViewReader { proxy in
             ScrollView([.horizontal, .vertical]) {
-                VStack(spacing: 40) {
-                if isSingleColumn {
-                    QuadrantView(title: "Quadrant 1 (Upper Right)", teeth: q1, isUpperJaw: true,  showLeftLabels: true,  showRightLabels: false)
-                    QuadrantView(title: "Quadrant 2 (Upper Left)",  teeth: q2, isUpperJaw: true,  showLeftLabels: true,  showRightLabels: false)
-                    QuadrantView(title: "Quadrant 4 (Lower Right)", teeth: q4, isUpperJaw: false, showLeftLabels: true,  showRightLabels: false)
-                    QuadrantView(title: "Quadrant 3 (Lower Left)",  teeth: q3, isUpperJaw: false, showLeftLabels: true,  showRightLabels: false)
-                } else {
-                    // Upper Jaw
-                    HStack(alignment: .top, spacing: 24) {
-                        QuadrantView(title: "Quadrant 1 (Upper Right)", teeth: q1, isUpperJaw: true, showLeftLabels: true,  showRightLabels: false)
-                        QuadrantView(title: "Quadrant 2 (Upper Left)",  teeth: q2, isUpperJaw: true, showLeftLabels: false, showRightLabels: true)
-                    }
-                    // Lower Jaw
-                    HStack(alignment: .top, spacing: 24) {
-                        QuadrantView(title: "Quadrant 4 (Lower Right)", teeth: q4, isUpperJaw: false, showLeftLabels: true,  showRightLabels: false)
-                        QuadrantView(title: "Quadrant 3 (Lower Left)",  teeth: q3, isUpperJaw: false, showLeftLabels: false, showRightLabels: true)
-                    }
+                ZoomableContainer(zoomController: zoomController, isSingleColumn: isSingleColumn, showAIMode: showAIMode) {
+                    ChartContentView(isSingleColumn: isSingleColumn, mouth: mouth, updateTooth: updateTooth)
+                        .equatable()
                 }
-            }
-            .padding(24)
-            .padding(.top, 70) // Push content down to avoid overlapping with floating toolbar
-            .fixedSize()
-            .background(
-                GeometryReader { geo in
-                    Color.clear
-                        .onAppear { baseSize = geo.size }
-                        .onChange(of: geo.size) { _, newSize in baseSize = newSize }
-                }
-            )
-            .scaleEffect(scale)
-            .frame(
-                width:  baseSize == .zero ? nil : baseSize.width  * scale + (showAIMode ? 1000 : 0),
-                height: baseSize == .zero ? nil : baseSize.height * scale + (showAIMode ? 1000 : 0)
-            )
-            .gesture(
-                MagnifyGesture()
-                    .onChanged { (value: MagnifyGesture.Value) in
-                        let proposedScale = finalScale * value.magnification
-                        if !showAIMode && proposedScale < 1.0 {
-                            currentScale = 1.0 / finalScale
-                        } else {
-                            currentScale = value.magnification
-                        }
-                    }
-                    .onEnded { (value: MagnifyGesture.Value) in
-                        finalScale *= currentScale
-                        if !showAIMode && finalScale < 1.0 {
-                            finalScale = 1.0
-                        }
-                        currentScale = 1.0
-                    }
-            )
             }
             .onChange(of: showAIMode) { _, newValue in
                 if newValue {
                     aiViewModel.initializeCursorIfNeeded()
-                    
-                    withAnimation(.easeInOut(duration: 0.5)) {
-                        finalScale = 1.75
-                    }
+                    zoomController.setAIScale(true)
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                         let selTooth = aiViewModel.activeSelection?.startTooth.toothNumber
                         let curTooth = aiViewModel.currentCursor?.currentTooth
@@ -94,9 +124,7 @@ struct ChartDashboard: View {
                         }
                     }
                 } else {
-                    withAnimation(.easeInOut(duration: 0.5)) {
-                        finalScale = 1.0
-                    }
+                    zoomController.setAIScale(false)
                 }
             }
             .onChange(of: aiViewModel.currentCursor) { _, cur in
@@ -147,10 +175,7 @@ struct ChartDashboard: View {
                 }
                 
                 Button {
-                    withAnimation {
-                        finalScale   = 1.0
-                        currentScale = 1.0
-                    }
+                    zoomController.reset()
                 } label: {
                     Label("Reset Zoom", systemImage: "arrow.up.left.and.down.right.and.arrow.up.right.and.down.left")
                 }
@@ -211,6 +236,46 @@ struct ChartDashboard: View {
                 .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
+        .overlay(alignment: .bottomTrailing) {
+            if !showAIMode {
+                GeometryReader { geo in
+                    let trackLength = max(100, (geo.size.height / 2.0) - 100) // Half the screen minus button/padding space
+                    
+                    VStack(spacing: 8) {
+                        Button {
+                            withAnimation { zoomController.finalScale = min(zoomController.finalScale + 0.25, 3.0) }
+                        } label: {
+                            Image(systemName: "plus.magnifyingglass")
+                        }
+                        .font(.title3)
+                        .foregroundStyle(.white)
+
+                        Slider(value: $zoomController.finalScale, in: 1.0...3.0)
+                            .tint(.white)
+                            .environment(\.colorScheme, .dark)
+                            .frame(width: trackLength)
+                            .rotationEffect(.degrees(-90))
+                            .frame(width: 44, height: trackLength) // Constrain the layout bounding box width after rotation
+
+                        Button {
+                            withAnimation { zoomController.finalScale = max(zoomController.finalScale - 0.25, 1.0) }
+                        } label: {
+                            Image(systemName: "minus.magnifyingglass")
+                        }
+                        .font(.title3)
+                        .foregroundStyle(.white)
+                    }
+                    .padding(.vertical, 16)
+                    .padding(.horizontal, 12)
+                    .background(Color(red: 0.05, green: 0.2, blue: 0.5), in: Capsule())
+                    .shadow(color: .black.opacity(0.15), radius: 10, y: 5)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                    .padding(.trailing, 24)
+                    .padding(.bottom, 24)
+                }
+                .transition(.move(edge: .trailing).combined(with: .opacity))
+            }
+        }
         .environmentObject(selectionModel)
         .sheet(isPresented: $showDebugMenu) {
             SelectionDebugMenu()
@@ -229,6 +294,10 @@ struct ChartDashboard: View {
         }
         .onChange(of: aiViewModel.currentCursor) { _, _ in updateHighlight() }
         .onChange(of: aiViewModel.activeSelection) { _, _ in updateHighlight() }
+    }
+    
+    private func updateTooth(_ tooth: ToothObject) {
+        mouth[tooth.toothNumber] = tooth
     }
     
     private func updateHighlight() {

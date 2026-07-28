@@ -6,6 +6,7 @@ struct QuadrantView: View {
     var isUpperJaw: Bool
     var showLeftLabels: Bool = true
     var showRightLabels: Bool = true
+    var onToothUpdate: ((ToothObject) -> Void)?
 
     var body: some View {
         VStack(alignment: .center, spacing: 4) {
@@ -27,7 +28,7 @@ struct QuadrantView: View {
 
                 HStack(spacing: 0) {
                     ForEach(Array(teeth.enumerated()), id: \.element.id) { index, _ in
-                        ToothColumnView(teeth: teeth, index: index, isUpperJaw: isUpperJaw)
+                        ToothColumnView(teeth: teeth, index: index, isUpperJaw: isUpperJaw, onToothUpdate: onToothUpdate)
                             .id(teeth[index].toothNumber)
                     }
                 }
@@ -62,8 +63,9 @@ struct SideLabelsView: View {
         VStack(spacing: 4) {
             Color.clear.frame(height: 24) // Align with tooth number header
 
-            VStack(spacing: 6) {
+            VStack(spacing: 4) {
                 sharedGridLabels()
+                Color(.separator).frame(height: 1)
                 aspectGridLabels()
             }
 
@@ -75,13 +77,13 @@ struct SideLabelsView: View {
 
     @ViewBuilder
     private func graphicPlaceholder() -> some View {
-        Color.clear.frame(height: 162)
+        Color.clear.frame(height: 512)
             .padding(.vertical, 4)
     }
 
     @ViewBuilder
     private func sharedGridLabels() -> some View {
-        VStack(spacing: 1) {
+        VStack(spacing: 0) {
             labelRow("Implant")
             labelRow("Mobility")
         }
