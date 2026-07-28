@@ -34,7 +34,7 @@ final class TranscriptionEngine {
     // ~3.2 GB and was getting the app SIGKILL'd mid-download; we ship the ~1 GB
     // quantized build in the bundle and load it from disk (no first-launch download).
 //    private static let bundledModelName = "openai_whisper-large-v3_turbo_954MB"
-    private static let bundledModelName = "openai_whisper-large-v3_turbo_632MB"
+    private static let bundledModelName = "openai_whisper-large-v3-v20240930_turbo_632MB"
     private static let networkModelName = "openai_whisper-large-v3_turbo"
 
     private init() {}
@@ -71,7 +71,7 @@ final class TranscriptionEngine {
             // fast autoregressive per-token loop — that's where the inference win is.
             let compute = ModelComputeOptions(
                 melCompute: .cpuAndGPU,
-                audioEncoderCompute: .all,
+                audioEncoderCompute: .cpuAndGPU,
                 textDecoderCompute: .cpuAndNeuralEngine
             )
 
