@@ -219,8 +219,17 @@ struct ChartCellCoordinate: Hashable {
 
 class ChartSelectionModel: ObservableObject {
     let objectWillChange = ObservableObjectPublisher()
-    
+
     @Published var selectedCells: Set<ChartCellCoordinate> = [] {
+        willSet {
+            objectWillChange.send()
+        }
+    }
+
+    /// Cells whose value comes from the live *preview* (unconfirmed Whisper text)
+    /// and hasn't been committed yet — rendered ghosted so the clinician sees
+    /// what's tentative vs finalized. Empty outside live AI-Mode dictation.
+    @Published var ghostedCells: Set<ChartCellCoordinate> = [] {
         willSet {
             objectWillChange.send()
         }

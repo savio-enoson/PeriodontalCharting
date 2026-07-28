@@ -233,15 +233,32 @@ struct ChartDashboard: View {
         .sheet(isPresented: $showTranscription) {
             LiveTranscriptionView()
         }
-        .onChange(of: aiViewModel.commandHistory) { _, newHistory in
-            var newMouth = ToothObject.fullMouthEmpty()
-            for cmd in newHistory {
-                ChartProcessor.apply(command: cmd, to: &newMouth)
-            }
-            self.mouth = newMouth
-        }
+        .onChange(of: aiViewModel.commandHistory) { _, _ in recomputeChart() }
+        .onChange(of: aiViewModel.committedCommands) { _, _ in recomputeChart() }
         .onChange(of: aiViewModel.currentCursor) { _, _ in updateHighlight() }
         .onChange(of: aiViewModel.activeSelection) { _, _ in updateHighlight() }
+    }
+
+    /// Rebuild the chart from the preview commands (full live text) and mark which
+    /// cells are still tentative — present in the preview but not yet in the
+    /// confirmed-only `committedCommands`. Those get ghosted in the cells.
+    private func recomputeChart() {
+        var previewMouth = ToothObject.fullMouthEmpty()
+        for cmd in aiViewModel.commandHistory {
+            ChartProcessor.apply(command: cmd, to: &previewMouth)
+        }
+        self.mouth = previewMouth
+
+        if let committed = aiViewModel.committedCommands {
+            var committedMouth = ToothObject.fullMouthEmpty()
+            for cmd in committed {
+                ChartProcessor.apply(command: cmd, to: &committedMouth)
+            }
+            selectionModel.ghostedCells = ChartProcessor.differingCells(
+                preview: previewMouth, committed: committedMouth)
+        } else {
+            selectionModel.ghostedCells = []
+        }
     }
     
     private func updateHighlight() {

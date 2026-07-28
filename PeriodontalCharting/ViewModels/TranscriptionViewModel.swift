@@ -324,14 +324,15 @@ final class TranscriptionViewModel: LiveCaptureDriver {
             tokenizer: tokenizer,
             audioProcessor: whisper.audioProcessor,
             decodingOptions: options,
-            // [LATENCY Tier 2] Confirm a segment after only 1 following segment
-            // instead of 2 (WhisperKit default). The chart commits off *confirmed*
-            // text, so this removes a whole spoken phrase of lag. Safe here because
-            // charting utterances are short and rarely revised, and the parser is
-            // idempotent (re-derives the whole chart from the full transcript each
-            // call) so the rare late correction is absorbed. Revert to 2 if you see
-            // segments freezing on a wrong value.
-            requiredSegmentsForConfirmation: 1,
+            // Confirm a segment only after 2 following segments (WhisperKit default).
+            // The AI Mode chart commits off *confirmed* text, and confirmed text with
+            // more following context is more stabilized/accurate — Whisper keeps
+            // refining the unconfirmed tail, so freezing too early (tried 1) fed the
+            // chart a rougher hypothesis than the Transcribe sheet shows. Kept at 2:
+            // charting accuracy is worth ~one phrase of latency (which felt the same
+            // in practice). See STT_ISSUES.md #2/#6 for the full latency-vs-accuracy
+            // reasoning (Tier 3 preview is the way to get both).
+            requiredSegmentsForConfirmation: 2,
             // [LATENCY Tier 1] Bound the live buffer. The streamer re-decodes the
             // ENTIRE retained buffer every ~100 ms tick, so 60 s = two full 30 s
             // Whisper windows decoded per tick. 32 s keeps a full 30 s window (+

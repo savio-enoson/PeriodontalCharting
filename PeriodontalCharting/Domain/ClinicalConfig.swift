@@ -209,6 +209,12 @@ enum ClinicalConfig {
     /// (regex pattern, replacement) — ported from PHRASE_FIX.
     private static let phraseFixes: [(String, String)] = [
         (#"\bplak\s*ada\b"#, "gak ada"),
+        // "gak ada" (tooth missing) merged/garbled by STT into one token
+        // ("gada"/"gaada"/"gakda"/"gadda"…). Left alone, the Levenshtein snap sends
+        // it to "pada" (the "at" action) — because "pada" precedes "ada" in the
+        // lexicon and is 1 edit away — so the tooth never gets marked missing.
+        // Must run here (before the snap). Leaves "pada"/"ada"/"tidak ada" untouched.
+        (#"\bgak?\s?a?d+a+\b"#, "gak ada"),
         // "disto" corruptions, only when a site word / number follows
         (#"\b(?:di\s*situ|disitu|justru|di\s*stok|stok|situl|di\s*situl|di\s*setiap|di\s*semua|di\s*1)\b(?=\s+(?:bukal|lingual|\d))"#, "disto"),
         (#"\bdi\s*situ\b"#, "disto"),

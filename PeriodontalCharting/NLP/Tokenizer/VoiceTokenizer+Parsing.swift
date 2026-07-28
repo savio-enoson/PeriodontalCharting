@@ -165,6 +165,20 @@ extension VoiceTokenizer {
                     i += 1; continue
                 }
 
+                // Repetition-artifact guard: a "doubled digit" (11, 22, … 88, 99)
+                // arriving immediately after a value number is almost always the STT
+                // repeating the value stream ("2 2 2" → "222 22"), NOT a real tooth
+                // jump. Treat it as two repeated values instead of jumping the cursor
+                // to tooth 22. Explicit teeth are unaffected: "gigi 22" is handled by
+                // the gigi branch above, and "22 …"/"lanjut 22" aren't preceded by a
+                // bare value number, so `tokens.last` isn't a `.number` there.
+                if num >= 11, num % 11 == 0, case .number = tokens.last {
+                    let d = num / 11
+                    tokens.append(.number(d)); tokens.append(.number(d))
+                    currentValues += 2
+                    i += 1; continue
+                }
+
                 if num > 10 && num < 99 {
                     tokens.append(.toothIdentifier(num))
                     expectedValues = 3; currentValues = 0

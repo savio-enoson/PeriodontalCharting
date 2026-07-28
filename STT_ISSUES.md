@@ -3,7 +3,7 @@
 Running tracker for speech-to-text issues (Layer 1 STT + Layer 2 rule-based parser).
 Tick the box when resolved. See `TUNING.md` for where each knob lives.
 
-_Last updated: 2026-07-27_
+_Last updated: 2026-07-28_
 
 **Legend:** severity 🔴 high · 🟡 medium · 🟢 low · layer **STT** (audio→text) / **PARSE** (text→chart) / **PERF**
 Status: `[ ]` open · `[~]` in progress · `[x]` done
@@ -11,6 +11,11 @@ Status: `[ ]` open · `[~]` in progress · `[x]` done
 ---
 
 ## Open
+
+- [~] **7. Tier 3 fires more duplicate commands** 🔴 · PARSE _(acute jump fixed; residual overflow open)_
+  - **Cause:** Tier 3 parses the **full** transcript (confirmed + *unconfirmed* tail) every ~10 Hz. On repetitive charting audio Whisper repeats the value stream ("2 2 2" → "222 22"). The digit-split makes `222`→2,2,2, then the trailing **`22` was read as tooth 22** → cursor jumped.
+  - [x] **Acute fix (cursor jump):** `VoiceTokenizer+Parsing.swift` — a doubled-digit number (`num % 11 == 0`, i.e. 11/22/…/88) arriving **immediately after a value `.number`** is treated as two repeated values, not a tooth jump. Verified: `"bukal 222 22"` / `"bukal 2 2 2 22"` → all values (no jump); `"gigi 22"`, `"22 gak ada"`, `"lanjut 22"`, `"…2 2 2 18"` still teeth.
+  - [ ] **Residual:** the repeated digits still overflow the metric's 3 slots (e.g. 5 twos), so 1–2 extra values can spill onto the next tooth. Deeper fix = attack the root (volatile tail): (a) preview a bounded unconfirmed window, (b) commit-driven cursor (Tier 3b), or (c) cap values at `expectedValues` in the parser/flush. Pending: does the spill still show in practice after the jump fix?
 
 - [ ] **4. "furkasi" (furcation) mishandled** 🟡 · STT/PARSE _(needs repro)_
   - **Symptom:** furcation dictation doesn't chart correctly.
@@ -24,7 +29,16 @@ Status: `[ ]` open · `[~]` in progress · `[x]` done
   - [ ] `"di setob dan" → "disto bukal"` — add a `phraseFixes` regex (per-token Levenshtein won't do it). Need the observed variants.
   - [ ] Extend `minus` repair to sibling numbers (`minus dua/tiga/...`) as their corruptions are observed.
 
-- [~] **2. Latency — live transcription still feels slow** 🔴 · PERF _(Tier 1+2 applied; measuring / Tier 3 pending)_
+- [~] **6. AI Mode chart less accurate than the Transcribe sheet** 🟡 · PARSE _(Tier 3 built — pending device verify)_
+  - **Symptom:** the same speech gives a more accurate result in the Transcribe sheet than in the AI Mode chart, at ~the same latency.
+  - **Root cause (verified in code):** STT is **identical** for both (shared model, same options, same streaming path). The difference is the *result each shows*:
+    - Transcribe sheet renders `viewModel.transcript` = `clean(confirmed + unconfirmed)` — Whisper's **latest, most-refined** hypothesis.
+    - AI Mode's **chart** is parsed from `onConfirmedTranscript` = `clean(confirmed)` **only**, then run through `VoiceCommandParser`. The AI Mode *panel text* (`liveTranscription`) is the same full string as Transcribe — only the chart uses the narrower confirmed input.
+    - So the chart sees (a) an earlier, confirmed-only hypothesis (no unconfirmed-tail refinements) and (b) a second lossy layer (`clean` + parser).
+  - [x] **Mitigation applied:** reverted `requiredSegmentsForConfirmation` to 2 so confirmed text is more stabilized before the chart commits.
+  - [x] **Real fix — Tier 3 BUILT:** the AI Mode chart is now driven by the **full** live transcript (preview), so its input matches the Transcribe sheet exactly; a confirmed-only pass marks which cells are finalized and the rest render **ghosted** (0.4 opacity). Files: `AIVoiceViewModel` (preview→`commandHistory`, confirmed→`committedCommands`), `ChartProcessor.differingCells`, `ChartSelectionModel.ghostedCells`, `ChartDashboard.recomputeChart`, `ToothColumnView`/`ToothRowViews` (per-site ghosting). **Compiles clean; needs a device run to verify the ghosting visually.** Remaining gap vs Transcribe is now only parser/clean fidelity (#1–5), never STT.
+
+- [~] **2. Latency — live transcription still feels slow** 🔴 · PERF _(Tier 1 applied; Tier 2 reverted; Tier 3 built; measuring pending)_
   - **Symptom:** noticeable lag between speaking and text/chart updating.
 
   ### Analysis / reasoning (why it's slow)
@@ -38,7 +52,7 @@ Status: `[ ]` open · `[~]` in progress · `[x]` done
 
   ### Applied
   - [x] **Tier 1 — buffer window 60 → 32 s** (`TranscriptionViewModel.swift`, live init). Keeps a full 30 s decode window (+margin) but ~halves per-tick decode; retains less silence → also *reduces* runaway risk. Do NOT go below ~30 s (truncates Whisper's window). _Pure latency win, no misfire impact._
-  - [x] **Tier 2 — `requiredSegmentsForConfirmation` 2 → 1** (live init). Removes a whole phrase of confirmation lag. Low, reversible risk (short charting utterances rarely revised; idempotent re-parse absorbs corrections). **Revert to 2 if segments freeze on wrong values.**
+  - [x] ~~**Tier 2 — `requiredSegmentsForConfirmation` 2 → 1**~~ **REVERTED to 2** — this fed the AI Mode chart a rougher (earlier-frozen) hypothesis than the Transcribe sheet shows; see #6. Accuracy chosen over ~1 phrase of latency (which felt the same anyway). Tier 3 is the way to get both.
 
   ### Still to do
   - [x] **Instrumentation added** — true per-decode `[RTFx] decode: N.NNx realtime (…s audio in …s wall)` printed in `AudioStreamTranscriber` (local WhisperKit pkg) right around the decode call. This is the raw decode-speed signal (audio-seconds / wall-seconds), distinct from the app's throughput `[RTF] live:` log.
@@ -48,11 +62,9 @@ Status: `[ ]` open · `[~]` in progress · `[x]` done
   - [ ] Compute units (`TranscriptionEngine.swift` L63–65): try encoder/decoder ANE vs GPU on device.
   - [ ] Model size (~1 GB turbo): a smaller/more-quantized live model cuts decode at an accuracy cost. **Decision needed: accuracy headroom?**
 
-  ### Tier 3 — "instant but safe" (design sketch, not yet built)
-  The proper fix for responsiveness *without* misfires, leveraging parser idempotency:
-  - **Optimistic preview + confirmed commit:** parse **confirmed + unconfirmed** text for a live *preview* (cursor + pending values shown but visually "unlocked"); only **lock/commit** a cell when its segment confirms **or** a boundary passes (`lanjut`/`selesai`, or a pause). Preview tracks the voice instantly; because the chart re-derives from full text, any misfire is transient and self-erasing — committed data stays clean.
-  - **Tier 3b — commit on silence:** charting is dictated in bursts. WhisperKit already has VAD (`useVAD`/`silenceThreshold`); finalizing the current utterance at a detected pause gives near-instant commit at natural boundaries with no misfire.
-  - **Where:** split AI Mode state into `previewCommands` (from full text) vs `committedCommands` (from confirmed/boundary) in `AIVoiceViewModel`; `ChartDashboard` renders committed as solid, preview as ghosted. Requires touching the confirmed-chunk gate in `TranscriptionViewModel` to also expose the unconfirmed tail.
+  ### Tier 3 — "instant but safe" — ✅ BUILT (see #6)
+  Optimistic preview + confirmed commit, leveraging parser idempotency. The chart is driven by the **full** live transcript (preview) so it's as responsive/accurate as the Transcribe sheet; not-yet-confirmed cells render **ghosted** (0.4 opacity) and solidify as Whisper confirms. Implemented via `AIVoiceViewModel` (`commandHistory`=preview / `committedCommands`=confirmed), `ChartProcessor.differingCells`, `ChartSelectionModel.ghostedCells`, `ToothColumnView`/`ToothRowViews`. Compiles clean; **pending device verify** of the ghost visuals + flicker feel.
+  - [ ] **Tier 3b — commit on silence (not built):** charting is dictated in bursts; WhisperKit already has VAD (`useVAD`/`silenceThreshold`). Finalizing the current utterance at a detected pause would tighten the confirm timing further. Only worth it if `[RTFx]` shows the model keeps up and confirmation lag is still the felt bottleneck.
 
   ### Misfire guards to preserve regardless
   - Commit off **confirmed** text (Tier 3's lock step).
@@ -71,6 +83,10 @@ Status: `[ ]` open · `[~]` in progress · `[x]` done
 ---
 
 ## Resolved
+
+- [x] **8. "gak ada" wrongly corrected to "pada"** 🔴 · STT · _2026-07-28_
+  - **Cause:** when STT merges "gak ada" (tooth missing) into one token (`gada`/`gaada`/`gakda`/`gadda`…), `ClinicalConfig.clean`'s Levenshtein snap sends it to **"pada"** — verified: `pada` precedes `ada` in `lexiconList` and is 1 edit from `gada`, so the first-closest tie-break picks it. `pada` = the "at" action, so the tooth never gets marked missing.
+  - **Fix:** `phraseFixes` regex `\bgak?\s?a?d+a+\b → "gak ada"` (runs before the snap). Verified to catch `gada/gaada/gakada/gakda/gadda/gadaa/ga da` and leave `pada/ada/tidak ada/dada` untouched.
 
 - [x] **1. Multi-digit runs not split — "333" fed as one value** 🔴 · PARSE
   - **Fix:** `NLP/Tokenizer/VoiceTokenizer+Parsing.swift` — in the number branch, any number `≥ 100` is split into individual single-digit `.number` tokens. No valid tooth id (11–48) or per-site value is ≥ 100, so this is unambiguous and leaves 2-digit tooth ids untouched.

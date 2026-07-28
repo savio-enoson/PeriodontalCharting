@@ -74,6 +74,8 @@ Runs on the transcript **before** the parser. Repair systematic STT errors here 
 | `lexiconList` | L284 | Correct terms that must never be flagged; also the target set for the fuzzy Levenshtein snap (unknown alpha token within 2 edits → nearest lexicon word). The snap itself is in `clean(_:)` at L298. |
 
 > This is also the cleanest single place to add a spoken-form correction that both the STT display **and** the parser will see.
+>
+> **Important:** per-token Levenshtein can only snap ONE unknown token to ONE lexicon word — it **cannot** fix multi-word corruptions (e.g. `"di setob dan" → "disto bukal"`, or `"minus satu"` merged into one word `"minosato"`). Those need a **`phraseFixes` regex**. Example already in place: `\bmin[ou]sat[ou]o?\b → "minus satu"`.
 
 ### 1e. Segmentation (VAD) — `Services/SileroVADEngine.swift`
 Silero VAD finds speech spans (batch mode packs them into ≤30 s chunks; live mode uses WhisperKit's own VAD).
@@ -83,11 +85,14 @@ Silero VAD finds speech spans (batch mode packs them into ≤30 s chunks; live m
 | `speechTimestamps(...)` defaults | `SileroVADEngine.swift` L138–142 (`threshold 0.5`, `minSpeechDurationMs 250`, `minSilenceDurationMs 100`, `speechPadMs 30`) | Lower `threshold` catches quieter speech (more false positives); `minSilence`/`minSpeech` control how eagerly it splits. |
 | Batch call overrides | `ViewModels/TranscriptionViewModel.swift` L211–212 (`minSpeechDurationMs: 250, minSilenceDurationMs: 500`) | The actual values used for file/upload transcription. |
 
-### 1f. Live-streaming behavior — `ViewModels/TranscriptionViewModel.swift`
-| Knob | Line | Effect |
-|------|------|--------|
-| `maxRetainedAudioSeconds: 60` | L334 | Rolling live buffer cap. Larger = more decode context but more memory + re-processing. |
-| Confirmed-chunk gate | L367 | The parser fires only when `confirmedSegments.count` advances. This is the "fire per finalized chunk" boundary from the last change — see Layer 2. |
+### 1f. Live-streaming behavior — `ViewModels/TranscriptionViewModel.swift` (live init in `launchStreamTranscriber`)
+| Knob | Current | Effect |
+|------|---------|--------|
+| `maxRetainedAudioSeconds` | **32** | Rolling live buffer cap. The streamer re-decodes the *whole* retained buffer each ~100 ms tick, so this ~= per-tick decode cost. Keep ≥30 (Whisper's own window); higher = more context + memory + latency. |
+| `requiredSegmentsForConfirmation` | **2** | A segment confirms only after N following segments. Lower = faster confirmation but rougher (less-stabilized) confirmed text; higher = more accurate but laggier. Drives what the AI Mode chart *commits*. |
+| Live event hooks | `onLiveTranscript` (full text) / `onConfirmedTranscript` (confirmed-only, fires when `confirmedSegments.count` advances) | AI Mode (Tier 3) parses the **full** text for the live chart *preview* and the confirmed-only text to mark which cells are finalized — see Layer 2 / AI Mode below. |
+
+**Latency:** the true per-decode speed prints as `[RTFx] decode: N.NNx realtime …` (added in `AudioStreamTranscriber`, local WhisperKit pkg). >1.0× = model keeps up; <1.0× = it's the bottleneck. See `STT_ISSUES.md` #2 for the full latency-vs-accuracy analysis (Tier 1/2/3).
 
 ---
 
@@ -106,6 +111,7 @@ Text that's already correct is turned into chart annotations here. Tune this whe
 | Missing / next / all keywords | L94–101 (`gak ada`, `missing`, `semua`, `lanjut`/`selesai`…) | Synonyms for control actions. |
 | Metric keywords | L212–219 | **Which spoken words map to which metric** — `resesi`/`kemunduran` → gingival margin (×−1), `poket`/`probing`/`kedalaman` → probing depth, `bop`/`berdarah` → bleeding, `plaque`/`plak`, `kegoyangan`/`mobilitas`/`mobility`, `furkasi`/`furcation`, `implan`/`implant`. Add a synonym by extending the `w == "…" || …` list. |
 | Number words | `VoiceTokenizer.swift` L6 (`numberWords`) | Indonesian digit words 0–10. |
+| Multi-digit split | number branch, `num >= 100` | A concatenated STT number (`"333"` for a spoken "3 3 3") is split back into single-digit `.number` values — no valid tooth id (11–48) or per-site value is ≥100. |
 
 ### 2b. Controlled vocabulary (enums) — `NLP/Models/VoiceToken.swift`
 `ActionType` and `AnatomyType` raw values are the canonical spoken forms. Add a genuinely new *action* or *anatomy site* here first, then handle it in `tokenize`.
@@ -114,7 +120,15 @@ Text that's already correct is turned into chart annotations here. Tune this whe
 Not word-level — this controls **cursor traversal**: jaw/aspect order, per-quadrant left↔right direction, and the tooth-number sequences (`getSequence(for:aspect:)`). Tune when auto-advance walks teeth in the wrong order/direction. (This config is user-editable via the Settings/Onboarding screen and persisted in `UserDefaults` under `"ChartingConfiguration"`.)
 
 ### 2d. Parser state machine — `NLP/Parser/VoiceCommandParser*.swift` (advanced)
-The flow logic that consumes tokens into `AnnotationCommand`s: `+Parse` (main loop), `+Lookahead` (deferring/merging decisions), `+Flush` (committing pending values). Change here only for *behavioral* logic (e.g. how ranges "dari … sampai …" resolve, when a block auto-commits) — not for vocabulary. Note there's a debug `print` in `activeSelection.didSet` (VoiceCommandParser.swift L5) worth silencing for production.
+The flow logic that consumes tokens into `AnnotationCommand`s: `+Parse` (main loop), `+Lookahead` (deferring/merging decisions), `+Flush` (committing pending values). Change here only for *behavioral* logic (e.g. how ranges "dari … sampai …" resolve, when a block auto-commits) — not for vocabulary.
+- **Sign of values:** `+Flush` uses `abs(n) * currentMetricMultiplier`, so a value's sign comes from the **metric** (`resesi` → ×−1, `margin`/`gingival` → ×+1), *not* the spoken word "minus" (which is inert). Recession is negative because of `resesi`.
+- Note a debug `print` in `activeSelection.didSet` (VoiceCommandParser.swift L5) worth silencing for production.
+
+### 2e. AI Mode live rendering — preview vs committed (Tier 3)
+AI Mode drives the chart from the **full** live transcript (preview) so it's as accurate as the Transcribe sheet, and marks not-yet-confirmed cells as **ghosted** (0.4 opacity).
+- `AIVoiceViewModel`: `commandHistory` = preview (from `onLiveTranscript`), `committedCommands` = confirmed-only (from `onConfirmedTranscript`). `committedCommands == nil` ⇒ no ghosting (simulation / `parseInstant`).
+- `ChartProcessor.differingCells(preview:committed:)` → `ChartSelectionModel.ghostedCells` → per-site dimming in `ToothColumnView`/`ToothRowViews`.
+- To change the ghost look, edit the `.opacity(… ? 0.4 : 1)` in `ToothRowViews.swift`.
 
 ---
 
@@ -122,9 +136,9 @@ The flow logic that consumes tokens into `AnnotationCommand`s: `+Parse` (main lo
 
 | Path | Good for |
 |------|----------|
-| **AI Mode → mic button** (`AIListeningView`) | End-to-end: real audio → STT → parser → chart. Tests Layer 1 + 2 together. |
-| **AI Mode → ▶ debug simulation** | Feeds a canned transcript (`TestTranscripts.swift`) word-by-word into the parser at a fake WPM — tests **Layer 2 only**, no audio needed. |
+| **AI Mode → mic button** (`AIListeningView`) | End-to-end: real audio → STT → parser → chart. Chart tracks the live (preview) transcript; unconfirmed cells render **ghosted** until confirmed. Tests Layer 1 + 2 together. |
+| **AI Mode → ▶ debug simulation** | Feeds a canned transcript (`TestTranscripts.swift`) word-by-word into the parser at a fake WPM — tests **Layer 2 only**, no audio, no ghosting. |
 | **Debug menu → `parseInstant`** (`Debug/SelectionDebugMenu.swift`) | Parse a full transcript instantly — fastest Layer-2 iteration. |
-| **Transcribe sheet / TestView** (`TestView.swift`) | Batch file/upload transcription with RTF readout — tests **Layer 1** (STT + cleanup) on a fixed clip. |
+| **Transcribe sheet / TestView** (`TestView.swift`) | Live mic (Transcribe) or batch file/upload (TestView) — shows raw transcript, tests **Layer 1** (STT + cleanup) without the parser. |
 
 **Rule of thumb:** if the *transcript text* is wrong → tune Layer 1 (§1c/§1d most often). If the *text is right but the chart is wrong* → tune Layer 2 (§2a most often).

@@ -6,6 +6,7 @@ struct ImplantCheckCell: View {
     let isChecked: Bool
     let isSelected: Bool
     let isMissing: Bool
+    var isGhosted: Bool = false
 
     var body: some View {
         ZStack {
@@ -16,6 +17,7 @@ struct ImplantCheckCell: View {
                 Image(systemName: isChecked ? "checkmark.square.fill" : "square")
                     .font(.system(size: 10))
                     .foregroundStyle(isChecked ? Color.blue : Color(.separator))
+                    .opacity(isGhosted ? 0.4 : 1)
             }
             if isSelected {
                 Rectangle().strokeBorder(Color.orange, lineWidth: 2)
@@ -31,6 +33,7 @@ struct SingleValueCell: View {
     let value: String
     let isSelected: Bool
     let isMissing: Bool
+    var isGhosted: Bool = false
 
     var body: some View {
         ZStack {
@@ -41,6 +44,7 @@ struct SingleValueCell: View {
                 Text(value)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .opacity(isGhosted ? 0.4 : 1)
             }
             if isSelected {
                 Rectangle().strokeBorder(Color.orange, lineWidth: 2)
@@ -56,6 +60,7 @@ struct FurcationCell: View {
     let furcation: [FurcationClass]?
     let selectedSites: [Bool]
     let isMissing: Bool
+    var ghostedSites: [Bool] = [false, false, false]
 
     var body: some View {
         if let values = furcation, !values.isEmpty {
@@ -69,6 +74,7 @@ struct FurcationCell: View {
                             Text("\(values[i].rawValue)")
                                 .font(.caption)
                                 .foregroundStyle(.primary)
+                                .opacity(i < ghostedSites.count && ghostedSites[i] ? 0.4 : 1)
                         }
                         
                         if i < selectedSites.count && selectedSites[i] {
@@ -104,6 +110,7 @@ struct TripleValueRow: View {
     let selectedSites: [Bool]
     let isMissing: Bool
     var isProbingDepth: Bool = false
+    var ghostedSites: [Bool] = [false, false, false]
 
     var body: some View {
         HStack(spacing: 0) {
@@ -117,6 +124,7 @@ struct TripleValueRow: View {
                             Text("\(values[i])")
                                 .font(.caption)
                                 .foregroundStyle(isProbingDepth && values[i] >= 4 ? .red : .primary)
+                                .opacity(i < ghostedSites.count && ghostedSites[i] ? 0.4 : 1)
                         }
                     }
                     if i < selectedSites.count && selectedSites[i] {
@@ -136,6 +144,7 @@ struct BoolDotRow: View {
     let dotColor: Color
     let selectedSites: [Bool]
     let isMissing: Bool
+    var ghostedSites: [Bool] = [false, false, false]
 
     var body: some View {
         HStack(spacing: 0) {
@@ -149,6 +158,7 @@ struct BoolDotRow: View {
                             Circle()
                                 .fill(dotColor)
                                 .frame(width: 6, height: 6)
+                                .opacity(i < ghostedSites.count && ghostedSites[i] ? 0.4 : 1)
                         } else {
                             Circle()
                                 .stroke(Color(.separator), lineWidth: 1)
