@@ -220,6 +220,11 @@ enum ClinicalConfig {
         (#"\bdi\s*situ\b"#, "disto"),
         (#"\bdisitu\b"#, "disto"),
         (#"\bjustru\b"#, "disto"),
+        // "disto bukal" acoustically compressed by STT into "di bop" — dangerous
+        // because "bop" is the BLEEDING metric, so the site would mark bleeding
+        // instead. Safe to rewrite: legit "di" is always followed by a site word
+        // (bukal/lingual/…), never "bop", and "bop di bukal" has the other order.
+        (#"\bdi\s*bop\b"#, "disto bukal"),
         // "disto lingual" split as "<stem> wall"
         (#"\b(?:pistoling|storing|sturing|distoling)\s+wall\b"#, "disto lingual"),
         (#"\bdistoling\b"#, "disto lingual"),

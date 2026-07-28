@@ -26,6 +26,7 @@ Status: `[ ]` open · `[~]` in progress · `[x]` done
 - [~] **5. STT word corruptions (whack-a-mole) — repair layer** 🟡 · STT _(pattern established)_
   - **Insight:** per-token Levenshtein (in `ClinicalConfig.clean`) can only snap ONE unknown token to ONE lexicon word. It **cannot** fix multi-word corruptions like `"di setob dan" → "disto bukal"` (3→2 words, >2 edits). Those need a **phrase-level regex** in `ClinicalConfig.phraseFixes`.
   - [x] **"minus satu" → "minosato"/"minusatu"** (recession value −1 lost as one non-corpus word). Fixed via `phraseFixes` regex `\bmin[ou]sat[ou]o?\b → "minus satu"` — verified to catch the merged forms and leave correct `minus`/`minus satu`/`minus dua` untouched. Sign still comes from the metric (`resesi`), which is intended (the `minus` word is inert by design: `Flush.swift` uses `abs(n) * multiplier`).
+  - [x] **"disto bukal" → "di bop"** (site compressed by STT; `di`=at-action, `bop`=BLEEDING metric, so the site would mark bleeding). Fixed via `phraseFixes` regex `\bdi\s*bop\b → "disto bukal"` — verified vs tokenizer (`"di bop 17"` → bleeding+at; after fix → `anat(disto bukal) tooth(17)`) and no false positives on `bop di bukal` / `di bukal`.
   - [ ] `"di setob dan" → "disto bukal"` — add a `phraseFixes` regex (per-token Levenshtein won't do it). Need the observed variants.
   - [ ] Extend `minus` repair to sibling numbers (`minus dua/tiga/...`) as their corruptions are observed.
 

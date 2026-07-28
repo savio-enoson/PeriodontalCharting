@@ -2,3 +2,4 @@ build
 build.log
 DerivedData/
 **/openai_whisper-large-v3_turbo_954MB/
+**/openai_whisper-large-v3_turbo_632MB/

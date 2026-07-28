@@ -23,12 +23,21 @@ struct AIListeningView: View {
                     Spacer()
 
                     // Real live dictation (Whisper → annotation parser per chunk).
+                    // Gated on the shared model: a spinner shows until it's ready
+                    // (TranscriptionEngine is @Observable, so this flips automatically),
+                    // then the mic becomes tappable. This is the model-ready indicator.
+                    let modelReady = TranscriptionEngine.shared.isReady
                     Button(action: { viewModel.toggleLiveDictation() }) {
-                        Image(systemName: viewModel.isDictating ? "mic.fill" : "mic")
-                            .font(.title2)
-                            .foregroundStyle(viewModel.isDictating ? .red : .blue)
-                            .symbolEffect(.pulse, isActive: viewModel.isDictating)
+                        if modelReady || viewModel.isDictating {
+                            Image(systemName: viewModel.isDictating ? "mic.fill" : "mic")
+                                .font(.title2)
+                                .foregroundStyle(viewModel.isDictating ? .red : .blue)
+                                .symbolEffect(.pulse, isActive: viewModel.isDictating)
+                        } else {
+                            ProgressView().controlSize(.small)
+                        }
                     }
+                    .disabled(!modelReady && !viewModel.isDictating)
 
                     // DEBUG: Start Simulation
                     Button(action: {

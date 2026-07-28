@@ -131,8 +131,8 @@ struct ChartDashboard: View {
             let darkBlue = Color(red: 0.05, green: 0.2, blue: 0.5)
             HStack(spacing: 20) {
                 Button {
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { 
-                        showAIMode.toggle() 
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                        showAIMode.toggle()
                         if showAIMode {
                             columnVisibility = .detailOnly
                         }
@@ -238,6 +238,7 @@ struct ChartDashboard: View {
         .onChange(of: aiViewModel.currentCursor) { _, _ in updateHighlight() }
         .onChange(of: aiViewModel.activeSelection) { _, _ in updateHighlight() }
     }
+
 
     /// Rebuild the chart from the preview commands (full live text) and mark which
     /// cells are still tentative — present in the preview but not yet in the
