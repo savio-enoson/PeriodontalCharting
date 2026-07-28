@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct SelectionDebugMenu: View {
+    @Binding var mouth: [Int: ToothObject]
     @EnvironmentObject var selectionModel: ChartSelectionModel
     @EnvironmentObject var aiViewModel: AIVoiceViewModel
     @Environment(\.dismiss) var dismiss
@@ -11,6 +12,17 @@ struct SelectionDebugMenu: View {
     var body: some View {
         NavigationStack {
             List {
+                Section("Chart Overrides") {
+                    Toggle("All Implants", isOn: Binding(
+                        get: { mouth.values.allSatisfy { $0.implant } },
+                        set: { isOn in
+                            for key in mouth.keys {
+                                mouth[key]?.implant = isOn
+                            }
+                        }
+                    ))
+                }
+                
                 Section("AI Simulation") {
                     VStack(alignment: .leading) {
                         Text("WPM: \(Int(aiViewModel.wpm))")

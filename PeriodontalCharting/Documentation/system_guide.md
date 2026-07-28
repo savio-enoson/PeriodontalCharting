@@ -2,7 +2,7 @@
 
 This document is the definitive high-level reference for anyone who wants to understand the inner logic of the Periodontal Charting voice command system. It covers the full pipeline from raw speech to chart annotation: how text becomes tokens, how tokens drive a state machine, and how that state machine produces structured commands that update the clinical record.
 
-For a complete file-by-file API reference, see [README.md](PeriodontalCharting/README.md).
+For the project brief, getting started, and roadmap, see [project_guide.md](project_guide.md). For the file-by-file Swift reference, see [frontend_guide.md](frontend_guide.md).
 
 ---
 
@@ -110,6 +110,7 @@ Before splitting into words, the tokenizer applies regex/string substitutions to
 | `"mid-"` / `"mid "` | `"mid"` | Normalizes hyphenated/spaced mid-prefix for multi-word alias matching |
 | `"bleeding or probing"` | `"bop"` | Common STT transcription error for "bleeding on probing" |
 | `"b o p"` / `"b.o.p"` / `"bleeding on probing"` | `"bop"` | Standard aliases |
+| `"probing depth"` | `"poket"` | English-language probing depth phrase → Indonesian metric keyword |
 
 After normalization, the text is split on whitespace into a word array.
 
@@ -117,13 +118,20 @@ After normalization, the text is split on whitespace into a word array.
 
 | Misspelling(s) | Corrected to |
 |---|---|
-| `misio`, `mesyio`, `mesyu`, `meso` | `mesio` |
+| `misio`, `mesyio`, `mesyu`, `meso`, `mezzo` | `mesio` |
 | `misial`, `mesyal` | `mesial` |
-| `diso`, `distio`, `dista` | `disto` |
+| `diso`, `distio`, `dista`, `disco` | `disto` |
+| `disal` | `distal` |
+| `sampe` | `sampai` |
 | `bocal`, `vocal`, `buka`, `buckal`, `buk` | `bukal` |
+| `palato`, `palat` | `palatal` |
+| `linguo` | `lingual` |
 | `plat`, `plug`, `flak`, `plek`, `flek`, `black`, `flag` | `plak` |
 | `pocket`, `poke`, `poked` | `poket` |
 | `beope`, `biopi`, `tiopi`, `bleeding` | `bop` |
+| `enggak`, `nda`, `ndak` | `gak` |
+| `mobiliti` | `mobility` |
+| `purkasi`, `furkasion`, `forkasi` | `furkasi` |
 
 ### 3.2 Token Types
 
@@ -131,10 +139,25 @@ After normalization, the text is split on whitespace into a word array.
 |---|---|---|
 | `.number(Int)` | `"3"` / `"tiga"` | `.number(3)` |
 | `.anatomy(AnatomyType)` | `"mesio bukal"` / `"palatal"` / `"rahang bawah"` | `.anatomy(.mesioBuccal)` |
-| `.metric(AnnotationOperation, multiplier: Int)` | `"resesi"` / `"BOP"` / `"plak"` | `.metric(.gingivalMargin, multiplier: 1)` |
-| `.action(ActionType)` | `"lanjut"` / `"gak ada"` / `"sampai"` | `.action(.next)` |
+| `.metric(AnnotationOperation, multiplier: Int)` | `"resesi"` / `"BOP"` / `"plak"` | `.metric(.gingivalMargin, multiplier: -1)` |
+| `.action(ActionType)` | `"lanjut"` / `"gak ada"` / `"sampai"` | `.action(.commit)` |
 | `.toothIdentifier(Int)` | `"gigi 16"` or bare two-digit `"16"` | `.toothIdentifier(16)` |
 | `.word(String)` | Unrecognised | `.word("mili")` |
+
+> **Note on `multiplier`:** The `.metric` case carries an associated `multiplier: Int` value. For recession metrics (`"resesi"`, `"kemunduran"`), the multiplier is **-1**, automatically negating dictated values so the gingival margin is stored as a negative number (recession). All other metrics use `multiplier: 1`.
+
+**Full metric keyword vocabulary:**
+
+| Metric | Keywords |
+|---|---|
+| `.gingivalMargin` (multiplier **-1**) | `"resesi"`, `"kemunduran"` |
+| `.gingivalMargin` (multiplier 1) | `"margin"`, `"gingival"`, `"enlargement"`, `"pembengkakan"`, `"pembesaran"` |
+| `.probingDepth` | `"poket"`, `"probing"`, `"kedalaman"` |
+| `.bleeding` | `"bop"`, `"berdarah"` |
+| `.plaque` | `"plak"`, `"plaque"` |
+| `.mobility` | `"kegoyangan"`, `"mobilitas"`, `"mobility"` |
+| `.furcation` | `"furkasi"`, `"furcation"` |
+| `.implant` | `"implan"`, `"implant"` |
 
 **Indonesian number words:** nol(0), satu(1), dua(2), tiga(3), empat(4), lima(5), enam(6), tujuh(7), delapan(8), sembilan(9), sepuluh(10).
 
@@ -144,15 +167,17 @@ After normalization, the text is split on whitespace into a word array.
 
 | Case | Indonesian keyword | Meaning |
 |---|---|---|
-| `.next` / `.commit` | `"lanjut"`, `"selesai"` | Advance cursor or explicitly flush the current selection |
-| `.missing` | `"gak"` (+ `"ada"`) | Tooth is missing / edentulous |
+| `.commit` | `"lanjut"`, `"selesai"`, `"kemudian"`, `"selanjutnya"`, `"berikutnya"` | Advance cursor / flush current selection |
+| `.missing` | `"gak"` (+ `"ada"`), `"missing"` | Tooth is missing / edentulous |
 | `.missing2` | `"tidak"` (+ `"ada"`) | Alternative missing form |
 | `.from` | `"dari"` | Start of a range |
 | `.until` | `"sampai"` | End of a range |
 | `.until2` | `"hingga"` | End of a range (synonym) |
 | `.at` | `"pada"` | "at / on" — triggers post-targeting mode |
 | `.at2` | `"di"` | Shorter "at / on" form |
-| `.all` | `"semua"`, `"seluruh"` | "all" — instantly assigns to all 64 surfaces |
+| `.all` | `"semua"`, `"semuanya"`, `"seluruh"`, `"seluruhnya"` | "all" — instantly assigns to all 64 surfaces |
+
+> **Note:** The `.next` enum case has been removed. All advance/flush actions now use the unified `.commit` case. The tokenizer maps `lanjut` and four synonyms to `.commit`.
 
 ### 3.3 Multi-word Alias Matching
 
@@ -160,10 +185,13 @@ Multi-word tokens are checked *before* single-word tokens. The tokenizer peeks a
 
 - `"mesio bukal"` → `.anatomy(.mesioBuccal)`, `"disto bukal"` → `.anatomy(.distoBuccal)`
 - `"mesio palatal"` → `.anatomy(.mesioPalatal)`, `"mesio lingual"` → `.anatomy(.mesioLingual)`
-- `"mid bukal"` → `.anatomy(.midBuccal)`, `"mid lingual"` → `.anatomy(.midLingual)`
+- `"tengah bukal"` / `"mid bukal"` → `.anatomy(.midBuccal)`, `"tengah lingual"` / `"mid lingual"` → `.anatomy(.midLingual)`
+- `"tengah palatal"` / `"mid palatal"` → `.anatomy(.midPalatal)`, `"tengah labial"` / `"mid labial"` → `.anatomy(.midLabial)`
 - `"rahang atas"` → `.anatomy(.upperJaw)`, `"rahang bawah"` → `.anatomy(.lowerJaw)`
 - `"gigi <N>"` → `.toothIdentifier(N)` (consumes two words)
 - `"gak ada"` → `.action(.missing)`, `"tidak ada"` → `.action(.missing2)`
+
+> **Mid-anatomy note:** The `AnatomyType` raw values use the Indonesian prefix `"tengah"` (e.g. `midBuccal = "tengah bukal"`). The English `"mid"` prefix is normalised to `"mid"` then matched as a two-word alias with the following aspect word. Both forms (`"tengah bukal"` and `"mid bukal"`) produce the same token. Single-word compact forms (`"midbukal"`, `"tengahbukal"`) are also matched directly.
 
 ### 3.4 Number Disambiguation
 

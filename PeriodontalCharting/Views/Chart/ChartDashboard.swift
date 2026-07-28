@@ -37,7 +37,9 @@ struct ZoomableContainer<Content: View>: View {
                     Color.clear
                         .onAppear { baseSize = geo.size }
                         .onChange(of: geo.size) { _, newSize in
-                            if baseSize != newSize {
+                            let widthDiff = abs(baseSize.width - newSize.width)
+                            let heightDiff = abs(baseSize.height - newSize.height)
+                            if widthDiff > 1.0 || heightDiff > 1.0 {
                                 DispatchQueue.main.async { baseSize = newSize }
                             }
                         }
@@ -99,6 +101,7 @@ struct ChartDashboard: View {
     @State private var showDebugMenu = false
     @State private var showAIMode = false
     @State private var showSettings = false
+    @State private var showZoomSlider = false
     @State private var highlightTask: Task<Void, Never>?
     @Binding var columnVisibility: NavigationSplitViewVisibility
 
@@ -110,6 +113,18 @@ struct ChartDashboard: View {
                         .equatable()
                 }
             }
+            .highPriorityGesture(
+                MagnificationGesture()
+                    .onChanged { val in
+                        zoomController.currentScale = val
+                    }
+                    .onEnded { val in
+                        withAnimation {
+                            zoomController.finalScale = min(max(zoomController.finalScale * val, 1.0), 3.0)
+                            zoomController.currentScale = 1.0
+                        }
+                    }
+            )
             .onChange(of: showAIMode) { _, newValue in
                 if newValue {
                     aiViewModel.initializeCursorIfNeeded()
@@ -175,9 +190,9 @@ struct ChartDashboard: View {
                 }
                 
                 Button {
-                    zoomController.reset()
+                    withAnimation { showZoomSlider.toggle() }
                 } label: {
-                    Label("Reset Zoom", systemImage: "arrow.up.left.and.down.right.and.arrow.up.right.and.down.left")
+                    Label("Zoom", systemImage: "magnifyingglass")
                 }
                 
                 Button {
@@ -237,7 +252,7 @@ struct ChartDashboard: View {
             }
         }
         .overlay(alignment: .bottomTrailing) {
-            if !showAIMode {
+            if !showAIMode && showZoomSlider {
                 GeometryReader { geo in
                     let trackLength = max(100, (geo.size.height / 2.0) - 100) // Half the screen minus button/padding space
                     
@@ -269,16 +284,14 @@ struct ChartDashboard: View {
                     .padding(.horizontal, 12)
                     .background(Color(red: 0.05, green: 0.2, blue: 0.5), in: Capsule())
                     .shadow(color: .black.opacity(0.15), radius: 10, y: 5)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                    .padding(.trailing, 24)
-                    .padding(.bottom, 24)
+                    .position(x: geo.size.width - 60, y: geo.size.height - (trackLength / 2.0) - 60)
                 }
                 .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
         .environmentObject(selectionModel)
         .sheet(isPresented: $showDebugMenu) {
-            SelectionDebugMenu()
+            SelectionDebugMenu(mouth: $mouth)
                 .environmentObject(selectionModel)
                 .environmentObject(aiViewModel)
         }

@@ -28,8 +28,18 @@ struct AspectData<T: Equatable & Codable>: Equatable, Codable {
 struct ToothObject: Identifiable, Equatable, Codable {
     var id = UUID()
     var toothNumber: Int
-    var probingDepth: AspectData<Int> = AspectData(outer: [0,0,0], inner: [0,0,0])
-    var gingivalMargin: AspectData<Int> = AspectData(outer: [0,0,0], inner: [0,0,0])
+    var probingDepth: AspectData<Int> = AspectData(outer: [0,0,0], inner: [0,0,0]) {
+        didSet {
+            probingDepth.outer = probingDepth.outer.map { min(max($0, 0), 16) }
+            probingDepth.inner = probingDepth.inner.map { min(max($0, 0), 16) }
+        }
+    }
+    var gingivalMargin: AspectData<Int> = AspectData(outer: [0,0,0], inner: [0,0,0]) {
+        didSet {
+            gingivalMargin.outer = gingivalMargin.outer.map { min(max($0, -10), 10) }
+            gingivalMargin.inner = gingivalMargin.inner.map { min(max($0, -10), 10) }
+        }
+    }
     var mobility: MobilityClass = .zero
     var furcation: FurcationData? = nil
     var bleeding: AspectData<Bool> = AspectData(outer: [false,false,false], inner: [false,false,false])

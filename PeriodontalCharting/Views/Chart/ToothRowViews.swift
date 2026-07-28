@@ -56,6 +56,27 @@ struct SingleValueCell: View {
     }
 }
 
+struct FurcationShape: View {
+    let value: FurcationClass
+    var body: some View {
+        Group {
+            switch value {
+            case .zero:
+                EmptyView()
+            case .one:
+                Circle().stroke(Color.primary, lineWidth: 1.5)
+            case .two:
+                ZStack {
+                    Circle().stroke(Color.primary, lineWidth: 1.5)
+                    Circle().trim(from: 0.25, to: 0.75).fill(Color.primary)
+                }
+            case .three:
+                Circle().fill(Color.primary)
+            }
+        }
+    }
+}
+
 // MARK: - FurcationCell
 
 struct FurcationCell: View {
@@ -73,9 +94,8 @@ struct FurcationCell: View {
                             HatchedPattern()
                         } else {
                             Color(.systemBackground)
-                            Text("\(values[i].rawValue)")
-                                .font(.caption)
-                                .foregroundStyle(.primary)
+                            FurcationShape(value: values[i])
+                                .frame(width: 12, height: 12)
                         }
                         
                         if i < selectedSites.count && selectedSites[i] {
@@ -96,13 +116,8 @@ struct FurcationCell: View {
             }
             .frame(height: 18)
         } else {
-            if isMissing {
-                HatchedPattern()
-                    .frame(height: 18)
-            } else {
-                Color(.systemBackground)
-                    .frame(height: 18)
-            }
+            HatchedPattern()
+                .frame(height: 18)
         }
     }
 }

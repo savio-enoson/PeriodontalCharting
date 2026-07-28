@@ -106,7 +106,12 @@ struct ToothColumnView: View {
                     .ignoresSafeArea()
                     .onTapGesture { activePopover = nil }
                 
-                VStack(spacing: 0) {
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        
+                        VStack(spacing: 0) {
                     switch pop {
                     case .mobility:
                         NumberPadPopoverView(
@@ -155,10 +160,15 @@ struct ToothColumnView: View {
                             }
                         )
                     }
+                        }
+                        .background(Color(.systemBackground))
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .shadow(color: Color.black.opacity(0.15), radius: 20, y: 10)
+                        
+                        Spacer().frame(width: 80) // Reserved for zoom slider
+                    }
+                    Spacer().frame(height: 40)
                 }
-                .background(Color(.systemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 16))
-                .shadow(color: Color.black.opacity(0.15), radius: 20, y: 10)
             }
             .presentationBackground(.clear)
         }
@@ -214,7 +224,20 @@ struct ToothColumnView: View {
                 onTap: { site in
                     guard !tooth.implant else { return }
                     selectionModel.selectedCells = [ChartCellCoordinate(toothNumber: tooth.toothNumber, operation: .furcation, aspect: isOuter ? .outer : .inner, siteIndex: site)]
-                    activePopover = .furcation(isOuter: isOuter, site: site)
+                    
+                    var newTooth = tooth
+                    if isOuter {
+                        if var arr = newTooth.furcation?.outer {
+                            arr[site] = FurcationClass(rawValue: (arr[site].rawValue + 1) % 4) ?? .zero
+                            newTooth.furcation?.outer = arr
+                        }
+                    } else {
+                        if var arr = newTooth.furcation?.inner {
+                            arr[site] = FurcationClass(rawValue: (arr[site].rawValue + 1) % 4) ?? .zero
+                            newTooth.furcation?.inner = arr
+                        }
+                    }
+                    onToothUpdate?(newTooth)
                 }
             )
             .opacity(tooth.implant ? 0.3 : 1.0)
