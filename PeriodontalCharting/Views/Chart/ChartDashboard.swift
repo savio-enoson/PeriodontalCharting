@@ -53,6 +53,7 @@ struct ChartDashboard: View {
     @State private var showDebugMenu = false
     @State private var showAIMode = false
     @State private var showSettings = false
+    @State private var showTranscription: Bool = false
     @State private var showZoomSlider = false
     @State private var highlightTask: Task<Void, Never>?
     @Binding var columnVisibility: NavigationSplitViewVisibility
@@ -228,6 +229,14 @@ struct ChartDashboard: View {
     
     private func updateTooth(_ tooth: ToothObject) {
         mouth[tooth.toothNumber] = tooth
+    }
+    
+    private func recomputeChart() {
+        var previewMouth = ToothObject.fullMouthEmpty()
+        for cmd in aiViewModel.commandHistory {
+            ChartProcessor.apply(command: cmd, to: &previewMouth)
+        }
+        self.mouth = previewMouth
     }
     
     private func updateHighlight() {

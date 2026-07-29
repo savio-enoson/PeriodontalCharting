@@ -7,3 +7,5 @@ DerivedData/
 .claude/
 **/xcuserdata/
 *.xcuserstate
+.DS_STORE
+*.DS_STORE

@@ -174,7 +174,6 @@ struct TripleValueRow: View {
                             Text("\(values[i])")
                                 .font(.caption)
                                 .foregroundStyle(isProbingDepth && values[i] >= 4 ? .red : .primary)
-                                .opacity(i < ghostedSites.count && ghostedSites[i] ? 0.4 : 1)
                         }
                     }
                     if i < selectedSites.count && selectedSites[i] {
