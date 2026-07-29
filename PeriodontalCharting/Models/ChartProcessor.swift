@@ -309,3 +309,59 @@ struct ChartProcessor {
         }
     }
 }
+
+extension ChartProcessor {
+    /// Cells where the live *preview* mouth (full confirmed+unconfirmed text)
+    /// differs from the *committed* mouth (confirmed text only) — i.e. the
+    /// tentative, not-yet-confirmed values. Used to ghost those cells in the chart.
+    /// A value that legitimately equals the committed default (e.g. 0) can't be
+    /// distinguished from "unset", so it won't ghost — acceptable for a tentative cue.
+    static func differingCells(
+        preview: [Int: ToothObject], committed: [Int: ToothObject]
+    ) -> Set<ChartCellCoordinate> {
+        var out = Set<ChartCellCoordinate>()
+
+        func siteCoords<T: Equatable>(
+            _ op: AnnotationOperation, tooth: Int,
+            _ pv: AspectData<T>, _ cv: AspectData<T>
+        ) {
+            for site in 0..<3 {
+                if site < pv.outer.count, site < cv.outer.count, pv.outer[site] != cv.outer[site] {
+                    out.insert(ChartCellCoordinate(toothNumber: tooth, operation: op, aspect: .outer, siteIndex: site))
+                }
+                if site < pv.inner.count, site < cv.inner.count, pv.inner[site] != cv.inner[site] {
+                    out.insert(ChartCellCoordinate(toothNumber: tooth, operation: op, aspect: .inner, siteIndex: site))
+                }
+            }
+        }
+
+        for (num, p) in preview {
+            let c = committed[num] ?? ToothObject.create(number: num)
+            siteCoords(.probingDepth, tooth: num, p.probingDepth, c.probingDepth)
+            siteCoords(.gingivalMargin, tooth: num, p.gingivalMargin, c.gingivalMargin)
+            siteCoords(.bleeding, tooth: num, p.bleeding, c.bleeding)
+            siteCoords(.plaque, tooth: num, p.plaque, c.plaque)
+
+            // Furcation: optional per-aspect arrays of FurcationClass.
+            let pFurcO = p.furcation?.outer ?? [], cFurcO = c.furcation?.outer ?? []
+            for site in 0..<max(pFurcO.count, cFurcO.count) where
+                (site < pFurcO.count ? pFurcO[site] : nil) != (site < cFurcO.count ? cFurcO[site] : nil) {
+                out.insert(ChartCellCoordinate(toothNumber: num, operation: .furcation, aspect: .outer, siteIndex: site))
+            }
+            let pFurcI = p.furcation?.inner ?? [], cFurcI = c.furcation?.inner ?? []
+            for site in 0..<max(pFurcI.count, cFurcI.count) where
+                (site < pFurcI.count ? pFurcI[site] : nil) != (site < cFurcI.count ? cFurcI[site] : nil) {
+                out.insert(ChartCellCoordinate(toothNumber: num, operation: .furcation, aspect: .inner, siteIndex: site))
+            }
+
+            // Single-value shared cells.
+            if p.mobility != c.mobility {
+                out.insert(ChartCellCoordinate(toothNumber: num, operation: .mobility, aspect: nil, siteIndex: nil))
+            }
+            if p.implant != c.implant {
+                out.insert(ChartCellCoordinate(toothNumber: num, operation: .implant, aspect: nil, siteIndex: nil))
+            }
+        }
+        return out
+    }
+}

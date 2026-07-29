@@ -151,6 +151,34 @@ extension VoiceTokenizer {
             }
             
             if let num = parseIntOrWord(w) {
+                // Whisper often concatenates a spoken run of single-digit values
+                // ("3 3 3") into one number ("333"). No valid tooth id (11–48) or
+                // per-site metric value is ≥ 100, so a 3+ digit number here is
+                // unambiguously a run of individual values — split it back into
+                // single-digit `.number` tokens so it charts exactly as "3 3 3" would.
+                if num >= 100 {
+                    for ch in String(num) {
+                        guard let d = ch.wholeNumberValue else { continue }
+                        tokens.append(.number(d))
+                        currentValues += 1
+                    }
+                    i += 1; continue
+                }
+
+                // Repetition-artifact guard: a "doubled digit" (11, 22, … 88, 99)
+                // arriving immediately after a value number is almost always the STT
+                // repeating the value stream ("2 2 2" → "222 22"), NOT a real tooth
+                // jump. Treat it as two repeated values instead of jumping the cursor
+                // to tooth 22. Explicit teeth are unaffected: "gigi 22" is handled by
+                // the gigi branch above, and "22 …"/"lanjut 22" aren't preceded by a
+                // bare value number, so `tokens.last` isn't a `.number` there.
+                if num >= 11, num % 11 == 0, case .number = tokens.last {
+                    let d = num / 11
+                    tokens.append(.number(d)); tokens.append(.number(d))
+                    currentValues += 2
+                    i += 1; continue
+                }
+
                 if num > 10 && num < 99 {
                     tokens.append(.toothIdentifier(num))
                     expectedValues = 3; currentValues = 0

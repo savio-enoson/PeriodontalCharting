@@ -34,6 +34,7 @@ struct ImplantCheckCell: View {
     let isChecked: Bool
     let isSelected: Bool
     let isMissing: Bool
+    var isGhosted: Bool = false
 
     var body: some View {
         ZStack {
@@ -65,6 +66,7 @@ struct SingleValueCell: View {
     let value: String
     let isSelected: Bool
     let isMissing: Bool
+    var isGhosted: Bool = false
 
     var body: some View {
         ZStack {
@@ -75,6 +77,7 @@ struct SingleValueCell: View {
                 Text(value)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .opacity(isGhosted ? 0.4 : 1)
             }
             if isSelected {
                 HighlightBorder()
@@ -171,6 +174,7 @@ struct TripleValueRow: View {
                             Text("\(values[i])")
                                 .font(.caption)
                                 .foregroundStyle(isProbingDepth && values[i] >= 4 ? .red : .primary)
+                                .opacity(i < ghostedSites.count && ghostedSites[i] ? 0.4 : 1)
                         }
                     }
                     if i < selectedSites.count && selectedSites[i] {

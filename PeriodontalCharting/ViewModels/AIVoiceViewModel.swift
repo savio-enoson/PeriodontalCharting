@@ -5,10 +5,25 @@ import Combine
 class AIVoiceViewModel: ObservableObject {
     @Published var liveTranscription: String = ""
     @Published var isListening: Bool = false
+    /// True while real Whisper dictation is feeding the parser (vs. the debug
+    /// simulation, which sets `isListening`). Kept separate so both controls can
+    /// show independent state; the two are mutually exclusive at runtime.
+    @Published var isDictating: Bool = false
+
+    /// Real on-device transcription. AI Mode drives it and consumes its confirmed
+    /// chunks; the standalone LiveTranscriptionView uses its own instance.
+    private let transcriber = TranscriptionViewModel()
     
     // Stubs for future parsing architecture
     @Published var currentCommand: AnnotationCommand? = nil
+    /// The commands driving the chart. In live dictation this is the *preview*
+    /// (parsed from the full confirmed+unconfirmed transcript) so the chart is as
+    /// accurate as the Transcribe sheet.
     @Published var commandHistory: [AnnotationCommand] = []
+    /// Commands parsed from *confirmed-only* text during live dictation. The chart
+    /// ghosts cells present in `commandHistory` (preview) but not yet here. `nil`
+    /// outside live dictation → nothing ghosted (simulation/instant show all solid).
+    @Published var committedCommands: [AnnotationCommand]? = nil
     @Published var currentCursor: ChartingCursor? = nil
     @Published var activeSelection: TeethSelection? = nil
     @Published var pendingValues: [String] = []
@@ -19,6 +34,8 @@ class AIVoiceViewModel: ObservableObject {
         return TestTranscripts.all.first(where: { $0.0 == selectedTestTranscriptName })?.1 ?? ""
     }
     private var simulationTask: Task<Void, Never>?
+    /// Last text handed to `ingestPreview`, to skip redundant re-parses at ~10 Hz.
+    private var lastPreviewText: String = ""
     private var words: [String] = []
     private var currentWordIndex: Int = 0
     
@@ -144,6 +161,7 @@ Plaque pada semua gigi
     
     func parseInstant(text: String) {
         stopSimulation()
+        committedCommands = nil   // debug/instant: no ghosting, everything solid
         liveTranscription = text
         let parser = VoiceCommandParser(configuration: self.getConfiguration())
         let parsedFinal = parser.parse(text: text, isFinal: true)
@@ -163,7 +181,93 @@ Plaque pada semua gigi
         stopSimulation()
     }
 
+    // MARK: - Live dictation (real Whisper transcription → annotation parser)
+
+    func toggleLiveDictation() {
+        if isDictating { stopLiveDictation() } else { startLiveDictation() }
+    }
+
+    /// Begin real on-device dictation. Tier 3 "optimistic preview + confirmed
+    /// commit": the chart is driven by the FULL running transcript (preview) so it
+    /// tracks the voice as accurately as the Transcribe sheet, while a separate
+    /// confirmed-only pass (`committedCommands`) marks which cells are finalized —
+    /// the rest render ghosted. The parser re-derives the whole chart from the full
+    /// text each call, so a revised hypothesis self-corrects; nothing sticks wrong.
+    func startLiveDictation() {
+        stopSimulation()          // the two feeds are mutually exclusive
+        isDictating = true
+        liveTranscription = ""
+        commandHistory = []
+        committedCommands = []
+        lastPreviewText = ""
+        currentCommand = nil
+        initializeCursorIfNeeded()
+
+        transcriber.inputMode = .live
+        transcriber.onLiveTranscript = { [weak self] text in
+            self?.liveTranscription = text
+            self?.ingestPreview(text)         // full text → chart values + cursor
+        }
+        transcriber.onConfirmedTranscript = { [weak self] confirmed in
+            self?.ingestCommitted(confirmed)  // confirmed text → committed set (ghosting)
+        }
+
+        Task { [weak self] in
+            guard let self else { return }
+            await self.transcriber.loadModel()
+            guard self.isDictating else { return }  // stopped during model load
+            self.transcriber.startLive()
+        }
+    }
+
+    func stopLiveDictation() {
+        guard isDictating else { return }
+        isDictating = false
+        transcriber.stopLive()
+        transcriber.onLiveTranscript = nil
+        transcriber.onConfirmedTranscript = nil
+        // Final flush over everything captured, then mark it all committed so no
+        // cells remain ghosted once dictation ends.
+        lastPreviewText = ""
+        ingestPreview(liveTranscription, isFinal: true)
+        committedCommands = commandHistory
+    }
+
+    /// Parse the FULL live transcript and publish the chart-driving state (values,
+    /// cursor, selection). Skipped when the text hasn't changed since the last pass.
+    private func ingestPreview(_ text: String, isFinal: Bool = false) {
+        if !isFinal && text == lastPreviewText { return }
+        lastPreviewText = text
+        guard !text.isEmpty else {
+            commandHistory = []
+            currentCommand = nil
+            return
+        }
+        let parser = VoiceCommandParser(configuration: getConfiguration())
+        let parsed = parser.parse(text: text, isFinal: isFinal)
+
+        self.commandHistory = parsed
+        if let last = parsed.last, last.operation == parser.cursor.currentMetric {
+            self.currentCommand = last
+        } else {
+            self.currentCommand = nil
+        }
+        self.currentCursor = parser.cursor
+        self.activeSelection = parser.activeSelection
+        self.pendingValues = parser.pendingValues
+    }
+
+    /// Parse the confirmed-only text into the committed command set. The chart
+    /// ghosts any preview cell not backed by these.
+    private func ingestCommitted(_ text: String) {
+        guard !text.isEmpty else { committedCommands = []; return }
+        let parser = VoiceCommandParser(configuration: getConfiguration())
+        committedCommands = parser.parse(text: text, isFinal: false)
+    }
+
     private func startSimulation(from text: String?) {
+        stopLiveDictation()   // the two feeds are mutually exclusive
+        committedCommands = nil   // simulation: no ghosting, everything solid
         if let newText = text {
             let spaced = newText
                 .replacingOccurrences(of: "\n", with: " \n ")

@@ -83,8 +83,8 @@ struct ChartDashboard: View {
             let darkBlue = Color(red: 0.05, green: 0.2, blue: 0.5)
             HStack(spacing: 20) {
                 Button {
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { 
-                        showAIMode.toggle() 
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                        showAIMode.toggle()
                         if showAIMode {
                             columnVisibility = .detailOnly
                         }
@@ -114,6 +114,12 @@ struct ChartDashboard: View {
                     Label("Debug", systemImage: "ladybug")
                 }
                 
+                Button {
+                    showTranscription = true
+                } label: {
+                    Label("Transcribe", systemImage: "waveform")
+                }
+
                 Button {
                     // Export logic placeholder
                 } label: {
@@ -211,13 +217,11 @@ struct ChartDashboard: View {
         .sheet(isPresented: $showSettings) {
             OnboardingView(hasCompletedOnboarding: .constant(true), isSettingsMode: true)
         }
-        .onChange(of: aiViewModel.commandHistory) { _, newHistory in
-            var newMouth = ToothObject.fullMouthEmpty()
-            for cmd in newHistory {
-                ChartProcessor.apply(command: cmd, to: &newMouth)
-            }
-            self.mouth = newMouth
+        .sheet(isPresented: $showTranscription) {
+            LiveTranscriptionView()
         }
+        .onChange(of: aiViewModel.commandHistory) { _, _ in recomputeChart() }
+        .onChange(of: aiViewModel.committedCommands) { _, _ in recomputeChart() }
         .onChange(of: aiViewModel.currentCursor) { _, _ in updateHighlight() }
         .onChange(of: aiViewModel.activeSelection) { _, _ in updateHighlight() }
     }
