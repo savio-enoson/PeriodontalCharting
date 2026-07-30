@@ -123,7 +123,11 @@ struct ChartProcessor {
                let eIdx = allTeeth.firstIndex(of: ts.endTooth.toothNumber) {
                 let lower = min(sIdx, eIdx)
                 let upper = max(sIdx, eIdx)
-                let teethInRange = Array(allTeeth[lower...upper])
+                var teethInRange = Array(allTeeth[lower...upper])
+                
+                if sIdx > eIdx {
+                    teethInRange.reverse()
+                }
                 
                 var valueIndex = 0
                 let isBroadcast = command.values.count == 1

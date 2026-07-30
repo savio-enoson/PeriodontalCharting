@@ -9,3 +9,4 @@ DerivedData/
 *.xcuserstate
 .DS_STORE
 *.DS_STORE
+.swiftmodulecache

@@ -6,24 +6,10 @@ struct ToothAssetOffsets {
     
     // The ratio of the tooth's non-transparent pixel width precisely at the CEJ line (the tooth base/neck)
     // compared to the total PNG asset width. Used to dynamically size implants to the physical tooth base.
-    static let cejWidthRatios: [String: CGFloat] = [
-        "11_B": 0.8202, "11_P": 0.7086, "12_B": 0.693,  "12_P": 0.6792,
-        "13_B": 0.7769, "13_P": 0.6217, "14_B": 0.7769, "14_P": 0.6639,
-        "15_B": 0.7037, "15_P": 0.6861, "16_B": 0.8667, "16_P": 0.7832,
-        "17_B": 0.8133, "17_P": 0.7016, "18_B": 0.8246, "18_P": 0.8108,
-        "21_B": 0.8202, "21_P": 0.7086, "22_B": 0.693,  "22_P": 0.6792,
-        "23_B": 0.7769, "23_P": 0.6217, "24_B": 0.7769, "24_P": 0.6639,
-        "25_B": 0.7037, "25_P": 0.6861, "26_B": 0.8667, "26_P": 0.7832,
-        "27_B": 0.8133, "27_P": 0.7016, "28_B": 0.8246, "28_P": 0.8108,
-        "31_B": 0.6611, "31_L": 0.6258, "32_B": 0.6437, "32_L": 0.6139,
-        "33_B": 0.6739, "33_L": 0.5867, "34_B": 0.5797, "34_L": 0.6278,
-        "35_B": 0.5945, "35_L": 0.6056, "36_B": 0.7119, "36_L": 0.8122,
-        "37_B": 0.7516, "37_L": 0.7184, "38_B": 0.7737, "38_L": 0.7296,
-        "41_B": 0.6611, "41_L": 0.6258, "42_B": 0.6437, "42_L": 0.6139,
-        "43_B": 0.7439, "43_L": 0.5867, "44_B": 0.5797, "44_L": 0.6278,
-        "45_B": 0.5945, "45_L": 0.6056, "46_B": 0.7159, "46_L": 0.8122,
-        "47_B": 0.7016, "47_L": 0.8184, "48_B": 0.7437, "48_L": 0.7296,
-    ]
+    static let cejWidthUpperBuccal: [CGFloat]  = [0.7822, 0.7123, 0.8569, 0.8269, 0.7537, 0.8667, 0.8033, 0.8046]
+    static let cejWidthUpperPalatal: [CGFloat] = [0.7406, 0.6792, 0.7017, 0.7439, 0.7461, 0.7832, 0.7016, 0.8108]
+    static let cejWidthLowerBuccal: [CGFloat]  = [0.6111, 0.6457, 0.7339, 0.5797, 0.6245, 0.6759, 0.6816, 0.7007]
+    static let cejWidthLowerLingual: [CGFloat] = [0.6408, 0.6539, 0.6757, 0.6508, 0.6456, 0.8222, 0.8284, 0.8406]
     
     // Arrays defining the custom scaling and horizontal offsets for implant screws.x 7 = 3rd molar).
     // Provide exactly 8 values per array.
@@ -35,16 +21,10 @@ struct ToothAssetOffsets {
     static let lowerLingual: [CGFloat] = [6, 4, -3, 8, 3, -1, -5, -6]
     
     // Optional X offsets to horizontally align the implant screw with asymmetrical tooth crowns
-    static let upperBuccalX: [CGFloat]  = [0, 0, 0, 0, 0, 0, 0, 0]
-    static let upperPalatalX: [CGFloat] = [0, 0, 0, 0, 0, 0, 0, 0]
-    static let lowerBuccalX: [CGFloat]  = [0, 0, 0, -2, -2, -2, -4, 1]
-    static let lowerLingualX: [CGFloat] = [0, 0, 0, 0, 0, 0, 0, 0]
-    
-    // Optional scaling multipliers for the implant screw (default 1.0)
-    static let upperBuccalScale: [CGFloat]  = [1, 1, 1, 1, 1, 1, 1, 1]
-    static let upperPalatalScale: [CGFloat] = [1, 1, 1, 1, 1, 1, 1, 1]
-    static let lowerBuccalScale: [CGFloat]  = [1, 1, 1, 1, 1, 1, 1, 1]
-    static let lowerLingualScale: [CGFloat] = [1, 1, 1, 1, 1, 1, 1, 1]
+    static let upperBuccalX: [CGFloat]  = [0, 1, -1, -0.5, 0, 0, 0.5, 1]
+    static let upperPalatalX: [CGFloat] = [-1.5, 0, 0, 0, 0.5, -1, -1, -1.5]
+    static let lowerBuccalX: [CGFloat]  = [0, 0, -0.5, -1.5, -1.5, -0.5, -2, 0.5]
+    static let lowerLingualX: [CGFloat] = [0, 0.5, 0, 1, 0.5, 0, 0, 0.5]
     
     static func offset(for tooth: ToothObject, isOuter: Bool) -> CGFloat {
         let quadrant = tooth.toothNumber / 10
@@ -86,22 +66,22 @@ struct ToothAssetOffsets {
         }
     }
     
-    static func scale(for tooth: ToothObject, isOuter: Bool) -> CGFloat {
+    static func cejWidthRatio(for tooth: ToothObject, isOuter: Bool) -> CGFloat {
         let quadrant = tooth.toothNumber / 10
         let id = tooth.toothNumber % 10
-        guard id >= 1 && id <= 8 else { return 1.0 }
+        guard id >= 1 && id <= 8 else { return 0.65 }
         
         let arrayIndex = id - 1
         
         switch quadrant {
         case 1, 2:
-            let arr = isOuter ? upperBuccalScale : upperPalatalScale
-            return arrayIndex < arr.count ? arr[arrayIndex] : 1.0
+            let arr = isOuter ? cejWidthUpperBuccal : cejWidthUpperPalatal
+            return arrayIndex < arr.count ? arr[arrayIndex] : 0.65
         case 3, 4:
-            let arr = isOuter ? lowerBuccalScale : lowerLingualScale
-            return arrayIndex < arr.count ? arr[arrayIndex] : 1.0
+            let arr = isOuter ? cejWidthLowerBuccal : cejWidthLowerLingual
+            return arrayIndex < arr.count ? arr[arrayIndex] : 0.65
         default:
-            return 1.0
+            return 0.65
         }
     }
 }
@@ -154,14 +134,11 @@ struct ToothGraphicSideView: View, Equatable {
                     let targetImplantHeight = 10.0 * lineSpacing
                     
                     let screwXOffset = ToothAssetOffsets.offsetX(for: tooth, isOuter: isOuter)
-                    let screwScale = ToothAssetOffsets.scale(for: tooth, isOuter: isOuter)
                     
-                    let suffix = isOuter ? "B" : (tooth.toothNumber < 30 ? "P" : "L")
-                    let toothKey = "\(tooth.toothNumber)_\(suffix)"
-                    let cejRatio = ToothAssetOffsets.cejWidthRatios[toothKey] ?? 0.65
+                    let cejRatio = ToothAssetOffsets.cejWidthRatio(for: tooth, isOuter: isOuter)
                     let trueToothBaseWidth = targetWidth * cejRatio
                     
-                    let endWidth = trueToothBaseWidth * screwScale
+                    let endWidth = trueToothBaseWidth
                     let isMolar = [6, 7, 8].contains(tooth.toothNumber % 10)
                     let bodyWidth = isMolar ? (endWidth * 0.80) : endWidth
                     
@@ -484,4 +461,73 @@ struct ToothGraphicSideView: View, Equatable {
         }
         return "\(quadrant)-\(id) \(aspect)"
     }
+}
+
+#Preview {
+    struct ToothPreviewWrapper: View {
+        @State private var showImplants = true
+        @State private var showLines = false
+        
+        let upperTeeth = [18,17,16,15,14,13,12,11, 21,22,23,24,25,26,27,28]
+        let lowerTeeth = [48,47,46,45,44,43,42,41, 31,32,33,34,35,36,37,38]
+        
+        var body: some View {
+            ScrollView {
+                VStack(spacing: 20) {
+                    HStack {
+                        Toggle("Implants", isOn: $showImplants)
+                        Toggle("Lines", isOn: $showLines)
+                    }.padding()
+                    
+                    previewRow(title: "Upper Outer (Buccal)", toothNumbers: upperTeeth, isOuter: true, isMirrored: false)
+                    previewRow(title: "Upper Inner (Palatal)", toothNumbers: upperTeeth, isOuter: false, isMirrored: true)
+                    previewRow(title: "Lower Outer (Buccal)", toothNumbers: lowerTeeth, isOuter: true, isMirrored: true)
+                    previewRow(title: "Lower Inner (Lingual)", toothNumbers: lowerTeeth, isOuter: false, isMirrored: false)
+                }
+            }
+        }
+        
+        func previewRow(title: String, toothNumbers: [Int], isOuter: Bool, isMirrored: Bool) -> some View {
+            var teethObj: [ToothObject] = []
+            for t in toothNumbers {
+                var obj = ToothObject.create(number: t)
+                if showImplants {
+                    obj.implant = true
+                }
+                if showLines {
+                    obj.probingDepth = AspectData(outer: [3, 4, 3], inner: [3, 4, 3])
+                    obj.gingivalMargin = AspectData(outer: [1, 2, 1], inner: [1, 2, 1])
+                } else {
+                    obj.probingDepth = AspectData(outer: [], inner: [])
+                    obj.gingivalMargin = AspectData(outer: [], inner: [])
+                }
+                teethObj.append(obj)
+            }
+            
+            return VStack(alignment: .leading) {
+                Text(title).font(.headline).padding(.leading)
+                ScrollView(.horizontal) {
+                    HStack(spacing: 0) {
+                        ForEach(0..<teethObj.count, id: \.self) { idx in
+                            VStack(spacing: 4) {
+                                Text("\(teethObj[idx].toothNumber)")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                                ToothGraphicSideView(
+                                    teeth: teethObj,
+                                    index: idx,
+                                    isOuter: isOuter,
+                                    isMirrored: isMirrored,
+                                    targetWidth: 40 // Same width as in production chart
+                                )
+                            }
+                        }
+                    }
+                    .padding(.horizontal)
+                }
+            }
+        }
+    }
+    
+    return ToothPreviewWrapper()
 }

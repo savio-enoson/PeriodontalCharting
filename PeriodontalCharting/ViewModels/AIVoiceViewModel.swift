@@ -40,102 +40,14 @@ class AIVoiceViewModel: ObservableObject {
     private var currentWordIndex: Int = 0
     
     static let debugTranscript = """
-gigi 18 gak ada
-2 2 2
-3 4 5
-5 3 3
-2 2 2
-
-resesi dari mesio bukal 17 sampai disto bukal 15 minus 1
-BOP dari bukal 16 hingga bukal 15
-
-Lanjut
-2 2 2 
-2 2 2
-2 2 2
-
-2 2 2
-2 2 2 
-2 2 2
-3 4 5
-5 5 5
-6 6 4
-3 2 2
-
-BOP dari mesio bukal 24 sampai mesio bukal 27
-28 gak ada
-
-Lanjut palatal
-2 2 2
-2 2 4
-4 4 4
-4 2 2
-
-BOP dari Mesio palatal 26 sampai Disto palatal 24.
-Lanjut, 23.
-2 2 2
-2 2 2
-2 2 2
-
-2 2 2
-2 2 2
-2 2 2
-2 2 2
-2 2 2
-4 3 3
-3 3 2
-
-15 palatal. Resesi palatal dan disto palatal 1.
-16 Resesi Mesio palatal 2. palatal 4. Disto palatal 2
-17 resesi mesio palatal 1
-BOP dimulai dari disto lingual 15 hingga palatal 16
-plaque pada semua gigi
-
-rahang bawah
-38 gak ada
-2 2 2 
-2 2 2
-2 2 2
-2 2 2
-2 2 2
-2 2 2
-2 2 2
-
-2 2 2
-2 2 2
-Resesi 2 mili pada labial 31, 32, 41, 42
-
-Lanjut 43, 
-2 2 2 
-2 2 2 
-2 2 2 
-
-Resesi 1 mili, distal 45
-46 tidak ada
-
-3, 2, 2 
-
-Resesi 1 mili Mesial 47
-
-48 gak ada
-
-Lingual
-2 2 3
-Resesi 1 mili Mesial
-2 2 2
-Resesi satu mili distal
-
-2 2 2 
-2 2 2
-2 2 2
-2 2 2
-
-2 2 2
-2 2 2
-2 2 2
-
-Sampai 37 2
-Plaque pada semua gigi
+gigi 18 17 16 resesi -2
+gigi 15 14 13 mobility grade 1
+gigi 21 22 23 BOP
+gigi 24 25 26 plak
+gigi 27 28 implan
+gigi 38 37 36 furkasi 2
+gigi 35 34 33 tidak ada
+gigi 41 42 43 3 2 3
 """
     
     /// Initializes the starting cursor position if it hasn't been set yet.

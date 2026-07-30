@@ -44,6 +44,11 @@ struct SelectionDebugMenu: View {
                         dismiss()
                     }
                     
+                    Button("Test Debug Transcript") {
+                        aiViewModel.parseInstant(text: AIVoiceViewModel.debugTranscript)
+                        dismiss()
+                    }
+                    
                     Button("Clear Chart", role: .destructive) {
                         aiViewModel.parseInstant(text: "")
                         selectionModel.selectedCells.removeAll()

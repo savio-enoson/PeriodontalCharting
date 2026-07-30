@@ -261,7 +261,8 @@ Each anatomy context carries an `expectedValues` count that tells the tokenizer 
 3. **Range lookahead:** Skip whitespace words and check whether the next meaningful token is `.action(.until)` or `.action(.until2)`. If so, look further for an optional end anatomy and end tooth.
 4. **Start anatomy lookback:** If `tokens[tokenIndex-1]` is an anatomy token, treat it as the start-anatomy of the range.
 5. Set `activeSelection` based on whether a full range, a partial range (no end tooth yet), or a single point was detected.
-6. **List continuation:** After a post-target tooth is applied, `isContinuingList` peeks ahead for conjunctions or additional tooth identifiers. If a list continues, `isPostTargeting` is maintained so subsequent teeth in the list receive the same template values.
+6. **List aggregation:** If the previous token was also a `.toothIdentifier` and `currentNumbers` is empty, expand the `activeSelection.endTooth` to aggregate sequential teeth into a contiguous range (e.g. `"18 17 16"`).
+7. **List continuation:** After a post-target tooth is applied, `isContinuingList` peeks ahead for conjunctions or additional tooth identifiers. If a list continues, `isPostTargeting` is maintained so subsequent teeth in the list receive the same template values.
 
 > **`_sep_` barrier:** The range lookahead skips `.word` filler tokens but stops at `_sep_` boundaries. This prevents a sentence-ending `.` or `\n` from accidentally forming a range bridge between two unrelated dictation sentences.
 
@@ -273,6 +274,7 @@ Each anatomy context carries an `expectedValues` count that tells the tokenizer 
 4. **Plaque fallback:** If the *previous* metric was `.plaque` and no specific targets were set (`!metricHadSpecificTargets`), emit a whole-sequence plaque command before switching.
 5. If `currentNumbers` is empty and `activeSelection` is set, snap the cursor highlight to that tooth without disrupting the sequence index.
 6. Set `cursor.currentMetric = m` and reset `metricHadSpecificTargets = false`.
+7. **Boolean Auto-Flushing:** If the new metric is boolean (`.bleeding`, `.plaque`, `.implant`) and `activeSelection` is non-nil (meaning targets were set before the metric), instantly emit the boolean command and restore the parser back to `.probingDepth`. This prevents boolean metrics from sticking to subsequent commands (e.g. isolating `"21 22 23 BOP"` from an incoming `"24 25 26 plak"`).
 
 > **Key invariant:** `.metric` tokens do *not* clear `activeSelection`. This allows chaining like `"Mesio Bukal Poket 2"` without losing the site selection.
 
@@ -340,6 +342,16 @@ When multiple anatomies are spoken sequentially, the parser aggregates them into
 2. `Mesiopalatal` → parser detects an upcoming tooth identifier, so it defers.
 3. `16` → parser walks backward, collects all contiguous deferred anatomies (`Distopalatal`, `Mesiopalatal`), sets the baseline to the first anatomy, and aggregates the rest (expanding bounds from site 0 to 2).
 4. `2` → value is flushed to the aggregated sites.
+
+*Example C (Tooth Sequence Aggregation):*
+```
+"18   17   16   resesi   -2"
+└────A1─────┘   └──M──┘  └N┘
+```
+1. `18` → sets `activeSelection` = 18.
+2. `17` → list aggregation detects a sequential tooth; expands `activeSelection` to `18...17`.
+3. `16` → expands `activeSelection` to `18...16`.
+4. `resesi -2` → broadcasts the metric/number across the entire 3-tooth block.
 
 ### 5.2 Post-targeting (numbers before anatomy)
 
@@ -444,7 +456,8 @@ The safeguard checks: if `activeSelection.startSite == nil && activeSelection.en
 2. Determine `targetSlots = activeSelection?.expectedSlots ?? 3`. If no active selection, assume 3 slots (full tooth).
 3. If `currentNumbers.count >= targetSlots` OR `force == true`, proceed:
    - **Broadcast:** If exactly 1 value and `targetSlots > 1`, repeat it to fill all slots (e.g., `"Bukal 2"` → `[2, 2, 2]`).
-   - **Padding:** If fewer values than slots, repeat the last value to fill (e.g., `[2, 3]` with 3 slots → `[2, 3, 3]`).
+   - **Pattern Repetition:** If `targetSlots % currentNumbers.count == 0` (e.g., 3 values given for 9 target slots), seamlessly repeat the entire array to fill the slots (e.g., `"18 17 16 3 2 3"` expands to `[3, 2, 3, 3, 2, 3, 3, 2, 3]`).
+   - **Padding:** If fewer values than slots (and it's not a clean multiple), repeat the last value to fill the remainder.
    - **Truncation:** Take only the first `targetSlots` values.
    - **Direction reversal:** Query `cursor.configuration.direction(for:aspect:)`. If `.rightToLeft`, reverse the values array. This maps the clinician's natural left-to-right dictation order to the correct anatomical site indices without requiring them to reverse.
    - **PD absolute value:** For `.probingDepth`, values are stored as `abs(n)` to prevent negative probing depths.
@@ -597,7 +610,7 @@ The function dispatches on the command's geometry:
 |---|---|---|
 | **Anatomy-site range** | `startAspect` and `endAspect` both non-nil | Calls `ChartAnatomyResolver.sequence(from:to:)` to get the ordered `(tooth, aspect, site)` list; applies values element-wise across the sequence. |
 | **Same-tooth, site range** | Same start and end tooth, `startSite` is non-nil | `endSite` defaults to `startSite` when nil (making single-site selections valid). Iterates each `(aspect, site)` pair consuming indexed values. |
-| **Multi-tooth range** | Start and end tooth differ, no aspect boundaries | Locates both teeth in the canonical 32-tooth order array, slices the range, and consumes values in groups of 3 per tooth. |
+| **Multiple complete teeth** | `ts.startTooth != ts.endTooth` | Identifies all teeth between start and end using the standard charting order list. **Crucially**, it detects if the user dictated them in reverse-charting order (e.g. `startTooth: 41`, `endTooth: 43`). If so, it reverses the iteration array so that values map cleanly left-to-right to the dictated sequence order. Slices the values array into 3-slot (or 1-slot) chunks and applies them to each tooth sequentially. |
 | **Single-tooth / fallback** | Default | Directly sets the named property arrays on the tooth using `command.values`. |
 
 `ChartDashboard` rebuilds `mouthState` from scratch by replaying the full `commandHistory` on every parser update. This guarantees the chart is always the deterministic result of the command log, regardless of partial parses during streaming.

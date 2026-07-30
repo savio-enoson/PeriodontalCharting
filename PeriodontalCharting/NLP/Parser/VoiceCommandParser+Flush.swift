@@ -35,6 +35,13 @@ extension VoiceCommandParser {
             
             if values.count == 1 && targetSlots > 1 {
                 values = Array(repeating: values[0], count: targetSlots)
+            } else if values.count > 1 && values.count < targetSlots && targetSlots % values.count == 0 {
+                let repeatCount = targetSlots / values.count
+                var repeatedValues: [Int] = []
+                for _ in 0..<repeatCount {
+                    repeatedValues.append(contentsOf: values)
+                }
+                values = repeatedValues
             } else if values.count < targetSlots {
                 let fill = values.last ?? 0
                 while values.count < targetSlots { values.append(fill) }
@@ -93,6 +100,13 @@ extension VoiceCommandParser {
         
         if finalValues.count == 1 && targetSlots > 1 {
             finalValues = Array(repeating: finalValues[0], count: targetSlots)
+        } else if finalValues.count > 1 && finalValues.count < targetSlots && targetSlots % finalValues.count == 0 {
+            let repeatCount = targetSlots / finalValues.count
+            var repeatedValues: [String] = []
+            for _ in 0..<repeatCount {
+                repeatedValues.append(contentsOf: finalValues)
+            }
+            finalValues = repeatedValues
         } else if finalValues.count < targetSlots {
             let fill = finalValues.last ?? (isBoolMetric ? "True" : "0")
             while finalValues.count < targetSlots { finalValues.append(fill) }

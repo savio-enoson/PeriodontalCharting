@@ -276,7 +276,33 @@ extension VoiceCommandParser {
                             }
                         }
                     } else {
-                        self.activeSelection = TeethSelection(startTooth: ToothObject.create(number: tooth), startAspect: nil, startSite: nil, endTooth: ToothObject.create(number: tooth), endAspect: nil, endSite: nil)
+                        var isList = false
+                        if self.activeSelection != nil && self.currentNumbers.isEmpty {
+                            var j = tokenIndex - 1
+                            while j >= 0 {
+                                if case .toothIdentifier(_) = tokens[j] {
+                                    isList = true
+                                    break
+                                } else if case .word(let w) = tokens[j], w != "_sep_" {
+                                    j -= 1
+                                } else if case .anatomy(_) = tokens[j] {
+                                    j -= 1
+                                } else {
+                                    break
+                                }
+                            }
+                        }
+                        
+                        if isList {
+                            if var currentSelection = self.activeSelection {
+                                currentSelection.endTooth = ToothObject.create(number: tooth)
+                                currentSelection.endAspect = currentSelection.startAspect
+                                currentSelection.endSite = currentSelection.startSite
+                                self.activeSelection = currentSelection
+                            }
+                        } else {
+                            self.activeSelection = TeethSelection(startTooth: ToothObject.create(number: tooth), startAspect: nil, startSite: nil, endTooth: ToothObject.create(number: tooth), endAspect: nil, endSite: nil)
+                        }
                     }
                     tokenIndex += 1
                 }
@@ -308,6 +334,14 @@ extension VoiceCommandParser {
                 self.cursor.setMetric(m)
                 currentMetricMultiplier = mult
                 metricHadSpecificTargets = false
+                
+                if m == .bleeding || m == .plaque || m == .implant {
+                    if self.activeSelection != nil {
+                        emitBoolIfPending()
+                        restoreToMainSequence()
+                    }
+                }
+                
                 tokenIndex += 1
                 
             case .action(let a):
