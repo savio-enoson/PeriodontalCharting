@@ -40,14 +40,7 @@ class AIVoiceViewModel: ObservableObject {
     private var currentWordIndex: Int = 0
     
     static let debugTranscript = """
-gigi 18 17 16 resesi -2
-gigi 15 14 13 mobility grade 1
-gigi 21 22 23 BOP
-gigi 24 25 26 plak
-gigi 27 28 implan
-gigi 38 37 36 furkasi 2
-gigi 35 34 33 tidak ada
-gigi 41 42 43 3 2 3
+resesi 18, 17, 16, -1 -1
 """
     
     /// Initializes the starting cursor position if it hasn't been set yet.
