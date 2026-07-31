@@ -1,5 +1,6 @@
 //
 //  SeparatorBenchmarkService.swift
+//  PeriodontalCharting
 //
 //  Measures TargetSeparator_BSRNN on real hardware with dummy tensors — no
 //  audio, no VAD, no pipeline. Answers the one binding unknown for the target

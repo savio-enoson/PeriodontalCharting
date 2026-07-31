@@ -12,6 +12,8 @@ struct OnboardingView: View {
     @State private var hasRecorded = false
     @State private var recordingPermissionGranted = false
     @State private var enrollmentStatus = ""
+    @State private var enrollmentDetail = ""
+    @State private var enrollmentSucceeded = false
     @State private var isEnrolling = false
     
     init(hasCompletedOnboarding: Binding<Bool>, isSettingsMode: Bool = false) {
@@ -114,11 +116,23 @@ struct OnboardingView: View {
                     }
 
                     if isEnrolling || !enrollmentStatus.isEmpty {
-                        HStack(spacing: 8) {
-                            if isEnrolling { ProgressView() }
-                            Text(isEnrolling ? "Registering your voice…" : enrollmentStatus)
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(spacing: 8) {
+                                if isEnrolling {
+                                    ProgressView()
+                                } else {
+                                    Image(systemName: enrollmentSucceeded
+                                          ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                                        .foregroundStyle(enrollmentSucceeded ? .green : .orange)
+                                }
+                                Text(isEnrolling ? "Registering your voice…" : enrollmentStatus)
+                                    .font(.footnote)
+                            }
+                            if !enrollmentDetail.isEmpty && !isEnrolling {
+                                Text(enrollmentDetail)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -197,36 +211,41 @@ struct OnboardingView: View {
 
     /// Build the speaker centroid from the calibration recording.
     ///
-    /// Enrolls into TranscriptionEngine's SHARED gate. A locally-constructed
-    /// SpeakerGateService would deallocate when this function returns and take the
-    /// centroid with it — the enrollment would appear to succeed and be gone.
-    ///
-    /// Uses `enrollmentUtterances` rather than `enroll(fromFile:)` so short spans
-    /// are filtered out: SpeakerGate.inputSamples is 48_000, a FIXED 3 s Core ML
-    /// input that zero-pads anything shorter, and a 1.5 s span is half padding.
+    /// The work lives on TranscriptionEngine so onboarding and launch-time restore
+    /// share ONE implementation; this is purely state assignment and message
+    /// mapping. Reports every stage, because "no usable speech" on its own cannot
+    /// distinguish a half-written file from a dead mic from spans that were merely
+    /// too short.
     private func enrollCalibration() {
-        guard let service = TranscriptionEngine.shared.makeSpeakerGateIfNeeded() else {
-            enrollmentStatus = "Voice model unavailable — try recording again."
-            return
-        }
-
         isEnrolling = true
         enrollmentStatus = ""
-        let url = TranscriptionEngine.calibrationURL
+        enrollmentDetail = ""
 
-        Task.detached(priority: .userInitiated) {
-            service.resetEnrollment()
-            let added = (try? service.enrollmentUtterances(
-                            fromFile: url,
-                            minSeconds: 3.0,
-                            maxPerFile: SpeakerGate.maxTemplates))
-                .flatMap { try? service.enroll(utterances: $0) } ?? 0
+        Task {
+            let result = await TranscriptionEngine.shared.enrollFromCalibration(
+                reset: true, waitForFile: true)
 
-            await MainActor.run {
-                isEnrolling = false
-                enrollmentStatus = added > 0
-                    ? "Voice registered — \(added) template(s)."
-                    : "No usable speech found. Record again, a little longer."
+            isEnrolling = false
+            enrollmentSucceeded = result.templates > 0
+
+            let base = String(format: "%.1f s audio · %d speech segment(s) · %d at least 3 s",
+                              result.seconds, result.totalSpans, result.eligibleSpans)
+
+            if result.templates > 0 {
+                enrollmentStatus = "Voice registered — \(result.templates) template(s)."
+                enrollmentDetail = base
+            } else if result.seconds < 1.0 {
+                enrollmentStatus = "Recording is too short or unreadable."
+                enrollmentDetail = String(format: "Read %.1f s after 3 s of retries. "
+                                        + "Record for at least 5 seconds.", result.seconds)
+            } else if result.totalSpans == 0 {
+                enrollmentStatus = "No speech detected in the recording."
+                enrollmentDetail = base + ". Check the microphone is not muted, and "
+                                 + "play the recording back to confirm."
+            } else {
+                enrollmentStatus = "Speech found, but no template could be built."
+                enrollmentDetail = base + ". The embedder rejected every segment — "
+                                 + "check SpeakerEmbedding_ECAPA.mlpackage is in the target."
             }
         }
     }

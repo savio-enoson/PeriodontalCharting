@@ -81,24 +81,68 @@ final class SpeakerGateService: @unchecked Sendable {
     /// * **Capped per file.** SpeakerGate evicts FIFO past `maxTemplates`, so
     ///   enrolling every span of four takes would silently DELETE take 1 — losing
     ///   exactly the acoustic diversity multi-condition calibration buys.
-    func enrollmentUtterances(fromFile url: URL,
-                              minSeconds: Double = 3.0,
-                              maxPerFile: Int = 4) throws -> [[Float]] {
-        let audio = try SpeakerGate.loadSamples(from: url)
-        guard !audio.isEmpty else { return [] }
+    func enrollmentSelection(
+        fromFile url: URL,
+        minSeconds: Double = 3.0,
+        maxPerFile: Int = 4
+    ) throws -> (utterances: [[Float]], audioSeconds: Double,
+                 totalSpans: Int, eligibleSpans: Int) {
 
-        let spans = Self.mergeSpans(vad.speechTimestamps(audio), totalSamples: audio.count)
-        guard !spans.isEmpty else { return [] }
+        let audio = try SpeakerGate.loadSamples(from: url)
+        let seconds = Double(audio.count) / Double(SpeakerGate.sampleRate)
+        guard !audio.isEmpty else { return ([], 0, 0, 0) }
+
+        // Permissive threshold, deliberately. Silero's 0.5 default is tuned for
+        // STREAMING, where a false positive costs decode time. Enrollment is the
+        // opposite problem: the file is known to be the target reading a script, so
+        // the cost of missing speech is a failed calibration. Measured on a healthy
+        // recording (rms 0.128): max prob 0.409 — under 0.5 everywhere, so the
+        // default found nothing at all.
+        let raw = vad.speechTimestamps(audio, threshold: 0.3)
+        var spans = Self.mergeSpans(raw, totalSamples: audio.count)
+        var usedFallback = false
+
+        // Last resort: fixed windows. A VAD that finds nothing must not block
+        // enrollment on a file we know contains the speaker. Windows match
+        // SpeakerGate.inputSamples so each one fills the embedder's fixed 3 s
+        // input exactly — no centre-crop, no zero-padding.
+        if spans.isEmpty {
+            let win = SpeakerGate.inputSamples
+            let trim = SpeakerGate.sampleRate / 4      // drop 0.25 s each end (button taps)
+            var start = trim
+            while start + win <= audio.count - trim {
+                spans.append(SpeechSegment(start: start, end: start + win))
+                start += win
+            }
+            usedFallback = true
+        }
+
+        if usedFallback || spans.isEmpty {
+            print(String(format: "[Enroll] VAD found nothing at 0.3 — %.1fs, fallback windows: %d",
+                         seconds, spans.count))
+        }
 
         let minSamples = Int(minSeconds * Double(SpeakerGate.sampleRate))
-        // Fall back rather than enrolling nothing — a short take beats a missing condition.
-        var eligible = spans.filter { $0.end - $0.start >= minSamples }
-        if eligible.isEmpty { eligible = spans }
+        let eligible = spans.filter { $0.end - $0.start >= minSamples }
 
-        return eligible
+        // Fall back rather than enrolling nothing — a short span beats no centroid.
+        let usable = eligible.isEmpty ? spans : eligible
+        let picked = usable
             .sorted { ($0.end - $0.start) > ($1.end - $1.start) }
             .prefix(maxPerFile)
             .map { Array(audio[$0.start..<$0.end]) }
+
+        return (picked, seconds, spans.count, eligible.count)
+    }
+
+    /// Convenience wrapper — kept so any caller that only wants the audio is
+    /// unaffected.
+    func enrollmentUtterances(fromFile url: URL,
+                              minSeconds: Double = 3.0,
+                              maxPerFile: Int = 4) throws -> [[Float]] {
+        try enrollmentSelection(fromFile: url,
+                                minSeconds: minSeconds,
+                                maxPerFile: maxPerFile).utterances
     }
 
     func resetEnrollment() {
