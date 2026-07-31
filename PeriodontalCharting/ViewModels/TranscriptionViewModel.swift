@@ -98,6 +98,9 @@ final class TranscriptionViewModel: LiveCaptureDriver {
     private var lastConfirmedSegmentCount = 0
     private var lastConfirmedCumulative = ""
     private var liveConfirmedCarryOver = ""
+    /// Speaker gate. When set and enrolled, confirmed Whisper segments whose time
+    /// range falls in a REJECTED span are withheld from the parser.
+    var speakerGate: SpeakerGateService?
 
     /// WhisperKit decodes a fixed 30 s window; batch speech is packed into chunks
     /// no larger than this so each decode fills the window (not one pass per burst).
@@ -374,7 +377,20 @@ final class TranscriptionViewModel: LiveCaptureDriver {
                 // so annotations never react to unconfirmed hypotheses.
                 if newState.confirmedSegments.count != self.lastConfirmedSegmentCount {
                     self.lastConfirmedSegmentCount = newState.confirmedSegments.count
-                    let cleanedConfirmed = ClinicalConfig.clean(confirmed)
+
+                    // Speaker gate: drop confirmed segments that fall in a span the
+                    // gate rejected, so an assistant's numbers never reach the chart.
+                    // Fails open when no gate is set or nothing covers the timestamp.
+                    let gated: [TranscriptionSegment]
+                    if let gate = self.speakerGate, gate.isEnrolled {
+                        gated = newState.confirmedSegments.filter {
+                            gate.isTargetSpeaking(atSeconds: Double(($0.start + $0.end) / 2))
+                        }
+                    } else {
+                        gated = newState.confirmedSegments
+                    }
+
+                    let cleanedConfirmed = ClinicalConfig.clean(cleanText(gated))
                     let confirmedCumulative = self.liveConfirmedCarryOver.isEmpty
                         ? cleanedConfirmed
                         : (self.liveConfirmedCarryOver + " " + cleanedConfirmed).trimmingCharacters(in: .whitespaces)

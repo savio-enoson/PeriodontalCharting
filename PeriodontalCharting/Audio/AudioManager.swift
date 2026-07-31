@@ -24,6 +24,11 @@ class AudioManager: NSObject, ObservableObject {
     
     private var audioRecorder: AVAudioRecorder?
     private var audioPlayer: AVAudioPlayer?
+
+    /// The file the last `startRecording` targeted. `stopRecording` must re-check
+    /// THIS file rather than the default, or multi-take calibration silently
+    /// repoints `recordingURL` at take 1 and Play plays the wrong recording.
+    private var currentFilename: String = "voice_sample.wav"
     
     private override init() {
         super.init()
@@ -54,6 +59,7 @@ class AudioManager: NSObject, ObservableObject {
             let documentPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             let audioFilename = documentPath.appendingPathComponent(filename)
             self.recordingURL = audioFilename
+            self.currentFilename = filename
             
             // 16kHz WAV configuration
             let settings: [String: Any] = [
@@ -85,16 +91,22 @@ class AudioManager: NSObject, ObservableObject {
         
         DispatchQueue.main.async {
             self.isRecording = false
-            self.checkExistingRecording()
+            self.checkExistingRecording(filename: self.currentFilename)
         }
     }
     
-    func playRecording() {
+    /// Pass a filename to play a specific take; omit it to replay whatever
+    /// `recordingURL` currently points at (the pre-existing behaviour).
+    func playRecording(filename: String? = nil) {
+        if let filename { checkExistingRecording(filename: filename) }
         guard let url = recordingURL, hasRecording else { return }
         
         let session = AVAudioSession.sharedInstance()
         do {
-            try session.setCategory(.playback, mode: .default, options: [.defaultToSpeaker])
+            // NO .defaultToSpeaker here — it is only valid with .playAndRecord,
+            // and passing it with .playback makes setCategory throw OSStatus -50
+            // so playback never starts. .playback already routes to the speaker.
+            try session.setCategory(.playback, mode: .default)
             try session.setActive(true)
             
             audioPlayer = try AVAudioPlayer(contentsOf: url)

@@ -8,6 +8,11 @@
 //  (the full turbo build already got the app SIGKILL'd), so all live/batch
 //  transcription draws from this one instance.
 //
+//  Also owns the app-wide SpeakerGateService. That is DELIBERATELY independent of
+//  the WhisperKit load: enrollment needs only the small ECAPA embedder and Silero
+//  VAD, and gating it behind a ~1 GB model meant onboarding always found `vad`
+//  still nil and silently skipped calibration.
+//
 
 import Foundation
 import CoreML
@@ -25,9 +30,15 @@ final class TranscriptionEngine {
     private(set) var isReady = false
     private(set) var statusMessage = "Loading model…"
 
+    /// App-wide speaker gate. Enrollment lives HERE, not in whatever view happened
+    /// to trigger it — a locally-constructed service deallocates and takes the
+    /// centroid with it.
+    private(set) var speakerGate: SpeakerGateService?
+
     /// The in-flight (or completed) load, so concurrent callers coalesce onto one
     /// load instead of racing to build multiple WhisperKit instances.
     @ObservationIgnored private var loadTask: Task<Void, Never>?
+    @ObservationIgnored private var enrollmentTask: Task<Void, Never>?
 
     // Model naming: folders in argmaxinc/whisperkit-coreml use an underscore before
     // "turbo" (openai_whisper-large-v3_turbo), NOT a hyphen. The full turbo build is
@@ -36,6 +47,13 @@ final class TranscriptionEngine {
 //    private static let bundledModelName = "openai_whisper-large-v3_turbo_954MB"
     private static let bundledModelName = "openai_whisper-large-v3_turbo_632MB"
     private static let networkModelName = "openai_whisper-large-v3_turbo"
+
+    /// Where onboarding writes the calibration recording. Single source of truth
+    /// for both enrollment and restore.
+    static var calibrationURL: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("voice_sample.wav")
+    }
 
     private init() {}
 
@@ -125,5 +143,62 @@ final class TranscriptionEngine {
         } catch {
             statusMessage = "Failed to load: \(error.localizedDescription)"
         }
+    }
+
+    // MARK: - Speaker gate
+
+    /// True once a centroid exists. Read this rather than tracking a separate flag.
+    var isSpeakerEnrolled: Bool { speakerGate?.isEnrolled ?? false }
+
+    /// Build the app-wide gate on first use, independent of the WhisperKit load.
+    ///
+    /// Falls back to its own SileroVADEngine when `vad` is not set yet — during
+    /// onboarding it usually is not, because `performLoad` assigns it only AFTER
+    /// the ~1 GB WhisperKit load completes.
+    ///
+    /// Synchronous: it loads two small Core ML models on the main actor (~100 ms).
+    /// Acceptable for a one-time setup call; do not put it in a render path.
+    @discardableResult
+    func makeSpeakerGateIfNeeded() -> SpeakerGateService? {
+        if let speakerGate { return speakerGate }
+        guard let vadEngine = vad ?? (try? SileroVADEngine()),
+              let gate = try? SpeakerGate() else { return nil }
+        let service = SpeakerGateService(gate: gate, vad: vadEngine)
+        speakerGate = service
+        return service
+    }
+
+    /// Rebuild the centroid from the stored calibration recording.
+    ///
+    /// Templates are held in memory only, so without this the clinician would
+    /// re-calibrate on every cold start. Re-enrolling from the WAV is used instead
+    /// of serialising the 192-float templates: no storage format to version, and
+    /// the audio stays the single source of truth. The trade-off is that any
+    /// ADAPTIVELY learned templates are lost across launches — irrelevant until
+    /// adaptive enrollment is switched on.
+    ///
+    /// Idempotent and coalesced, like `load()`. Safe to call at launch.
+    func restoreEnrollment() async {
+        if isSpeakerEnrolled { return }
+        if enrollmentTask == nil {
+            enrollmentTask = Task { await self.performRestoreEnrollment() }
+        }
+        await enrollmentTask?.value
+        if !isSpeakerEnrolled { enrollmentTask = nil }   // allow a retry
+    }
+
+    private func performRestoreEnrollment() async {
+        guard let service = makeSpeakerGateIfNeeded() else { return }
+        guard !service.isEnrolled else { return }
+
+        let url = Self.calibrationURL
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+
+        _ = await Task.detached(priority: .utility) { () -> Int in
+            (try? service.enrollmentUtterances(fromFile: url,
+                                               minSeconds: 3.0,
+                                               maxPerFile: SpeakerGate.maxTemplates))
+                .flatMap { try? service.enroll(utterances: $0) } ?? 0
+        }.value
     }
 }

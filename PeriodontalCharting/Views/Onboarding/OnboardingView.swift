@@ -11,6 +11,8 @@ struct OnboardingView: View {
     @State private var config = ChartingConfiguration()
     @State private var hasRecorded = false
     @State private var recordingPermissionGranted = false
+    @State private var enrollmentStatus = ""
+    @State private var isEnrolling = false
     
     init(hasCompletedOnboarding: Binding<Bool>, isSettingsMode: Bool = false) {
         self._hasCompletedOnboarding = hasCompletedOnboarding
@@ -52,6 +54,7 @@ struct OnboardingView: View {
                             if audioManager.isRecording {
                                 audioManager.stopRecording()
                                 hasRecorded = true
+                                enrollCalibration()
                             } else {
                                 if !recordingPermissionGranted {
                                     audioManager.requestPermission { granted in
@@ -108,6 +111,16 @@ struct OnboardingView: View {
                             }
                         }
                         Spacer()
+                    }
+
+                    if isEnrolling || !enrollmentStatus.isEmpty {
+                        HStack(spacing: 8) {
+                            if isEnrolling { ProgressView() }
+                            Text(isEnrolling ? "Registering your voice…" : enrollmentStatus)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
                 .padding()
@@ -176,6 +189,44 @@ struct OnboardingView: View {
             if let data = UserDefaults.standard.data(forKey: "ChartingConfiguration"),
                let savedConfig = try? JSONDecoder().decode(ChartingConfiguration.self, from: data) {
                 config = savedConfig
+            }
+        }
+    }
+
+    // MARK: - Enrollment
+
+    /// Build the speaker centroid from the calibration recording.
+    ///
+    /// Enrolls into TranscriptionEngine's SHARED gate. A locally-constructed
+    /// SpeakerGateService would deallocate when this function returns and take the
+    /// centroid with it — the enrollment would appear to succeed and be gone.
+    ///
+    /// Uses `enrollmentUtterances` rather than `enroll(fromFile:)` so short spans
+    /// are filtered out: SpeakerGate.inputSamples is 48_000, a FIXED 3 s Core ML
+    /// input that zero-pads anything shorter, and a 1.5 s span is half padding.
+    private func enrollCalibration() {
+        guard let service = TranscriptionEngine.shared.makeSpeakerGateIfNeeded() else {
+            enrollmentStatus = "Voice model unavailable — try recording again."
+            return
+        }
+
+        isEnrolling = true
+        enrollmentStatus = ""
+        let url = TranscriptionEngine.calibrationURL
+
+        Task.detached(priority: .userInitiated) {
+            service.resetEnrollment()
+            let added = (try? service.enrollmentUtterances(
+                            fromFile: url,
+                            minSeconds: 3.0,
+                            maxPerFile: SpeakerGate.maxTemplates))
+                .flatMap { try? service.enroll(utterances: $0) } ?? 0
+
+            await MainActor.run {
+                isEnrolling = false
+                enrollmentStatus = added > 0
+                    ? "Voice registered — \(added) template(s)."
+                    : "No usable speech found. Record again, a little longer."
             }
         }
     }
