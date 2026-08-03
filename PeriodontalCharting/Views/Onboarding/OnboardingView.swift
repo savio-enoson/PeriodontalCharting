@@ -41,12 +41,30 @@ struct OnboardingView: View {
                         .fontWeight(.semibold)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     
-                    Text("Please record a voice sample speaking this text:")
+                    Text("Please read the whole passage aloud at a normal pace. The length is what lets the app tell "
+                         + "your voice apart from an assistant's.")
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    
-                    Text("\"Dokter gigi menyarankan untuk menggosok gigi sebanyak dua kali sehari, terutama sebelum tidur malam, guna menjaga kesehatan gusi Anda.\"")
-                        .font(.title3)
+
+                    // ~80 words. Two separate mechanisms depend on the length:
+                    // the GATE builds its centroid from 3 s windows (several beat
+                    // one — worth ~8x EER), and the EXTRACTOR needs 10.24 s of
+                    // speech to fill its 1024 conditioning keys, below which it
+                    // refuses to enroll at all.
+                    //
+                    // The digit run at the end is deliberate: it is the speech
+                    // style the clinician actually dictates in, and it is the
+                    // dominant ASR failure mode, so the enrollment should cover it
+                    // rather than being all prose.
+                    Text("""
+                    "Dokter gigi menyarankan untuk menggosok gigi sebanyak dua kali \
+                    sehari, terutama sebelum tidur malam, guna menjaga kesehatan gusi Anda.
+
+                    Pemeriksaan periodontal dilakukan menyeluruh pada setiap permukaan \
+                    gigi, mulai dari kuadran satu sampai kuadran empat."
+                    """)
+                        .font(.body)
+                        .lineSpacing(4)
                         .padding()
                         .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -216,6 +234,13 @@ struct OnboardingView: View {
     /// mapping. Reports every stage, because "no usable speech" on its own cannot
     /// distinguish a half-written file from a dead mic from spans that were merely
     /// too short.
+    ///
+    /// The EXTRACTOR is re-enrolled from the same recording afterwards, and it is
+    /// a genuinely different mechanism: the gate wants a centroid over a few clean
+    /// 3 s windows (WeSpeaker vs SpeechBrain ECAPA — different weights, different
+    /// embedding space), the extractor wants 1024 frame-level keys, which needs
+    /// >= 10.3 s of speech. A recording can succeed for one and fail for the
+    /// other, so both results are reported.
     private func enrollCalibration() {
         isEnrolling = true
         enrollmentStatus = ""
@@ -234,6 +259,12 @@ struct OnboardingView: View {
             if result.templates > 0 {
                 enrollmentStatus = "Voice registered — \(result.templates) template(s)."
                 enrollmentDetail = base
+
+                // Rebuild enroll_kv from the NEW recording. Skipping this leaves
+                // the extractor conditioned on the previous clinician's voice —
+                // which would still "work", on the wrong person.
+                await TSEEngine.shared.reprepare()
+                enrollmentDetail = base + "\n" + TSEEngine.shared.status
             } else if result.seconds < 1.0 {
                 enrollmentStatus = "Recording is too short or unreadable."
                 enrollmentDetail = String(format: "Read %.1f s after 3 s of retries. "

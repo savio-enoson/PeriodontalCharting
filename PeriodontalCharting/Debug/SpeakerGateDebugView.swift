@@ -25,6 +25,25 @@ struct SpeakerGateDebugView: View {
         List {
             Section("Extractor") {
                 NavigationLink("Separator benchmark (A16)") { SeparatorBenchmarkView() }
+
+                // Do-no-harm check: this is the target speaker, clean and
+                // close-mic. Expect ZERO spans routed. Anything routed here is
+                // the rescue path firing on audio it should never see.
+                NavigationLink("Rescue path — voice_sample.wav (expect 0 routed)") {
+                    TSEDebugView(audioURL: TranscriptionEngine.calibrationURL)
+                }
+
+                // The real thing: clinic audio with an assistant in it. This is
+                // where routing SHOULD happen, and where d must move DOWN.
+                if let sample = Bundle.main.url(forResource: "sample", withExtension: "mp3") {
+                    NavigationLink("Rescue path — sample.mp3") {
+                        TSEDebugView(audioURL: sample)
+                    }
+                }
+
+                Text("Mode: \(TSEConfig.mode.rawValue). In observe, the chart is "
+                     + "unchanged and every decision goes to the console.")
+                    .font(.caption2).foregroundStyle(.secondary)
             }
             
             Section("Status") {

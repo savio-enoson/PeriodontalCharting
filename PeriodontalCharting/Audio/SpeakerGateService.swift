@@ -34,8 +34,8 @@ struct GatedSpan {
 
 final class SpeakerGateService: @unchecked Sendable {
 
-    private let gate: SpeakerGate
-    private let vad: SileroVADEngine
+    let gate: SpeakerGate
+    let vad: SileroVADEngine
 
     /// Most recent evaluation, used by `isTargetSpeaking(atSeconds:)` to gate
     /// Whisper segments by timestamp.
@@ -193,6 +193,13 @@ final class SpeakerGateService: @unchecked Sendable {
     var currentTimeline: [GatedSpan] {
         lock.lock(); defer { lock.unlock() }
         return timeline
+    }
+    
+    /// Replace the timeline from the rescue path (TSERescuePath.swift). Separate
+    /// from `evaluate` so post-extraction verdicts can be installed without
+    /// re-running VAD and ECAPA over the same audio.
+    func replaceTimeline(_ spans: [GatedSpan]) {
+        lock.lock(); timeline = spans; lock.unlock()
     }
 
     // MARK: - Span merging
