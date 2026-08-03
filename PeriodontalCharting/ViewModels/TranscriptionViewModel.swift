@@ -2,18 +2,13 @@
 //  TranscriptionViewModel.swift
 //  transcript
 //
-//  MVVM view-model: owns WhisperKit, all transcription state, and the business
-//  logic for the three input modes. The View (ContentView) only observes and
-//  sends intents; it holds no logic or WhisperKit references.
-//
-//  Batch (file/upload): Silero VAD finds the speech, which is packed into ≤30 s
-//  chunks and transcribed — the on-device-efficient shape of app.py's `transcribe()`.
+//  MVVM view-model: owns WhisperKit, all live-transcription state, and the
+//  business logic for live mic dictation. The View only observes and sends
+//  intents; it holds no logic or WhisperKit references.
 //
 //  Live (mic): WhisperKit's AudioStreamTranscriber, which captures the mic, runs
 //  VAD + windowing with running context, and fires a state callback (confirmed +
 //  unconfirmed segments) as speech arrives — so the transcript updates continuously.
-//  (app.py hand-rolls a rolling window only because Gradio has no streaming decoder;
-//  on WhisperKit the native streamer avoids the per-window 30 s-pad + overlap dupes.)
 //
 
 import Foundation
@@ -26,19 +21,7 @@ import WhisperKit
 @Observable
 final class TranscriptionViewModel: LiveCaptureDriver {
 
-    // MARK: - Input mode
-
-    enum InputMode: String, CaseIterable, Identifiable {
-        case sample = "Sample File"
-        case upload = "Upload File"
-        case live = "Live Mic"
-        var id: String { rawValue }
-    }
-
     // MARK: - Observable state (the View binds to these)
-
-    var inputMode: InputMode = .sample
-    var selectedFileURL: URL?
 
     /// Cleaned, display-ready transcript (updated live while streaming).
     private(set) var transcript: String = ""
@@ -48,21 +31,11 @@ final class TranscriptionViewModel: LiveCaptureDriver {
     private(set) var isTranscribing: Bool = false
     private(set) var isRecording: Bool = false
 
-    /// Benchmark readouts (file/upload modes).
-    private(set) var benchmarkTime: TimeInterval = 0
-    private(set) var rtfValue: Double = 0
-
-    var canTranscribe: Bool {
-        isModelReady && !isTranscribing &&
-        (inputMode != .upload || selectedFileURL != nil)
-    }
-
     // MARK: - Private
 
     // The model is shared app-wide and preloaded at launch — see TranscriptionEngine.
     // These just forward to it so all the transcription logic below is unchanged.
     private var whisperKit: WhisperKit? { TranscriptionEngine.shared.whisperKit }
-    private var vad: SileroVADEngine? { TranscriptionEngine.shared.vad }
 
     // Live mic: WhisperKit's native streaming transcriber + the task driving it.
     private var streamTranscriber: AudioStreamTranscriber?
@@ -99,36 +72,6 @@ final class TranscriptionViewModel: LiveCaptureDriver {
     private var lastConfirmedCumulative = ""
     private var liveConfirmedCarryOver = ""
 
-    /// WhisperKit decodes a fixed 30 s window; batch speech is packed into chunks
-    /// no larger than this so each decode fills the window (not one pass per burst).
-    private static let maxChunkSamples = 30 * SileroVADEngine.sampleRate
-
-    /// Concatenate the VAD speech spans (dropping the silence between them) into
-    /// chunks of at most `maxLen` samples; bursts longer than `maxLen` are split.
-    nonisolated private static func packSpeech(
-        _ audio: [Float], _ segments: [SpeechSegment], maxLen: Int
-    ) -> [[Float]] {
-        var chunks: [[Float]] = []
-        var current: [Float] = []
-        current.reserveCapacity(maxLen)
-        for seg in segments {
-            var s = max(0, seg.start)
-            let end = min(audio.count, seg.end)
-            while s < end {
-                let take = min(end - s, maxLen - current.count)
-                current.append(contentsOf: audio[s..<s + take])
-                s += take
-                if current.count >= maxLen {
-                    chunks.append(current)
-                    current = []
-                    current.reserveCapacity(maxLen)
-                }
-            }
-        }
-        if !current.isEmpty { chunks.append(current) }
-        return chunks.isEmpty ? [audio] : chunks
-    }
-
     // MARK: - Model loading
 
     /// Reflect the shared, launch-preloaded model into this view-model's observable
@@ -149,93 +92,6 @@ final class TranscriptionViewModel: LiveCaptureDriver {
     /// eval harness builds the exact same options this app uses.
     private func clinicalOptions(_ whisper: WhisperKit) -> DecodingOptions {
         ClinicalConfig.decodingOptions(for: whisper.tokenizer)
-    }
-
-    // MARK: - Intents
-
-    /// Transcribe the current file/upload selection (batch; one result at the end).
-    func transcribeSelection() {
-        guard let whisper = whisperKit, inputMode != .live else { return }
-
-        var audioURL: URL?
-        var scoped = false
-        switch inputMode {
-        case .sample:
-            audioURL = Bundle.main.url(forResource: "sample", withExtension: "mp3")
-            if audioURL == nil {
-                statusMessage = "Bundled 'sample.mp3' not found."
-                return
-            }
-        case .upload:
-            guard let url = selectedFileURL else {
-                statusMessage = "Please select a file first."
-                return
-            }
-            scoped = url.startAccessingSecurityScopedResource()
-            guard scoped else {
-                statusMessage = "Cannot access the selected file."
-                return
-            }
-            audioURL = url
-        case .live:
-            return
-        }
-
-        guard let url = audioURL else { return }
-
-        isTranscribing = true
-        statusMessage = "Transcribing…"
-        transcript = ""
-        benchmarkTime = 0
-        rtfValue = 0
-
-        let vad = self.vad
-        Task {
-            let start = Date()
-            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-            do {
-                let options = clinicalOptions(whisper)
-
-                // Load as a 16 kHz mono float array.
-                let audio = try AudioProcessor.loadAudioAsFloatArray(fromPath: url.path)
-                let audioDuration = Double(audio.count) / Double(SileroVADEngine.sampleRate)
-
-                // Silero VAD finds the speech, but WhisperKit's encoder ALWAYS runs on
-                // a fixed 30 s (480k-sample) window — a 2 s burst still costs a full 30 s
-                // pass. So instead of one decode per burst (app.py's shape, which explodes
-                // the pass count on-device), we pack the speech back-to-back into ≤30 s
-                // chunks: silence is dropped, each chunk fills the window, and a clip
-                // needs ~ceil(speech / 30 s) passes instead of one-per-burst.
-                let chunks: [[Float]] = await Task.detached {
-                    guard let vad else { return [audio] }
-                    let ts = vad.speechTimestamps(
-                        audio, minSpeechDurationMs: 250, minSilenceDurationMs: 500)
-                    guard !ts.isEmpty else { return [audio] }
-                    return Self.packSpeech(audio, ts, maxLen: Self.maxChunkSamples)
-                }.value
-
-                statusMessage = "Transcribing \(chunks.count) chunk\(chunks.count == 1 ? "" : "s")…"
-
-                let perChunk = await whisper.transcribe(audioArrays: chunks, decodeOptions: options)
-                let raw = perChunk
-                    .compactMap { $0?.map(\.text).joined(separator: " ") }
-                    .map { $0.trimmingCharacters(in: .whitespaces) }
-                    .filter { !$0.isEmpty }
-                    .joined(separator: " ")
-
-                let elapsed = Date().timeIntervalSince(start)
-                transcript = ClinicalConfig.clean(raw).ifEmpty("No result")
-                benchmarkTime = elapsed
-                rtfValue = (audioDuration > 0 && elapsed > 0) ? audioDuration / elapsed : 0
-                statusMessage = "Done (\(chunks.count) chunk\(chunks.count == 1 ? "" : "s"))"
-                isTranscribing = false
-                print(String(format: "[RTF] batch: %.1fs audio in %.1fs -> %.2fx realtime (%d chunks)",
-                             audioDuration, elapsed, rtfValue, chunks.count))
-            } catch {
-                statusMessage = "Error: \(error.localizedDescription)"
-                isTranscribing = false
-            }
-        }
     }
 
     // MARK: - Live streaming (mic) — WhisperKit AudioStreamTranscriber
@@ -261,8 +117,6 @@ final class TranscriptionViewModel: LiveCaptureDriver {
         liveConfirmedCarryOver = ""
         lastConfirmedCumulative = ""
         lastConfirmedSegmentCount = 0
-        benchmarkTime = 0
-        rtfValue = 0
         isRecording = true
         isTranscribing = true
         statusMessage = "Requesting microphone access…"
@@ -324,15 +178,19 @@ final class TranscriptionViewModel: LiveCaptureDriver {
             tokenizer: tokenizer,
             audioProcessor: whisper.audioProcessor,
             decodingOptions: options,
-            // Confirm a segment only after 2 following segments (WhisperKit default).
-            // The AI Mode chart commits off *confirmed* text, and confirmed text with
-            // more following context is more stabilized/accurate — Whisper keeps
-            // refining the unconfirmed tail, so freezing too early (tried 1) fed the
-            // chart a rougher hypothesis than the Transcribe sheet shows. Kept at 2:
-            // charting accuracy is worth ~one phrase of latency (which felt the same
-            // in practice). See STT_ISSUES.md #2/#6 for the full latency-vs-accuracy
-            // reasoning (Tier 3 preview is the way to get both).
-            requiredSegmentsForConfirmation: 2,
+            // How many trailing segments stay UNCONFIRMED (revisable). Post-Tier-3
+            // this no longer gates chart accuracy — values ride the full *preview*
+            // (onLiveTranscript → ingestPreview), so this only controls how soon a
+            // cell de-ghosts (0.4 → solid) and where Whisper's live corrections land.
+            //   0 → nothing unconfirmed: corrections rewrite ALREADY-SOLID cells/text
+            //       (jarring — reads as lag).
+            //   2 → churn quarantined in a 2-segment ghosted tail, but solidify lags
+            //       ~2 spoken phrases.
+            //   1 → smoothest: churn lives in a 1-segment ghosted tail (solid cells
+            //       don't rewrite) while de-ghosting stays fast. Parser is idempotent,
+            //       so a revised cell self-corrects — a flicker, never a stuck value.
+            // See STT_ISSUES.md #2/#6 for the full latency-vs-accuracy history.
+            requiredSegmentsForConfirmation: 1,
             // [LATENCY Tier 1] Bound the live buffer. The streamer re-decodes the
             // ENTIRE retained buffer every ~100 ms tick, so 60 s = two full 30 s
             // Whisper windows decoded per tick. 32 s keeps a full 30 s window (+
@@ -462,9 +320,4 @@ final class TranscriptionViewModel: LiveCaptureDriver {
             self.statusMessage = self.transcript.isEmpty ? "No speech captured" : "Done"
         }
     }
-}
-
-// Small convenience used above.
-private extension String {
-    func ifEmpty(_ fallback: String) -> String { isEmpty ? fallback : self }
 }

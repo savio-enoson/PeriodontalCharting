@@ -24,7 +24,6 @@ struct LiveTranscriptionView: View {
         }
         .padding(.bottom)
         .task {
-            viewModel.inputMode = .live
             await viewModel.loadModel()
         }
     }

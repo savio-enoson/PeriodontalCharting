@@ -108,7 +108,6 @@ resesi 18, 17, 16, -1 -1
         currentCommand = nil
         initializeCursorIfNeeded()
 
-        transcriber.inputMode = .live
         transcriber.onLiveTranscript = { [weak self] text in
             self?.liveTranscription = text
             self?.ingestPreview(text)         // full text → chart values + cursor
