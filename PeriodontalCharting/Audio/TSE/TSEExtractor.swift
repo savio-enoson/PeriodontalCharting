@@ -1,5 +1,5 @@
 //
-//  TargetSpeakerExtractor.swift
+//  TSEExtractor.swift
 //  PeriodontalCharting
 //
 //  Target speaker extraction (Phase 2), assembled end to end: waveform in,
