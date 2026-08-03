@@ -178,17 +178,14 @@ final class TranscriptionViewModel: LiveCaptureDriver {
             tokenizer: tokenizer,
             audioProcessor: whisper.audioProcessor,
             decodingOptions: options,
-            // How many trailing segments stay UNCONFIRMED (revisable). Post-Tier-3
-            // this no longer gates chart accuracy — values ride the full *preview*
-            // (onLiveTranscript → ingestPreview), so this only controls how soon a
-            // cell de-ghosts (0.4 → solid) and where Whisper's live corrections land.
-            //   0 → nothing unconfirmed: corrections rewrite ALREADY-SOLID cells/text
-            //       (jarring — reads as lag).
-            //   2 → churn quarantined in a 2-segment ghosted tail, but solidify lags
-            //       ~2 spoken phrases.
-            //   1 → smoothest: churn lives in a 1-segment ghosted tail (solid cells
-            //       don't rewrite) while de-ghosting stays fast. Parser is idempotent,
-            //       so a revised cell self-corrects — a flicker, never a stuck value.
+            // Keep a 2-segment UNCONFIRMED (revisable) tail DURING speech: unclear
+            // audio commits with full following context, so it's accurate — Whisper
+            // keeps refining the last segments, and freezing early (tried 1/0) fed
+            // rougher text on unclear audio. The de-ghost lag this normally costs is
+            // reclaimed by Tier 3b below: `finalizeOnSilence` confirms the current
+            // utterance the instant VAD hits a pause, so each tooth's values solidify
+            // at the gap before the next one — accurate mid-phrase, snappy at pauses.
+            // Measured decode headroom is 10–50× realtime, so this costs nothing.
             // See STT_ISSUES.md #2/#6 for the full latency-vs-accuracy history.
             requiredSegmentsForConfirmation: 1,
             // [LATENCY Tier 1] Bound the live buffer. The streamer re-decodes the
@@ -197,7 +194,13 @@ final class TranscriptionViewModel: LiveCaptureDriver {
             // margin) while ~halving per-tick decode cost, and retains less silence
             // (which is what fed the biased-vocabulary runaway) — strictly safer.
             // Do NOT drop below ~30 s: that truncates Whisper's own decode window.
-            maxRetainedAudioSeconds: 32
+            maxRetainedAudioSeconds: 32,
+            // [LATENCY Tier 3b] Commit on silence. VAD is already on (default); this
+            // finalizes the pending tail at each detected pause so a charting burst
+            // solidifies the moment the clinician stops, without lowering the mid-
+            // speech confirmation buffer. Reclaims the de-ghost lag that keeping    
+            // requiredSegmentsForConfirmation at 2 would otherwise cost.
+            finalizeOnSilence: true
         ) { [weak self] _, newState in
             // Callback is @Sendable / off the main actor — hop back to update UI state.
             //
@@ -233,6 +236,13 @@ final class TranscriptionViewModel: LiveCaptureDriver {
                 if newState.confirmedSegments.count != self.lastConfirmedSegmentCount {
                     self.lastConfirmedSegmentCount = newState.confirmedSegments.count
                     let cleanedConfirmed = ClinicalConfig.clean(confirmed)
+                    // [STT diag] The exact confirmed text that feeds the chart, before
+                    // and after ClinicalConfig.clean. `raw` is what Whisper actually
+                    // heard (pre-phraseFix); `clean` is what the parser sees. Diff the
+                    // two to catch mishears clean MISSED (e.g. a "di bop" variant that
+                    // slips the repair regex) vs. ones it fixed. Grep `[STT]`.
+                    print("[STT] raw:   \(confirmed)")
+                    print("[STT] clean: \(cleanedConfirmed)")
                     let confirmedCumulative = self.liveConfirmedCarryOver.isEmpty
                         ? cleanedConfirmed
                         : (self.liveConfirmedCarryOver + " " + cleanedConfirmed).trimmingCharacters(in: .whitespaces)

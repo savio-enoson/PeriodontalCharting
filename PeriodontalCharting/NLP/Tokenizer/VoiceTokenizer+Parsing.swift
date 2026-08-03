@@ -4,6 +4,15 @@ extension VoiceTokenizer {
     static func tokenize(text: String, isFinal: Bool = false) -> [VoiceToken] {
         var tokens: [VoiceToken] = []
         let cleaned = text.lowercased()
+            // A decimal point BETWEEN digits ("1.5", "2.5", chained "1.5.3") is never
+            // one charting value — depths/recession are whole mm dictated one digit
+            // per site, so "1.5" is the two values 1 and 5. Split it to a space FIRST,
+            // before the "." -> _sep_ rule below: left intact, that rule turns the dot
+            // into a command boundary and scatters "1" and "5" onto different sites
+            // (parser treats _sep_ like "dan"). Zero-width lookaround so it only fires
+            // on a dot flanked by digits — real sentence periods and "b.o.p" are left
+            // for the rules below.
+            .replacingOccurrences(of: #"(?<=\d)\.(?=\d)"#, with: " ", options: .regularExpression)
             .replacingOccurrences(of: ".", with: " _sep_ ")
             .replacingOccurrences(of: ",", with: " ")
             .replacingOccurrences(of: "\n", with: " _sep_ ")
