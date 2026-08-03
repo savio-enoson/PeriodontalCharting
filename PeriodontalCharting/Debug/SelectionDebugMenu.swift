@@ -22,6 +22,12 @@ struct SelectionDebugMenu: View {
                         }
                     ))
                 }
+
+                Section("Speaker Gate (TSE)") {
+                    NavigationLink("Open gate test harness") {
+                        SpeakerGateDebugView()
+                    }
+                }
                 
                 Section("AI Simulation") {
                     VStack(alignment: .leading) {

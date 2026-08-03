@@ -18,6 +18,8 @@ struct LiveTranscriptionView: View {
 
             statusView
 
+            gateView
+
             transcriptView
 
             controls
@@ -42,6 +44,24 @@ struct LiveTranscriptionView: View {
             Text(viewModel.statusMessage)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+        }
+    }
+
+    /// Speaker filter state. Orange "off" is the case that used to be invisible:
+    /// no enrollment means every voice in the room reaches the chart.
+    @ViewBuilder
+    private var gateView: some View {
+        if viewModel.isRecording {
+            let status = viewModel.gateStatus
+            HStack(spacing: 6) {
+                Image(systemName: status.active ? "person.wave.2.fill" : "person.slash")
+                Text(status.summary)
+                if let d = status.lastDistance {
+                    Text(String(format: "· d %.2f", d)).monospacedDigit()
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(status.active ? Color.secondary : Color.orange)
         }
     }
 

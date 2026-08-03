@@ -6,11 +6,28 @@ struct ContentView: View {
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     
     var body: some View {
+        content
+            // Blocking splash while the shared WhisperKit model loads/downloads.
+            // Only after onboarding, so first-time users complete setup while the
+            // model warms in the background. Auto-dismisses when the model is ready.
+            // Reading `isReady` here (an @Observable) drives the transition.
+            .overlay {
+                if hasCompletedOnboarding && !TranscriptionEngine.shared.isReady {
+                    ModelLoadingSplash()
+                        .transition(.opacity)
+                }
+            }
+            .animation(.easeInOut(duration: 0.35),
+                       value: TranscriptionEngine.shared.isReady)
+    }
+
+    @ViewBuilder
+    private var content: some View {
         if !hasCompletedOnboarding {
             OnboardingView(hasCompletedOnboarding: $hasCompletedOnboarding)
         } else {
             let darkBlue = Color(red: 0.05, green: 0.2, blue: 0.5)
-            
+
             NavigationSplitView(columnVisibility: $columnVisibility) {
                 List {
                     if records.isEmpty {
