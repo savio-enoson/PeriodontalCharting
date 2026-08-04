@@ -439,7 +439,6 @@ final class TranscriptionViewModel: LiveCaptureDriver {
     }
 
     private func stopLiveTranscription() {
-        printGateSummary()
         gateMonitorTask?.cancel()
         gateMonitorTask = nil
         liveStreamStart = nil
