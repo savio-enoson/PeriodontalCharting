@@ -34,7 +34,7 @@ extension AspectType {
     }
 }
 
-struct ChartingConfiguration: Codable, Equatable {
+struct ChartingConfiguration: Codable, Equatable, Sendable {
     var primaryOrder: PrimaryOrderType = .jawFirst
     
     // For Jaw First

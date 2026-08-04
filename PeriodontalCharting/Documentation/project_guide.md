@@ -11,6 +11,7 @@ A comprehensive, iPad-optimised SwiftUI application for dental professionals to 
 | **[project_guide.md](project_guide.md)** *(this file)* | Project brief, design principles, getting started, color semantics, roadmap |
 | **[frontend_guide.md](frontend_guide.md)** | Project structure, architecture, Swift file-by-file reference |
 | **[system_guide.md](system_guide.md)** | NLP pipeline, tokenization, command inference, annotation logic |
+| **[ml_tokenizer_guide.md](ml_tokenizer_guide.md)** | ML tokenizer (Phase 1) — IndoBERT CoreML model, training pipeline, label schema, Swift integration, evaluation results, and Phase 2 TinyTransducer post-mortem |
 
 ---
 
@@ -32,7 +33,17 @@ This project modernises the workflow in two phases:
 
 1. **Phase 1 (Complete):** A WHO-standard, visually dense clinical chart that renders a full 32-tooth mouth across four quadrants. The chart scales seamlessly on iPad, supporting pinch-to-zoom and a 1-column vs 2-column layout toggle.
 
-2. **Phase 2 (In Progress):** A real-time voice-transcription pipeline that converts clinical dictation in **Indonesian** (e.g., *"gigi 16 tiga empat lima tiga empat tiga"*) into structured `AnnotationCommand` mutations, enabling completely hands-free charting. The NLP engine handles complex clinical ranges, missing teeth, dynamic highlighting, and sequence traversals based on custom clinician configurations.
+2. **Phase 2 (Substantially Complete):** A real-time voice-transcription pipeline that converts clinical dictation in **Indonesian** (e.g., *"gigi 16 tiga empat lima tiga empat tiga"*) into structured `AnnotationCommand` mutations, enabling completely hands-free charting. The NLP engine handles complex clinical ranges, missing teeth, dynamic highlighting, and sequence traversals based on custom clinician configurations.
+
+   The Phase 2 pipeline now has two ML-accelerated layers:
+
+   - **Speech-to-Text** — WhisperKit (`openai/whisper-large-v3-turbo`, 632 MB quantized bundle) with a Silero VAD pre-filter transcribes live microphone audio into Indonesian text. Per-step clinical vocabulary biasing (`SequenceBiasFilter`) substantially improves recall on key clinical terms.
+
+   - **ML Tokenizer (Phase 1 NLP)** — An IndoBERT-based CoreML classifier (`VoiceTokenizerModel.mlmodel`, 124 MB int8-quantized) assigns each transcribed word a typed semantic label (e.g., `TOOTH_ID`, `METRIC_BOP`, `ANAT_MESIOBUCCAL`). Achieves **99.43% F1** on the held-out test set, correctly handling spelling variants, STT mishearings, and contextually ambiguous numerals.
+
+   - **Swift Parser (Phase 2 NLP)** — The rule-based `VoiceCommandParser` remains the deterministic Phase 2 component. It converts the typed-token stream from the ML tokenizer into `AnnotationCommand` mutations. A seq2seq TinyTransducer model was trained as an ML alternative but achieved only ~54% exact-match accuracy and exhibited JSON syntax hallucinations; the Swift parser was retained. See [ml_tokenizer_guide.md](ml_tokenizer_guide.md) for the full evaluation record.
+
+   Wiring the live transcription output into the chart annotation pipeline is the remaining integration step.
 
 ---
 
@@ -122,10 +133,14 @@ All colors are system-adaptive — no manual Dark Mode handling is required. The
 - [x] **Regression Testing** — `ChartProcessor` + `ChartTestingUtilities` + CLI `test_parser.sh` for headless parser validation against JSON ground truth files. In-app "Save as Ground Truth" / "Test vs Ground Truth" buttons in the debug menu.
 - [x] **Manual editing** — tap any numeric cell to open a `NumberPadPopoverView` (full-screen cover); tap furcation cells to cycle value directly; tap implant cell to toggle.
 - [x] **Expanded test suite** — per-feature unit transcripts (`C-`, `F-`, `I-`, `M-`, `N-` prefixed) with paired ground truth JSONs in `Testing/Raw/` and `Testing/Ground/`.
+- [x] **WhisperKit STT** — `TranscriptionEngine` loads `openai/whisper-large-v3-turbo` (632 MB quantized bundle) once at launch; GPU encoder / ANE decoder compute-unit split avoids the ANE compile-cache latency. `SileroVADEngine` (CoreML Silero VAD v5) pre-filters audio into speech segments before Whisper transcription.
+- [x] **Clinical vocabulary biasing** — `ClinicalConfig` stores the clinical term vocabulary (directional, metric, and anatomy terms) and `SequenceBiasFilter` (WhisperKit `LogitsFilter`) applies per-step logit biases during Whisper decoding — ported from the Python PoC's validated bias values.
+- [x] **ML Tokenizer (Phase 1)** — IndoBERT-based CoreML word classifier (`VoiceTokenizerModel.mlmodel`, 124 MB int8) with state conditioning (active metric + prior label history). Achieves **99.43% F1** on 9,192-word held-out test set. Integrated via `MLVoiceTokenizer` + `TokenizerManager` singleton dispatcher.
+- [x] **Phase 2 ML evaluation** — TinyTransducer seq2seq model trained and evaluated; achieved ~54% exact-match accuracy with JSON syntax hallucinations. Decision: retain the rule-based Swift `VoiceCommandParser` as the deterministic Phase 2 component. See [ml_tokenizer_guide.md](ml_tokenizer_guide.md).
 
 ### Pending
 
-- [ ] **Live speech-to-text integration** — connect `AudioManager` to a real-time STT backend (e.g., on-device Whisper or cloud API) to replace the simulation loop.
+- [ ] **Live-transcript → chart annotation wiring** — connect the `TranscriptionViewModel` / `TranscriptionEngine` WhisperKit output to `AIVoiceViewModel` so live microphone dictation drives chart annotation (STT layer is complete; NLP pipeline integration is pending).
 - [ ] **Patient persistence** — CoreData or SwiftData layer for saving and loading charting sessions per patient.
 - [ ] **Export** — generate a PDF clinical report from the live chart state.
 - [ ] **iPhone / compact layout** — responsive layout fallback for smaller screens.

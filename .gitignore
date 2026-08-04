@@ -10,3 +10,6 @@ DerivedData/
 .DS_STORE
 *.DS_STORE
 .swiftmodulecache
+*.mlmodel
+*.mlmodelc
+*.mlpackage

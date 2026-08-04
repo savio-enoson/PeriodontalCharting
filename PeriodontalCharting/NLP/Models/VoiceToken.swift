@@ -27,6 +27,8 @@ enum AnatomyType: String, Equatable {
     case distoLingual = "disto lingual"
     case mesioPalatal = "mesio palatal"
     case distoPalatal = "disto palatal"
+    case mesioLabial = "mesio labial"
+    case distoLabial = "disto labial"
     case midBuccal = "tengah bukal"
     case midLabial = "tengah labial"
     case midLingual = "tengah lingual"
