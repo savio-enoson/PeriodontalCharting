@@ -6,17 +6,18 @@ struct ChartTestingUtilities {
         return URL(fileURLWithPath: "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/PeriodontalCharting/TestTranscripts/")
     }
     
-    static func getFileURL() -> URL {
+    static func getFileURL(testName: String? = nil) -> URL {
+        let fileName = testName != nil ? "\(testName!)_ground.json" : "ground_truth.json"
         #if targetEnvironment(simulator) || targetEnvironment(macCatalyst) || os(macOS)
-        return getProjectDirectoryURL().appendingPathComponent("ground_truth.json")
+        return getProjectDirectoryURL().appendingPathComponent(fileName)
         #else
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        return docs.appendingPathComponent("ground_truth.json")
+        return docs.appendingPathComponent(fileName)
         #endif
     }
     
-    static func saveChart(mouth: [Int: ToothObject]) -> Bool {
-        let url = getFileURL()
+    static func saveChart(mouth: [Int: ToothObject], transcriptName: String? = nil) -> Bool {
+        let url = getFileURL(testName: transcriptName)
         do {
             let encoder = JSONEncoder()
             encoder.outputFormatting = .prettyPrinted
@@ -32,8 +33,8 @@ struct ChartTestingUtilities {
         }
     }
     
-    static func loadChart() -> [Int: ToothObject]? {
-        let url = getFileURL()
+    static func loadChart(transcriptName testName: String? = nil) -> [Int: ToothObject]? {
+        let url = getFileURL(testName: testName)
         do {
             let data = try Data(contentsOf: url)
             let decoder = JSONDecoder()
@@ -75,7 +76,7 @@ struct ChartTestingUtilities {
                 differences.append("Tooth \(toothNum) Bleeding mismatch.")
             }
             if expectedTooth.plaque != actualTooth.plaque {
-                differences.append("Tooth \(toothNum) Plaque mismatch.")
+                differences.append("Tooth \(toothNum) Plaque mismatch. Expected: \(expectedTooth.plaque), Actual: \(actualTooth.plaque)")
             }
             if expectedTooth.mobility != actualTooth.mobility {
                 differences.append("Tooth \(toothNum) Mobility mismatch. Expected: \(expectedTooth.mobility), Actual: \(actualTooth.mobility)")
@@ -94,7 +95,15 @@ struct ChartTestingUtilities {
     static func parseTranscript(text: String, config: ChartingConfiguration) -> [Int: ToothObject] {
         var mouth = ToothObject.fullMouthEmpty()
         let parser = VoiceCommandParser(configuration: config)
-        let commands = parser.parse(text: text, isFinal: true)
+        let tokens = TokenizerManager.shared.tokenize(text: text)
+        
+        parser.tokens = tokens
+        parser.commands = []
+        parser.tokenIndex = 0
+        parser.currentNumbers = []
+        parser.currentMetricMultiplier = 1
+        parser.lastAutoAdvancedFromTooth = nil
+        let commands = parser.parseTokens(isFinal: true)
         
         for command in commands {
             ChartProcessor.apply(command: command, to: &mouth)

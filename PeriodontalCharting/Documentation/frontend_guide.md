@@ -23,6 +23,7 @@ For the NLP command inference system, see [system_guide.md](system_guide.md).
    - [Audio/](#39-audio)
    - [NLP/](#310-nlp-overview)
    - [Testing/](#311-testing)
+   - [AI/ (Model Assets)](#312-ai-model-assets)
 4. [Performance Architecture](#4-performance-architecture)
 
 ---
@@ -37,8 +38,14 @@ PeriodontalCharting/
 └── PeriodontalCharting/                           <- App source root (auto-discovered by Xcode)
     │
     ├── App/
-    │   ├── PeriodontalChartingApp.swift           <- @main entry point
+    │   ├── PeriodontalChartingApp.swift           <- @main entry point; triggers TranscriptionEngine.load() at launch
     │   └── ContentView.swift                      <- Onboarding gate + NavigationSplitView shell
+    │
+    ├── AI/                                        <- Bundled CoreML model assets (not Swift source)
+    │   ├── VoiceTokenizerModel.mlmodel            <- IndoBERT Phase 1 tokenizer (int8-quantized, ~124 MB)
+    │   ├── vocab.txt                              <- BERT WordPiece vocabulary (229 KB) used by BertTokenizer
+    │   ├── SileroVAD.mlpackage                    <- Silero VAD v5 CoreML model for speech detection
+    │   └── openai_whisper-large-v3_turbo_632MB/   <- Quantized WhisperKit model bundle (~632 MB)
     │
     ├── Models/
     │   ├── Models.swift                           <- Core chart data types (all Codable)
@@ -48,7 +55,9 @@ PeriodontalCharting/
     │   ├── Models/
     │   │   └── VoiceToken.swift                   <- Enums: ActionType, AnatomyType, VoiceToken
     │   ├── Tokenizer/
-    │   │   ├── VoiceTokenizer.swift               <- Core base class
+    │   │   ├── TokenizerManager.swift             <- Singleton dispatcher: ML path vs. legacy fallback
+    │   │   ├── MLVoiceTokenizer.swift             <- CoreML inference wrapper for VoiceTokenizerModel
+    │   │   ├── VoiceTokenizer.swift               <- Legacy rule-based tokenizer (fallback + CLI tests)
     │   │   ├── VoiceTokenizer+Helpers.swift       <- Tokenizing utilities
     │   │   └── VoiceTokenizer+Parsing.swift       <- Main text-to-token transformation loop
     │   └── Parser/
@@ -59,17 +68,25 @@ PeriodontalCharting/
     │
     ├── Configuration/
     │   ├── ChartingConfiguration.swift            <- Config enums + ChartingConfiguration struct
-    │   └── ChartingCursor.swift                   <- Traversal state machine
+    │   ├── ChartingCursor.swift                   <- Traversal state machine
+    │   └── ToothFramePreferenceKey.swift          <- PreferenceKey for tooth frame coordinate tracking
     │
     ├── Audio/
-    │   └── AudioManager.swift                     <- AVFoundation recording/playback
+    │   ├── AudioManager.swift                     <- AVFoundation recording/playback (calibration sample)
+    │   ├── TranscriptionEngine.swift              <- Singleton: loads WhisperKit + Silero VAD at launch
+    │   ├── SileroVADEngine.swift                  <- CoreML wrapper for Silero VAD v5
+    │   └── Domain/
+    │       ├── ClinicalConfig.swift               <- Clinical vocabulary + WhisperKit decoding options
+    │       └── SequenceBiasFilter.swift           <- WhisperKit LogitsFilter: per-step vocab biasing
     │
     ├── ViewModels/
-    │   └── AIVoiceViewModel.swift                 <- Voice simulation + parser orchestration
+    │   ├── AIVoiceViewModel.swift                 <- Voice simulation + parser orchestration
+    │   └── TranscriptionViewModel.swift           <- Live/batch WhisperKit transcription driver
     │
     ├── Views/
     │   ├── Chart/
     │   │   ├── ChartDashboard.swift               <- Root interactive viewport + state owner
+    │   │   ├── ZoomableScrollView.swift           <- UIViewRepresentable UIScrollView wrapper for zoom/pan
     │   │   ├── QuadrantView.swift                 <- One dental quadrant + SideLabelsView
     │   │   ├── ToothColumnView.swift              <- Single tooth column layout
     │   │   ├── ToothRowViews.swift                <- Cell types: ImplantCheckCell,
@@ -79,7 +96,8 @@ PeriodontalCharting/
     │   │   └── NumberPadPopoverView.swift         <- Full-screen numeric entry popover
     │   │
     │   ├── Voice/
-    │   │   └── AIListeningView.swift              <- Voice overlay panel
+    │   │   ├── AIListeningView.swift              <- Voice overlay panel (simulation mode)
+    │   │   └── LiveTranscriptionView.swift        <- Live-mic transcription view (embedded in toolbar)
     │   │
     │   └── Onboarding/
     │       ├── OnboardingView.swift               <- Main onboarding/settings view
@@ -107,7 +125,8 @@ PeriodontalCharting/
     ├── Documentation/
     │   ├── project_guide.md
     │   ├── frontend_guide.md                      <- This file
-    │   └── system_guide.md
+    │   ├── system_guide.md
+    │   └── ml_tokenizer_guide.md                  <- ML tokenizer (Phase 1) + TinyTransducer post-mortem
     │
     └── Assets.xcassets/
 ```
@@ -231,7 +250,7 @@ A custom `HStack` overlaid at `.topTrailing` on a dark navy pill (`RoundedRectan
 
 **`ZoomableScrollView` and zoom implementation:**
 
-The zoom and pan logic lives in `ZoomableScrollView<Content: View>`, a `UIViewRepresentable` wrapper around UIKit's `UIScrollView`. The native `UIScrollView` provides superior high-performance zooming and free-panning without SwiftUI layout thrashing. It manually sizes the `UIHostingController.view` to its intrinsic content size and completely bypasses Auto Layout constraints to prevent bounds-resizing glitches during scale transforms. The inner `RootWrapperView` also applies `.ignoresSafeArea()` to prevent coordinate drift.
+The zoom and pan logic lives in `ZoomableScrollView<Content: View>` (`Views/Chart/ZoomableScrollView.swift`), a `UIViewRepresentable` wrapper around UIKit's `UIScrollView`. The native `UIScrollView` provides superior high-performance zooming and free-panning without SwiftUI layout thrashing. It manually sizes the `UIHostingController.view` to its intrinsic content size and completely bypasses Auto Layout constraints to prevent bounds-resizing glitches during scale transforms. The inner `RootWrapperView` also applies `.ignoresSafeArea()` to prevent coordinate drift.
 
 When AI Mode is active, massive content insets (`contentInset`) equal to the screen bounds are applied, and the camera automatically centers on the bounding rect emitted by `HighlightFramePreferenceKey` at the 30% mark from the left edge without any edge clamping.
 
@@ -347,6 +366,19 @@ A full-screen numeric entry interface presented as a `.fullScreenCover` when a n
 
 A floating overlay panel that slides in from the trailing edge in AI Mode. Fills **40% of viewport width** and **80% of height**.
 
+---
+
+#### `Views/Voice/LiveTranscriptionView.swift`
+
+A slim live-microphone transcription sheet, embedded in the chart toolbar, backed by its own `TranscriptionViewModel` instance configured in `.live` mode. Provides:
+
+- A pulsing red recording-indicator dot (using `.symbolEffectPulse()`) while capturing.
+- A `ProgressView` spinner while `isTranscribing` but not yet recording (model warm-up).
+- A scrollable transcript text view showing the accumulating `transcript` string.
+- Start/Stop toggle button.
+
+The view calls `viewModel.loadModel()` on `.task` — this is a no-op if `TranscriptionEngine.shared` is already loaded. Currently produces raw text output only; integration with the chart annotation pipeline is pending.
+
 **Visual design:** `.ultraThinMaterial` background forced to `.light` color scheme, clipped to `RoundedRectangle(cornerRadius: 24)`. An orange-to-deep-orange gradient border (`LinearGradient`) pulses on a 1.5s repeating `easeInOut` animation. A soft shadow (`radius: 20, x: -10, y: 10`) creates depth.
 
 **Three sections:**
@@ -398,6 +430,41 @@ A unified configuration interface for both initial onboarding and in-app setting
 ---
 
 ### 3.5 `ViewModels/`
+
+#### `ViewModels/TranscriptionViewModel.swift`
+
+An `@Observable` `@MainActor` class that drives the three transcription input modes and owns the WhisperKit + VAD business logic. It delegates model management to the `TranscriptionEngine.shared` singleton.
+
+**Input modes:**
+
+| Case | Description |
+|---|---|
+| `.sample` | Transcribes a bundled sample audio file |
+| `.upload` | Transcribes a user-selected audio file |
+| `.live` | Streams live microphone audio via WhisperKit's `AudioStreamTranscriber` |
+
+**Published state:**
+
+| Property | Type | Role |
+|---|---|---|
+| `transcript` | `String` | Cleaned display-ready transcript, updated continuously during streaming |
+| `statusMessage` | `String` | Human-readable status line (model loading, recording, etc.) |
+| `isModelReady` | `Bool` | True once `TranscriptionEngine` has finished loading |
+| `isTranscribing` | `Bool` | True during batch transcription |
+| `isRecording` | `Bool` | True while the live `AudioStreamTranscriber` is capturing |
+| `benchmarkTime` | `TimeInterval` | Wall-clock duration of the last batch transcription |
+| `rtfValue` | `Double` | Real-time factor for the last batch transcription |
+
+**Key methods:**
+
+- **`loadModel()`** — Calls `await TranscriptionEngine.shared.load()` (idempotent; coalesces concurrent callers onto one load).
+- **`startTranscription()`** / **`stopTranscription()`** — For batch modes: uses Silero VAD to find speech segments, packs them into ≤30 s chunks, and transcribes with WhisperKit.
+- **`startLiveRecording()`** / **`stopLiveRecording()`** — For live mode: creates a `AudioStreamTranscriber` with `ClinicalConfig.decodingOptions(for:)`, runs it in a detached `Task`, and streams confirmed + unconfirmed segments into `transcript`.
+
+> [!NOTE]
+> Route/interruption changes (e.g., a Bluetooth headset connecting mid-session) rebuild the `AudioStreamTranscriber` via `restartLiveStream()`. The transcript produced before the interruption is stashed and prepended so the user doesn't lose context.
+
+---
 
 #### `ViewModels/AIVoiceViewModel.swift`
 
@@ -647,7 +714,7 @@ struct ChartingCursor: Equatable {
 
 #### `Audio/AudioManager.swift`
 
-Singleton `ObservableObject` managing all `AVFoundation` interactions.
+Singleton `ObservableObject` managing all `AVFoundation` interactions **for the voice calibration sample only** (the onboarding/settings screen). It is separate from the WhisperKit pipeline.
 
 **Published state:**
 
@@ -658,7 +725,7 @@ Singleton `ObservableObject` managing all `AVFoundation` interactions.
 | `hasRecording` | True if `voice_sample.wav` exists in Documents directory |
 | `recordingURL` | Path to the WAV file |
 
-**Recording format:** 16kHz, mono, 16-bit linear PCM WAV — matches input requirements of typical STT models (e.g., Whisper).
+**Recording format:** 16kHz, mono, 16-bit linear PCM WAV — matches Whisper's expected input format.
 
 ```swift
 AVFormatIDKey: kAudioFormatLinearPCM
@@ -671,18 +738,88 @@ Session configured as `.playAndRecord` with `.allowBluetoothHFP` so clinicians c
 
 ---
 
+#### `Audio/TranscriptionEngine.swift`
+
+A `@MainActor @Observable` singleton (`TranscriptionEngine.shared`) that **loads WhisperKit and Silero VAD once at app launch** and shares the warmed instances with every `TranscriptionViewModel`. Keeping a single instance prevents the ~632 MB model from being allocated multiple times, which previously caused SIGKILL on iPads with limited RAM.
+
+**State:**
+
+| Property | Meaning |
+|---|---|
+| `isReady` | True once WhisperKit and VAD are loaded successfully |
+| `statusMessage` | Human-readable load status for the UI |
+| `whisperKit` | The loaded `WhisperKit` instance (nil until ready) |
+| `vad` | The loaded `SileroVADEngine` instance (nil if VAD failed to load; batch/live mode degrades gracefully) |
+
+**Compute-unit strategy:**
+
+The encoder runs on `.cpuAndNeuralEngine` and the decoder on `.cpuAndNeuralEngine`. This was chosen after measuring that ANE graph specialization for the encoder dominates first-launch load time (~199 s in early builds). The current build uses the GPU for mel computation and ANE for the text decoder's autoregressive loop — the combination that gives fast inference without the ANE compile stall.
+
+**`SequenceBiasFilter` injection:**
+
+After loading, `TranscriptionEngine` encodes `ClinicalConfig.boostSequences(for:)` against WhisperKit's own tokenizer and assigns the resulting `SequenceBiasFilter` to `kit.textDecoder.logitsFilters`. This stays active for the whole session — unlike a static `initialPrompt`, the bias doesn't degrade on long recordings.
+
+---
+
+#### `Audio/SileroVADEngine.swift`
+
+A `@unchecked Sendable` CoreML wrapper around **Silero VAD v5** (`SileroVAD.mlpackage`), ported from the Python `silero-vad` package. The model operates as a **streaming per-chunk graph**:
+
+```
+input:     [1, 512]  f32   — 16 kHz mono, one 32 ms hop
+hc_state:  [2, 1, 128]     — LSTM hidden + cell state (zeros at stream start)
+→ prob:    [1, 1]           — speech probability for this chunk
+→ hc_stateN: [2, 1, 128]  — updated LSTM state (fed back as hc_state next call)
+```
+
+**Key APIs:**
+
+| Method | Description |
+|---|---|
+| `speechTimestamps(samples:threshold:minSpeechDuration:)` | Batch: runs the full audio array through the model and returns `[SpeechSegment]` (half-open sample index ranges). Used by `TranscriptionViewModel` to pre-segment audio before Whisper transcription. |
+| `speechProbabilities(samples:)` | Streaming: returns the per-chunk probability array for the full input. Used by live mode to gate Whisper windows. |
+
+Output names (`prob`, `hc_stateN`) are resolved defensively at runtime via shape-based detection in case CoreML renames them.
+
+---
+
+#### `Audio/Domain/ClinicalConfig.swift`
+
+A Swift port of the Python PoC's clinical vocabulary bias configuration (`test_whisper_live.ipynb`). Provides two things:
+
+1. **`boostSequences(for:)`** — Encodes the clinical vocabulary word lists against WhisperKit's tokenizer at runtime (never hardcodes token IDs) and returns `[(tokenIds: [Int], bias: Float)]` pairs for `SequenceBiasFilter`. Three tiers:
+   - *Directional stems* (e.g., `mesio`, `disto`, `mesial`, `distal`) — strongest boost (20.0), as these are the most acoustically confusable.
+   - *Core clinical terms* (e.g., `gigi`, `bukal`, `BOP`, `resesi`, `poket`) — medium boost (10.0).
+   - *Less-common terms* (e.g., `furkasi`, `kegoyangan`, `implan`) — light boost.
+
+2. **`decodingOptions(for:)`** — Returns `DecodingOptions` with language forced to `"id"` (Indonesian), suppress tokens for common non-clinical words, and beam-search parameters. Does **not** use `initialPrompt` (measured as causing >50% silent audio loss on multi-minute recordings due to WhisperKit re-injecting the prompt into every 30 s window).
+
+3. **`clean(_:)`** — Text post-processing: strips Whisper hallucination artifacts, normalises Unicode punctuation, and cleans up trailing/leading whitespace from the raw transcript.
+
+---
+
+#### `Audio/Domain/SequenceBiasFilter.swift`
+
+Implements WhisperKit's `LogitsFilter` protocol. On each decoder step, it looks up the **current partial output sequence** in its bias table and, if a registered token sequence is being completed, adds its configured bias value directly to the corresponding logit — nudging the model toward clinical vocabulary without overriding it. This is equivalent to `transformers`' `SequenceBiasLogitsProcessor` and is ported from the Python PoC's bias map.
+
+---
+
 ### 3.10 `NLP/` (Overview)
 
-The NLP pipeline implements a three-phase architecture: **Tokenization → Parsing → Application**. For the complete specification of token types, parsing rules, targeting modes, lookahead utilities, and worked examples, see [system_guide.md](system_guide.md).
+The NLP pipeline implements a three-phase architecture: **Tokenization → Parsing → Application**. For the complete specification of token types, parsing rules, targeting modes, lookahead utilities, and worked examples, see [system_guide.md](system_guide.md). For the ML tokenizer implementation, training pipeline, and evaluation details, see [ml_tokenizer_guide.md](ml_tokenizer_guide.md).
+
+**Entry point:** `TokenizerManager.shared.tokenize(text:isFinal:)` — all callers (including `AIVoiceViewModel`) go through this singleton, which dispatches to either `MLVoiceTokenizer` (primary) or `VoiceTokenizer` (fallback/CLI).
 
 **Directory structure:**
 
 | File | Responsibility |
 |---|---|
 | `NLP/Models/VoiceToken.swift` | `ActionType`, `AnatomyType`, `VoiceToken` enum definitions |
-| `NLP/Tokenizer/VoiceTokenizer.swift` | Base class declaration |
-| `NLP/Tokenizer/VoiceTokenizer+Helpers.swift` | Utility helpers |
-| `NLP/Tokenizer/VoiceTokenizer+Parsing.swift` | Main `tokenize(text:isFinal:)` loop — normalization, spell correction, multi-word matching, number disambiguation |
+| `NLP/Tokenizer/TokenizerManager.swift` | Singleton dispatcher: `useMLTokenizer` flag, `normalizeSTT()` shared pre-processing, ML-vs-legacy routing |
+| `NLP/Tokenizer/MLVoiceTokenizer.swift` | CoreML inference wrapper for `VoiceTokenizerModel`; includes `BertTokenizer` WordPiece impl and label→`VoiceToken` mapping |
+| `NLP/Tokenizer/VoiceTokenizer.swift` | Legacy rule-based tokenizer base class (fallback + CLI regression tests) |
+| `NLP/Tokenizer/VoiceTokenizer+Helpers.swift` | Utility helpers for the legacy tokenizer |
+| `NLP/Tokenizer/VoiceTokenizer+Parsing.swift` | Main `tokenize(text:isFinal:)` loop for the legacy path — normalization, spell correction, multi-word matching, number disambiguation |
 | `NLP/Parser/VoiceCommandParser.swift` | State property declarations and `init(configuration:)` |
 | `NLP/Parser/VoiceCommandParser+Parse.swift` | Main `parse(text:isFinal:)` token loop — all case handlers |
 | `NLP/Parser/VoiceCommandParser+Flush.swift` | `flushNumbers`, `emitBoolIfPending`, `startPostTargeting`, `flushPostTargetIfPending`, `restoreToMainSequence` |
@@ -754,6 +891,25 @@ cd /path/to/PeriodontalCharting   # project root (where test_parser.sh lives)
 
 > [!IMPORTANT]
 > The CLI runner always uses `ChartingConfiguration()` defaults (the zig-zag pattern). If you change the default configuration, re-generate `ground_truth.json` using the **Save as Ground Truth** button in the app's Debug menu before running the CLI test.
+
+---
+
+### 3.12 `AI/` (Model Assets)
+
+The `AI/` directory contains the bundled CoreML model assets that power the voice pipeline. These are not Swift source files — they are binary model artefacts included in the Xcode project via file references and compiled into the app bundle.
+
+| Asset | Size | Description |
+|---|---|---|
+| `VoiceTokenizerModel.mlmodel` | ~124 MB | IndoBERT-based word classifier for Phase 1 NLP tokenization. Int8-quantized. Loaded by `MLVoiceTokenizer` via `TokenizerManager`. |
+| `vocab.txt` | 229 KB | BERT WordPiece vocabulary. Loaded by `BertTokenizer` inside `MLVoiceTokenizer` to convert raw words into subword token IDs before CoreML inference. |
+| `SileroVAD.mlpackage` | ~2 MB | Silero VAD v5 CoreML model. Per-chunk streaming speech detector (32 ms hops at 16 kHz). Loaded by `SileroVADEngine`. |
+| `openai_whisper-large-v3_turbo_632MB/` | ~632 MB | Quantized WhisperKit Whisper model bundle. Contains `AudioEncoder.mlmodelc`, `TextDecoder.mlmodelc`, and tokenizer files. Loaded by `TranscriptionEngine`. |
+
+> [!NOTE]
+> The model bundle uses the underscore convention in its folder name (`openai_whisper-large-v3_turbo_632MB`), matching the `argmaxinc/whisperkit-coreml` release naming. Xcode's synchronized-group build system flattens model artefacts so that `AudioEncoder.mlmodelc` lands at the **bundle root** rather than inside a subfolder — `TranscriptionEngine` detects this via a `FileManager.fileExists` check and adjusts the load path accordingly.
+
+> [!IMPORTANT]
+> The total size of the `AI/` directory is approximately **756 MB**. Xcode's on-demand resources or App Thinning features should be considered if the OTA download size exceeds App Store limits.
 
 ---
 

@@ -213,7 +213,7 @@ struct ChartingCursor: Equatable {
                         sequenceIndex = originalSequenceIndex
                         currentSequence = originalSequence
                         currentAspect = originalAspect
-                        currentTooth = tooth
+                        currentTooth = originalTooth
                     }
                     return true
                 }

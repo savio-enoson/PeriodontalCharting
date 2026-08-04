@@ -2,7 +2,7 @@ import Foundation
 
 struct ChartProcessor {
     static func apply(command: AnnotationCommand, to mouthState: inout [Int: ToothObject]) {
-        // print("APPLY: \(command)")
+        print("APPLY: \(command)")
         
         let ts = command.teethSelection
         
@@ -17,6 +17,7 @@ struct ChartProcessor {
             
             for (t, aspect, site) in seq {
                 guard mouthState[t] != nil else { continue }
+                if mouthState[t]?.missing == true && command.operation != .missing && command.operation != .implant { continue }
                 
                 switch command.operation {
                 case .probingDepth:
@@ -88,6 +89,7 @@ struct ChartProcessor {
             for aspect in aspectsToIterate {
                 for site in min(sSite, eSite)...max(sSite, eSite) {
                     guard mouthState[t] != nil else { continue }
+                    if mouthState[t]?.missing == true && command.operation != .missing && command.operation != .implant { continue }
                     let valStr = valIdx < command.values.count ? command.values[valIdx] : "0"
                     valIdx += 1
                     
@@ -131,98 +133,124 @@ struct ChartProcessor {
                 
                 var valueIndex = 0
                 let isBroadcast = command.values.count == 1
-                for t in teethInRange {
-                    guard mouthState[t] != nil else { continue }
-                    _ = command.aspect ?? .outer
-                    
-                    let slotsPerTooth: Int
-                    switch command.operation {
-                    case .probingDepth, .gingivalMargin, .bleeding, .plaque: slotsPerTooth = 3
-                    case .missing, .implant, .mobility, .furcation: slotsPerTooth = 1
+                let isSlotBased = [.probingDepth, .gingivalMargin, .bleeding, .plaque].contains(command.operation)
+                
+                if isSlotBased {
+                    let aspectsToIterate: [ChartAspect] = (ts.startAspect ?? command.aspect) == nil ? [.outer, .inner] : [ts.startAspect ?? command.aspect!]
+                    for aspect in aspectsToIterate {
+                        var aspectValueIndex = 0
+                        let endAsp = ts.endAspect ?? aspect
+                        let seq = ChartAnatomyResolver.sequence(from: (ts.startTooth.toothNumber, aspect, ts.startSite),
+                                                                to: (ts.endTooth.toothNumber, endAsp, ts.endSite))
+                        
+                        for (t, asp, site) in seq {
+                            guard mouthState[t] != nil else { continue }
+                            if mouthState[t]?.missing == true && command.operation != .missing && command.operation != .implant { continue }
+                            let valStr = isBroadcast ? command.values[0] : (aspectValueIndex < command.values.count ? command.values[aspectValueIndex] : "False")
+                            if !isBroadcast { aspectValueIndex += 1 }
+                            
+                            let intValue = Int(valStr) ?? 0
+                            let boolVal = valStr.lowercased() == "true"
+                            
+                            switch command.operation {
+                            case .probingDepth:
+                                if asp == .outer { mouthState[t]?.probingDepth.outer[site] = intValue } else { mouthState[t]?.probingDepth.inner[site] = intValue }
+                            case .gingivalMargin:
+                                if asp == .outer { mouthState[t]?.gingivalMargin.outer[site] = intValue } else { mouthState[t]?.gingivalMargin.inner[site] = intValue }
+                            case .bleeding:
+                                if asp == .outer { mouthState[t]?.bleeding.outer[site] = boolVal } else { mouthState[t]?.bleeding.inner[site] = boolVal }
+                            case .plaque:
+                                if asp == .outer { mouthState[t]?.plaque.outer[site] = boolVal } else { mouthState[t]?.plaque.inner[site] = boolVal }
+                            default: break
+                            }
+                        }
                     }
-                    
-                    let v1 = isBroadcast ? command.values[0] : (valueIndex < command.values.count ? command.values[valueIndex] : "False")
-                    let v2 = isBroadcast ? command.values[0] : (valueIndex + 1 < command.values.count ? command.values[valueIndex + 1] : "False")
-                    let v3 = isBroadcast ? command.values[0] : (valueIndex + 2 < command.values.count ? command.values[valueIndex + 2] : "False")
-                    if !isBroadcast { valueIndex += slotsPerTooth }
-                    
-                    let i1 = Int(v1) ?? 0; let i2 = Int(v2) ?? 0; let i3 = Int(v3) ?? 0
-                    let b1 = v1.lowercased() == "true"; let b2 = v2.lowercased() == "true"; let b3 = v3.lowercased() == "true"
-                    
-                    switch command.operation {
-                    case .probingDepth:
-                        if let asp = command.aspect {
-                            if asp == .outer { mouthState[t]?.probingDepth.outer = [i1, i2, i3] }
-                            else { mouthState[t]?.probingDepth.inner = [i1, i2, i3] }
-                        } else {
-                            mouthState[t]?.probingDepth.outer = [i1, i2, i3]
-                            mouthState[t]?.probingDepth.inner = [i1, i2, i3]
-                        }
-                    case .gingivalMargin:
-                        if let asp = command.aspect {
-                            if asp == .outer { mouthState[t]?.gingivalMargin.outer = [i1, i2, i3] }
-                            else { mouthState[t]?.gingivalMargin.inner = [i1, i2, i3] }
-                        } else {
-                            mouthState[t]?.gingivalMargin.outer = [i1, i2, i3]
-                            mouthState[t]?.gingivalMargin.inner = [i1, i2, i3]
-                        }
-                    case .bleeding:
-                        if let asp = command.aspect {
-                            if asp == .outer { mouthState[t]?.bleeding.outer = [b1, b2, b3] }
-                            else { mouthState[t]?.bleeding.inner = [b1, b2, b3] }
-                        } else {
-                            mouthState[t]?.bleeding.outer = [b1, b2, b3]
-                            mouthState[t]?.bleeding.inner = [b1, b2, b3]
-                        }
-                    case .plaque:
-                        if let asp = command.aspect {
-                            if asp == .outer { mouthState[t]?.plaque.outer = [b1, b2, b3] }
-                            else { mouthState[t]?.plaque.inner = [b1, b2, b3] }
-                        } else {
-                            mouthState[t]?.plaque.outer = [b1, b2, b3]
-                            mouthState[t]?.plaque.inner = [b1, b2, b3]
-                        }
-                    case .missing:
-                        let wasMissing = mouthState[t]?.missing ?? false
-                        mouthState[t]?.missing = b1
-                        if !b1 && wasMissing {
-                            mouthState[t]?.probingDepth = AspectData(outer: [0,0,0], inner: [0,0,0])
-                            mouthState[t]?.gingivalMargin = AspectData(outer: [0,0,0], inner: [0,0,0])
-                            mouthState[t]?.mobility = .zero
-                            mouthState[t]?.bleeding = AspectData(outer: [false,false,false], inner: [false,false,false])
-                            mouthState[t]?.plaque = AspectData(outer: [false,false,false], inner: [false,false,false])
-                            mouthState[t]?.implant = false
-                            mouthState[t]?.furcation = ToothObject.create(number: t).furcation
-                        }
-                    case .mobility:
-                        if let mClass = MobilityClass(rawValue: i1) {
-                            mouthState[t]?.mobility = mClass
-                        }
-                    case .implant:
-                        mouthState[t]?.implant = b1
-                        if b1 && mouthState[t]?.missing == true {
-                            mouthState[t]?.missing = false
-                            mouthState[t]?.probingDepth = AspectData(outer: [0,0,0], inner: [0,0,0])
-                            mouthState[t]?.gingivalMargin = AspectData(outer: [0,0,0], inner: [0,0,0])
-                            mouthState[t]?.mobility = .zero
-                            mouthState[t]?.bleeding = AspectData(outer: [false,false,false], inner: [false,false,false])
-                            mouthState[t]?.plaque = AspectData(outer: [false,false,false], inner: [false,false,false])
-                            mouthState[t]?.furcation = ToothObject.create(number: t).furcation
-                        }
-                    case .furcation:
-                        if let fClass = FurcationClass(rawValue: i1) {
-                            if let asp = command.aspect {
-                                if asp == .outer {
-                                    if (mouthState[t]?.furcation?.outer.count ?? 0) > 0 { mouthState[t]?.furcation?.outer = [fClass] }
+                } else {
+                    for t in teethInRange {
+                        guard mouthState[t] != nil else { continue }
+                        if mouthState[t]?.missing == true && command.operation != .missing && command.operation != .implant { continue }
+                        
+                        let valStr = isBroadcast ? command.values[0] : (valueIndex < command.values.count ? command.values[valueIndex] : "False")
+                        if !isBroadcast { valueIndex += 1 }
+                        
+                        let i1 = Int(valStr) ?? 0
+                        let b1 = valStr.lowercased() == "true"
+                        
+                        switch command.operation {
+                        case .missing:
+                            let wasMissing = mouthState[t]?.missing ?? false
+                            mouthState[t]?.missing = b1
+                            if !b1 && wasMissing {
+                                mouthState[t]?.probingDepth = AspectData(outer: [0,0,0], inner: [0,0,0])
+                                mouthState[t]?.gingivalMargin = AspectData(outer: [0,0,0], inner: [0,0,0])
+                                mouthState[t]?.mobility = .zero
+                                mouthState[t]?.bleeding = AspectData(outer: [false,false,false], inner: [false,false,false])
+                                mouthState[t]?.plaque = AspectData(outer: [false,false,false], inner: [false,false,false])
+                                mouthState[t]?.implant = false
+                                mouthState[t]?.furcation = ToothObject.create(number: t).furcation
+                            }
+                        case .probingDepth:
+                            if let a = command.aspect {
+                                if a == .outer { mouthState[t]?.probingDepth.outer = [i1, i1, i1] }
+                                else { mouthState[t]?.probingDepth.inner = [i1, i1, i1] }
+                            } else {
+                                mouthState[t]?.probingDepth.outer = [i1, i1, i1]
+                                mouthState[t]?.probingDepth.inner = [i1, i1, i1]
+                            }
+                        case .gingivalMargin:
+                            if let a = command.aspect {
+                                if a == .outer { mouthState[t]?.gingivalMargin.outer = [i1, i1, i1] }
+                                else { mouthState[t]?.gingivalMargin.inner = [i1, i1, i1] }
+                            } else {
+                                mouthState[t]?.gingivalMargin.outer = [i1, i1, i1]
+                                mouthState[t]?.gingivalMargin.inner = [i1, i1, i1]
+                            }
+                        case .bleeding:
+                            if let a = command.aspect {
+                                if a == .outer { mouthState[t]?.bleeding.outer = [b1, b1, b1] }
+                                else { mouthState[t]?.bleeding.inner = [b1, b1, b1] }
+                            } else {
+                                mouthState[t]?.bleeding.outer = [b1, b1, b1]
+                                mouthState[t]?.bleeding.inner = [b1, b1, b1]
+                            }
+                        case .plaque:
+                            if let a = command.aspect {
+                                if a == .outer { mouthState[t]?.plaque.outer = [b1, b1, b1] }
+                                else { mouthState[t]?.plaque.inner = [b1, b1, b1] }
+                            } else {
+                                mouthState[t]?.plaque.outer = [b1, b1, b1]
+                                mouthState[t]?.plaque.inner = [b1, b1, b1]
+                            }
+                        case .mobility:
+                            if let mClass = MobilityClass(rawValue: i1) {
+                                mouthState[t]?.mobility = mClass
+                            }
+                        case .implant:
+                            mouthState[t]?.implant = b1
+                            if b1 && mouthState[t]?.missing == true {
+                                mouthState[t]?.missing = false
+                                mouthState[t]?.probingDepth = AspectData(outer: [0,0,0], inner: [0,0,0])
+                                mouthState[t]?.gingivalMargin = AspectData(outer: [0,0,0], inner: [0,0,0])
+                                mouthState[t]?.mobility = .zero
+                                mouthState[t]?.bleeding = AspectData(outer: [false,false,false], inner: [false,false,false])
+                                mouthState[t]?.plaque = AspectData(outer: [false,false,false], inner: [false,false,false])
+                                mouthState[t]?.furcation = ToothObject.create(number: t).furcation
+                            }
+                        case .furcation:
+                            if let fClass = FurcationClass(rawValue: i1) {
+                                if let asp = command.aspect {
+                                    if asp == .outer {
+                                        if (mouthState[t]?.furcation?.outer.count ?? 0) > 0 { mouthState[t]?.furcation?.outer = [fClass] }
+                                    } else {
+                                        if let innerCount = mouthState[t]?.furcation?.inner.count, innerCount > 0 {
+                                            mouthState[t]?.furcation?.inner = Array(repeating: fClass, count: innerCount)
+                                        }
+                                    }
                                 } else {
+                                    if (mouthState[t]?.furcation?.outer.count ?? 0) > 0 { mouthState[t]?.furcation?.outer = [fClass] }
                                     if let innerCount = mouthState[t]?.furcation?.inner.count, innerCount > 0 {
                                         mouthState[t]?.furcation?.inner = Array(repeating: fClass, count: innerCount)
                                     }
-                                }
-                            } else {
-                                if (mouthState[t]?.furcation?.outer.count ?? 0) > 0 { mouthState[t]?.furcation?.outer = [fClass] }
-                                if let innerCount = mouthState[t]?.furcation?.inner.count, innerCount > 0 {
-                                    mouthState[t]?.furcation?.inner = Array(repeating: fClass, count: innerCount)
                                 }
                             }
                         }
@@ -234,6 +262,7 @@ struct ChartProcessor {
         
         let tNum = command.teethSelection.startTooth.toothNumber
         guard mouthState[tNum] != nil else { return }
+        if mouthState[tNum]?.missing == true && command.operation != .missing && command.operation != .implant { return }
         
         switch command.operation {
         case .missing:
