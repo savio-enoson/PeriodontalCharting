@@ -57,21 +57,18 @@ extension SpeakerGateService {
 
     // MARK: - Tuning
 
-    /// Span parameters for the RESCUE paths. Deliberately tighter than
-    /// `mergeSpans`' defaults, which `evaluate(audio:)` keeps so its distances
-    /// stay comparable with the Python harness.
     enum RescueTuning {
-        /// Silero's 0.5 default finds nothing on this microphone — measured max
-        /// probability on clean, deliberate, close-mic speech was 0.409.
-        static let vadThreshold: Float = 0.3
-
-        /// 0.35 s, not 1.5 s. The difference between gating a PERSON and gating a
-        /// CONVERSATION: offline numbers came from single-speaker recordings, but
-        /// in a real room consecutive turns are well under 1.5 s apart, so the
-        /// default merge fuses them into one span whose embedding contains the
-        /// target — and therefore reads as the target.
+        /// Frames below `noiseFloor * speechFloorMultiple` are silence. RELATIVE,
+        /// because the microphone level swings widely between sessions (measured
+        /// window peaks 0.015 to 0.597).
+        static let speechFloorMultiple: Float = 3.0
+        /// Absolute minimum, so a dead-quiet room cannot promote its own hiss.
+        static let absoluteFloor: Float = 0.01
+        /// 0.35 s, not 1.5 s — gating a PERSON, not a CONVERSATION. Offline numbers
+        /// came from single-speaker recordings, but in a real room consecutive turns
+        /// are well under 1.5 s apart, so the default merge fuses them into one span
+        /// whose embedding contains the target — and so reads as the target.
         static let maxGapSeconds = 0.35
-
         /// Matches `SpeakerGate.inputSamples` (3.0 s), so no span is centre-cropped.
         static let maxSpanSeconds = 3.0
     }
@@ -136,51 +133,72 @@ extension SpeakerGateService {
                            extractedAudio: keepAudio ? extracted : nil)
     }
 
-    /// Speech spans to judge, plus whether they came from the fallback.
+    /// Speech spans to judge — segmented on ENERGY, not Silero.
     ///
-    /// Two defences live here, both learned the hard way:
+    /// Silero is non-functional on this device: peak probability 0.005 on speech at
+    /// amplitude 0.597, 0.003 at 0.279, and it finds nothing on the calibration file
+    /// either — which `SpeakerGate.loadSamples` already peak-normalises, so input
+    /// level is not the variable. It loads and predicts; the outputs are simply
+    /// wrong. Its probability is still logged on the fallback path so that a future
+    /// fix, or a regression, is visible.
     ///
-    /// 1. PEAK-NORMALISE before the VAD. The only measurement where Silero gave a
-    ///    usable probability on this hardware (0.409) was on file audio, which
-    ///    `SpeakerGate.loadSamples` peak-normalises. Live buffer audio arrives raw
-    ///    and Silero collapsed to 0.003–0.046 on speech Whisper transcribed
-    ///    cleanly at rms 0.08 — so present it the same shape of signal the
-    ///    enrollment path does. Indices map 1:1, and spans are sliced from the
-    ///    ORIGINAL audio afterwards (ECAPA is gain-invariant either way).
-    ///
-    /// 2. FIXED-WINDOW FALLBACK when the VAD still finds nothing. The enrollment
-    ///    path already needed this. Without it the live gate produces zero spans,
-    ///    the timeline stays empty, every timestamp is uncovered — silently,
-    ///    because the empty-span return happens before any logging. The log lines
-    ///    below exist so that can never be silent again.
+    /// RMS separates speech from silence by ~20x on this hardware (0.053 speech vs
+    /// 0.003 silence), so an adaptive energy threshold is strictly more reliable.
     private func rescueSpans(in audio: [Float]) -> (spans: [SpeechSegment], fromFallback: Bool) {
-        var probe = audio
-        var peakAmplitude: Float = 0
-        vDSP_maxmgv(probe, 1, &peakAmplitude, vDSP_Length(probe.count))
-        if peakAmplitude > 1e-6 {
-            var scale = 1.0 / peakAmplitude
-            vDSP_vsmul(probe, 1, &scale, &probe, 1, vDSP_Length(probe.count))
+        let hop = SpeakerGate.sampleRate / 100 * 3        // 30 ms frames
+        guard audio.count >= hop * 8 else { return ([], true) }
+
+        var frameLevels: [Float] = []
+        frameLevels.reserveCapacity(audio.count / hop)
+        audio.withUnsafeBufferPointer { buffer in
+            var i = 0
+            while i + hop <= buffer.count {
+                var r: Float = 0
+                vDSP_rmsqv(buffer.baseAddress! + i, 1, &r, vDSP_Length(hop))
+                frameLevels.append(r)
+                i += hop
+            }
+        }
+        guard !frameLevels.isEmpty else { return ([], true) }
+
+        // 20th percentile as the noise floor: robust whether the window is mostly
+        // speech or mostly silence.
+        let ordered = frameLevels.sorted()
+        let noiseFloor = ordered[min(ordered.count - 1, ordered.count / 5)]
+        let threshold = max(noiseFloor * RescueTuning.speechFloorMultiple,
+                            RescueTuning.absoluteFloor)
+
+        var raw: [SpeechSegment] = []
+        var runStart: Int?
+        for k in 0...frameLevels.count {
+            let isSpeech = k < frameLevels.count && frameLevels[k] > threshold
+            if isSpeech, runStart == nil { runStart = k }
+            if !isSpeech, let s = runStart {
+                raw.append(SpeechSegment(start: s * hop, end: min(k * hop, audio.count)))
+                runStart = nil
+            }
         }
 
-        let merged = Self.mergeSpans(
-            vad.speechTimestamps(probe, threshold: RescueTuning.vadThreshold),
-            totalSamples: audio.count,
-            maxGapSeconds: RescueTuning.maxGapSeconds,
-            maxDurationSeconds: RescueTuning.maxSpanSeconds)
-        if !merged.isEmpty { return (merged, false) }
+        let merged = Self.mergeSpans(raw,
+                                     totalSamples: audio.count,
+                                     maxGapSeconds: RescueTuning.maxGapSeconds,
+                                     maxDurationSeconds: RescueTuning.maxSpanSeconds)
+        if !merged.isEmpty {
+            print(String(format: "[Gate] energy: floor %.4f, threshold %.4f -> %d span(s)",
+                         noiseFloor, threshold, merged.count))
+            return (merged, false)
+        }
 
-        // `speechProbabilities` swallows failed predictions as 0, so a DEAD VAD
-        // and genuine silence produce the same empty list. Print the peak next to
-        // the input amplitude: a low probability at amp 1.000 means the model is
-        // not predicting usefully, and the fallback is masking that rather than
-        // compensating for a quiet microphone.
+        // Nothing above the floor — genuinely quiet, or one steady level throughout.
+        // Fall back to fixed windows so coverage never has a hole, and never let
+        // that be silent: an empty span list used to return before any logging, and
+        // the gate then failed open across an entire session with no trace.
         let seconds = Double(audio.count) / Double(SpeakerGate.sampleRate)
-        let peakProb = vad.speechProbabilities(probe).max() ?? 0
-
-        let window = SpeakerGate.inputSamples          // 3.0 s — the embedder's input
+        let sileroPeak = vad.speechProbabilities(audio).max() ?? 0
+        let window = SpeakerGate.inputSamples
         guard audio.count >= window else {
-            print(String(format: "[Gate] no spans in %.1fs (VAD peak %.3f, amp %.3f), window too short",
-                         seconds, peakProb, peakAmplitude))
+            print(String(format: "[Gate] no spans in %.1fs (floor %.4f, silero %.3f), window too short",
+                         seconds, noiseFloor, sileroPeak))
             return ([], true)
         }
         var windows: [SpeechSegment] = []
@@ -189,9 +207,8 @@ extension SpeakerGateService {
             windows.append(SpeechSegment(start: start, end: start + window))
             start += window
         }
-        print(String(format: "[Gate] VAD found nothing at %.2f in %.1fs (peak %.3f, amp %.3f) — "
-                     + "%d blind window(s); distances below are NOT trustworthy",
-                     RescueTuning.vadThreshold, seconds, peakProb, peakAmplitude, windows.count))
+        print(String(format: "[Gate] no energy above %.4f in %.1fs (floor %.4f, silero %.3f) — %d blind window(s)",
+                     threshold, seconds, noiseFloor, sileroPeak, windows.count))
         return (windows, true)
     }
 
@@ -300,16 +317,39 @@ extension SpeakerGateService {
     func coveringSpan(atSeconds t: Double) -> GatedSpan? {
         currentTimeline.first { t >= $0.startSeconds && t < $0.endSeconds }
     }
+    
+    /// The span covering a timestamp, or the nearest one within `tolerance`.
+    ///
+    /// Energy segmentation leaves gaps — between merged spans, and where
+    /// `mergeSpans` drops something under its 1 s floor — and Whisper happily
+    /// produces text inside them. Failing open on every gap lets the other speaker
+    /// through; failing closed on every gap drops the clinician's own words.
+    /// Inheriting the nearest verdict resolves both: mid-utterance gaps take the
+    /// verdict of the speech around them, and only the leading edge of a session —
+    /// where there is no verdict within 1.5 s — genuinely falls open.
+    func nearestSpan(toSeconds t: Double, within tolerance: Double = 1.5) -> GatedSpan? {
+        let spans = currentTimeline
+        if let hit = spans.first(where: { t >= $0.startSeconds && t < $0.endSeconds }) {
+            return hit
+        }
+        return spans
+            .map { span -> (GatedSpan, Double) in
+                (span, t < span.startSeconds ? span.startSeconds - t : t - span.endSeconds)
+            }
+            .filter { $0.1 <= tolerance }
+            .min { $0.1 < $1.1 }?.0
+    }
 
     // MARK: - Logging
 
     /// One line per span. Reading order: does the LEVEL look like speech, is the
-    /// SOURCE vad (trustworthy) or win (blind), then the distance and its margin.
+    /// SOURCE nrg (energy-segmented, trustworthy) or win (blind fallback), then the
+    /// distance and its margin.
     private static func log(_ results: [RescuedSpan],
                             tag: String,
                             enforcing: Bool,
                             fromFallback: Bool) {
-        let source = fromFallback ? "win" : "vad"
+        let source = fromFallback ? "win" : "nrg"
         for r in results {
             let d = r.distanceMixed
             let dText = d.map { String(format: "%.3f", $0) } ?? " --- "

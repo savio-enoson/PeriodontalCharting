@@ -12,8 +12,9 @@
 //  (app.py hand-rolls a rolling window only because Gradio has no streaming decoder;
 //  on WhisperKit the native streamer avoids the per-window 30 s-pad + overlap dupes.)
 //
-//  The speaker gate runs alongside in OBSERVE mode: it judges every span and logs
-//  what it would do, but withholds nothing. See `passesGate`.
+//  The speaker gate runs alongside and now ENFORCES: segments whose nearest verdict
+//  is `reject` are withheld from both the display transcript and the parser. See
+//  `passesGate` for the measurements that justified turning it on.
 //
 
 import Foundation
@@ -76,8 +77,7 @@ final class TranscriptionViewModel: LiveCaptureDriver {
     private var lastConfirmedSegmentCount = 0
     private var lastConfirmedCumulative = ""
     private var liveConfirmedCarryOver = ""
-    /// Speaker gate. Currently OBSERVE ONLY — it logs verdicts and withholds
-    /// nothing. See `passesGate` for what has to be true before it enforces.
+    /// Speaker gate. ENFORCING — see `passesGate`.
     var speakerGate: SpeakerGateService?
 
     // MARK: - Speaker filter status
@@ -92,7 +92,6 @@ final class TranscriptionViewModel: LiveCaptureDriver {
         var rejected = 0
         var routed = 0
         var rescued = 0
-        /// In observe mode this counts segments the gate WOULD have withheld.
         var withheldSegments = 0
         var lastDistance: Double?
 
@@ -101,7 +100,7 @@ final class TranscriptionViewModel: LiveCaptureDriver {
             var parts = ["\(spans) span\(spans == 1 ? "" : "s")"]
             if rejected > 0 { parts.append("\(rejected) not you") }
             if withheldSegments > 0 {
-                parts.append("\(withheldSegments) line\(withheldSegments == 1 ? "" : "s") flagged")
+                parts.append("\(withheldSegments) line\(withheldSegments == 1 ? "" : "s") withheld")
             }
             if routed > 0 { parts.append("\(rescued)/\(routed) rescued") }
             return parts.joined(separator: " · ")
@@ -282,7 +281,7 @@ final class TranscriptionViewModel: LiveCaptureDriver {
             // [LATENCY Tier 3b] Commit on silence. VAD is already on (default); this
             // finalizes the pending tail at each detected pause so a charting burst
             // solidifies the moment the clinician stops, without lowering the mid-
-            // speech confirmation buffer. Reclaims the de-ghost lag that keeping    
+            // speech confirmation buffer. Reclaims the de-ghost lag that keeping
             // requiredSegmentsForConfirmation at 2 would otherwise cost.
             finalizeOnSilence: true
         ) { [weak self] _, newState in
@@ -301,20 +300,29 @@ final class TranscriptionViewModel: LiveCaptureDriver {
                     .joined(separator: " ")
             }
 
-            // OBSERVE ONLY — the gate withholds NOTHING.
-            //
-            // This is what the design called for from the start: Silero peaked at
-            // 0.41 on this microphone, the centroid is currently a couple of
-            // templates from fallback windows, and there is no data on how often
-            // the gate fires in a real session. Enforcing before that evidence
-            // exists withholds the clinician's OWN measurements, which is precisely
-            // what happened when filtering was switched on early.
-            //
-            // Before flipping this to `span.verdict == .accept`, [Gate/summary]
-            // must show your spans separated from the other speaker's — and on
-            // spans Silero actually found (source `vad`), not fallback windows,
-            // which tile silence and produce meaningless distances.
-            func passesGate(_ segment: TranscriptionSegment) -> Bool { true }
+            /// ENFORCING. Withhold a segment whose nearest verdict is `reject`.
+            ///
+            /// Measured on this hardware, three sessions:
+            ///     enrolled speaker   d 0.383 – 0.730   (one 0.815 outlier)
+            ///     other speaker      d 0.824, 0.941, 0.997, 1.061 — all reject
+            /// The reject threshold at 0.775 separates them, so REJECT-only is the
+            /// rule. Accept-only was tried and withheld the clinician's own
+            /// dictation, because his own spans reach into the confirm band.
+            ///
+            /// `nearestSpan`, not `coveringSpan`: energy segmentation leaves gaps
+            /// and Whisper produces text inside them. Inheriting the nearest verdict
+            /// within 1.5 s means a gap during the other speaker is withheld too,
+            /// while a gap mid-dictation still passes.
+            ///
+            /// Fails OPEN only where there is no verdict within 1.5 s — the leading
+            /// edge of a session, before the gate has caught up. Those segments are
+            /// re-filtered on the next callback, so they appear briefly and vanish.
+            func passesGate(_ segment: TranscriptionSegment) -> Bool {
+                guard let gate else { return true }
+                let mid = Double((segment.start + segment.end) / 2)
+                guard let span = gate.nearestSpan(toSeconds: mid) else { return true }
+                return span.verdict != .reject
+            }
             let gatedConfirmed = newState.confirmedSegments.filter(passesGate)
             let gatedUnconfirmed = newState.unconfirmedSegments.filter(passesGate)
 
@@ -338,26 +346,23 @@ final class TranscriptionViewModel: LiveCaptureDriver {
                 if newState.confirmedSegments.count != self.lastConfirmedSegmentCount {
                     self.lastConfirmedSegmentCount = newState.confirmedSegments.count
 
-                    // What the gate WOULD do, printed but not acted on. Three cases
-                    // look identical from the transcript: no span covers the time, a
-                    // span covered it and accepted, or a span covered it and would
-                    // have withheld. Name which one.
-                    var wouldWithhold = 0
+                    // Three cases look identical from the transcript: no verdict
+                    // nearby (fail open), a verdict that passed, or one that
+                    // withheld. Name which one. Uses the SAME rule as passesGate.
                     for segment in newState.confirmedSegments.suffix(3) {
                         let mid = Double((segment.start + segment.end) / 2)
-                        if let span = gate?.coveringSpan(atSeconds: mid) {
-                            let verdictPasses = span.verdict == .accept
-                            if !verdictPasses { wouldWithhold += 1 }
-                            print(String(format: "[Gate/seg] %.2fs covered by %.2f–%.2f %@ (d %@) -> %@",
+                        if let span = gate?.nearestSpan(toSeconds: mid) {
+                            print(String(format: "[Gate/seg] %.2fs -> %.2f–%.2f %@ (d %@) -> %@",
                                          mid, span.startSeconds, span.endSeconds,
                                          span.verdict.rawValue,
                                          span.distance.map { String(format: "%.3f", $0) } ?? "-",
-                                         verdictPasses ? "PASS" : "would-withhold"))
+                                         span.verdict != .reject ? "PASS" : "WITHHELD"))
                         } else {
-                            print(String(format: "[Gate/seg] %.2fs NO SPAN COVERS -> PASS", mid))
+                            print(String(format: "[Gate/seg] %.2fs NO VERDICT WITHIN 1.5s -> PASS", mid))
                         }
                     }
-                    if gate != nil { self.gateStatus.withheldSegments = wouldWithhold }
+                    self.gateStatus.withheldSegments =
+                        newState.confirmedSegments.count - gatedConfirmed.count
 
                     let cleanedConfirmed = ClinicalConfig.clean(confirmed)
                     // [STT diag] The exact confirmed text that feeds the chart, before
@@ -439,6 +444,7 @@ final class TranscriptionViewModel: LiveCaptureDriver {
     }
 
     private func stopLiveTranscription() {
+        printGateSummary()
         gateMonitorTask?.cancel()
         gateMonitorTask = nil
         liveStreamStart = nil
@@ -457,7 +463,7 @@ final class TranscriptionViewModel: LiveCaptureDriver {
         }
     }
 
-    // MARK: - Live speaker gate (observation only)
+    // MARK: - Live speaker gate
 
     /// Poll WhisperKit's retained buffer and judge only the audio that is new.
     ///
@@ -481,6 +487,12 @@ final class TranscriptionViewModel: LiveCaptureDriver {
         gateStatus.active = true
         gateStatus.extractorReady = extractor?.isPrepared == true
         sessionSpans.removeAll()
+        // Stream time restarts at 0 every session, so last session's spans sit on
+        // top of this one's timestamps — and a stale span also BLOCKS the new
+        // verdict from being recorded, because overlapping ranges are not
+        // re-judged. Observed: a friend-only session reading `accept (d 0.418)`
+        // from an earlier recording of the enrolled speaker.
+        gate.resetTimeline()
         // `gate.gate` is the SpeakerGate inside the service. Add
         // `var rejectThreshold: Double { gate.rejectThreshold }` to
         // SpeakerGateService if you want this to read less awkwardly.
@@ -553,6 +565,37 @@ final class TranscriptionViewModel: LiveCaptureDriver {
         gateStatus.routed = results.filter(\.routed).count
         gateStatus.rescued = results.filter(\.rescued).count
         gateStatus.lastDistance = results.last?.distanceMixed
+    }
+
+    /// Printed once per session. The distance distributions have to stay separable
+    /// for enforcement to be safe: if the worst kept span and the best dropped span
+    /// overlap, the threshold is wrong for this centroid and the fix is a better
+    /// calibration recording, not code.
+    private func printGateSummary() {
+        let spans = sessionSpans.values.sorted { $0.start < $1.start }
+        guard !spans.isEmpty else {
+            print("[Gate/summary] no spans judged this session")
+            return
+        }
+        func stats(_ xs: [Double]) -> String {
+            guard !xs.isEmpty else { return "—" }
+            let s = xs.sorted()
+            return String(format: "min %.3f / med %.3f / max %.3f", s.first!, s[s.count / 2], s.last!)
+        }
+        let accepted = spans.filter { $0.verdictMixed == .accept }.compactMap(\.distanceMixed)
+        let confirmed = spans.filter { $0.verdictMixed == .confirm }.compactMap(\.distanceMixed)
+        let rejected = spans.filter { $0.verdictMixed == .reject }.compactMap(\.distanceMixed)
+        let seconds = spans.reduce(0) { $0 + $1.durationSeconds }
+
+        print(String(format: "[Gate/summary] %d spans, %.1fs judged", spans.count, seconds))
+        print("[Gate/summary]   accept  \(accepted.count)  \(stats(accepted))")
+        print("[Gate/summary]   confirm \(confirmed.count)  \(stats(confirmed))")
+        print("[Gate/summary]   reject  \(rejected.count)  \(stats(rejected))")
+
+        if let worstKept = (accepted + confirmed).max(), let bestDropped = rejected.min() {
+            print(String(format: "[Gate/summary]   separation: worst kept %.3f vs best dropped %.3f -> %+.3f",
+                         worstKept, bestDropped, bestDropped - worstKept))
+        }
     }
 }
 
