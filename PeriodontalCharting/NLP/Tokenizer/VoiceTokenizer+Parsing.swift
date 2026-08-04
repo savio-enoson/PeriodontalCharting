@@ -66,15 +66,18 @@ extension VoiceTokenizer {
         // below only fires when the site is a SEPARATE token, so peel a (fuzzy) trailing
         // site suffix off any m/d-initial token first — restoring the canonical site and
         // leaving the stem prefix ("mesiyo"/"disto"/…) for the positional pass to resolve
-        // (mesio/disto by leading sound). Guarded to m/d-initial tokens with a ≥2-char
-        // prefix so bare sites ("bukal") and "distal"/"mesial" are never split.
+        // (mesio/disto by leading sound). Guarded to m/d/s-initial tokens with a ≥2-char
+        // prefix so bare sites ("bukal") and "distal"/"mesial" are never split. 's' is
+        // allowed because STT frequently drops the leading 'd' of "disto" ("setobukal",
+        // "situbukal", "stobukal" → stem "seto"/"situ"/"sto"); the full site suffix is
+        // still required, so real s-words ("selesai", "semua", "membuka") never split.
         let compoundSites: [(suffixes: [String], site: String)] = [
             (["bukal", "buccal", "bucal", "buqal", "bukkal", "bukhal"], "bukal"),
             (["lingual", "lingval", "linggual", "lingal", "linguol"], "lingual"),
             (["palatal", "palatial", "palatel", "palatual"], "palatal"),
         ]
         words = words.flatMap { word -> [String] in
-            guard let first = word.first, first == "m" || first == "d" else { return [word] }
+            guard let first = word.first, first == "m" || first == "d" || first == "s" else { return [word] }
             for (suffixes, site) in compoundSites {
                 for suf in suffixes where word.count > suf.count && word.hasSuffix(suf) {
                     let prefix = String(word.dropLast(suf.count))

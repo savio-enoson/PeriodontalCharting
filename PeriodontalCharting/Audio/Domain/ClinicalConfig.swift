@@ -233,6 +233,15 @@ enum ClinicalConfig {
         (#"\bmezio\s*limual\b"#, "mesio lingual"),
         // "disto bukal"
         (#"\b(?:kistobukal|disubukal|disubuka)\b"#, "disto bukal"),
+        // "disto bukal" glued into ONE token with the leading 'd' dropped (disto ->
+        // seto/situ/sto) and/or the site's final 'l' dropped (bukal -> buka), optionally
+        // with a stray leading "di": "di setobuka", "setobukal", "situbuka", "stobukal".
+        // Runs before tokenizing so BOTH the displayed transcript and the parser see
+        // "disto bukal". Requires the "buk" core, so "setelah"/"sibuk"/"setubuh"/"membuka"
+        // are untouched. See STT_ISSUES #3/#5.
+        (#"\b(?:di\s+)?s[ei]?t[ou]?buka?l?\b"#, "disto bukal"),
+        // "mesio bukal" glued/compressed variants ("mesiyobuka", "msiyobukal", "mesiobuka").
+        (#"\bm[e]?s[iy]+o?buka?l?\b"#, "mesio bukal"),
         // "mesio bukal"
         (#"\bmili\s*bukal\b"#, "mesio bukal"),
         // stray "lingual"
