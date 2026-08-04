@@ -9,7 +9,7 @@
 /* Begin PBXBuildFile section */
 		9B4C62B230136AD0008BE63F /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 9B4C62B130136AD0008BE63F /* WhisperKit */; };
 		9B4C62B530136AF5008BE63F /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 9B4C62B430136AF5008BE63F /* WhisperKit */; };
-		9BA1018D3018B110003EFDD1 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 9BA1018C3018B110003EFDD1 /* WhisperKit */; };
+		9BA11CAE3021C07A003EFDD1 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 9BA11CAD3021C07A003EFDD1 /* WhisperKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -29,7 +29,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				9BA1018D3018B110003EFDD1 /* WhisperKit in Frameworks */,
+				9BA11CAE3021C07A003EFDD1 /* WhisperKit in Frameworks */,
 				9B4C62B530136AF5008BE63F /* WhisperKit in Frameworks */,
 				9B4C62B230136AD0008BE63F /* WhisperKit in Frameworks */,
 			);
@@ -76,7 +76,7 @@
 			packageProductDependencies = (
 				9B4C62B130136AD0008BE63F /* WhisperKit */,
 				9B4C62B430136AF5008BE63F /* WhisperKit */,
-				9BA1018C3018B110003EFDD1 /* WhisperKit */,
+				9BA11CAD3021C07A003EFDD1 /* WhisperKit */,
 			);
 			productName = PeriodontalCharting;
 			productReference = 2C11C7B3300DF29D00D797E6 /* PeriodontalCharting.app */;
@@ -107,7 +107,7 @@
 			mainGroup = 2C11C7AA300DF29D00D797E6;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				9BA1018B3018B110003EFDD1 /* XCLocalSwiftPackageReference "../argmax-oss-swift" */,
+				9BA11CAC3021C07A003EFDD1 /* XCRemoteSwiftPackageReference "argmax-oss-swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 2C11C7B4300DF29D00D797E6 /* Products */;
@@ -350,12 +350,16 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCLocalSwiftPackageReference section */
-		9BA1018B3018B110003EFDD1 /* XCLocalSwiftPackageReference "../argmax-oss-swift" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = "../argmax-oss-swift";
+/* Begin XCRemoteSwiftPackageReference section */
+		9BA11CAC3021C07A003EFDD1 /* XCRemoteSwiftPackageReference "argmax-oss-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ChronoStellar/argmax-oss-swift";
+			requirement = {
+				branch = main;
+				kind = branch;
+			};
 		};
-/* End XCLocalSwiftPackageReference section */
+/* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
 		9B4C62B130136AD0008BE63F /* WhisperKit */ = {
@@ -366,9 +370,9 @@
 			isa = XCSwiftPackageProductDependency;
 			productName = WhisperKit;
 		};
-		9BA1018C3018B110003EFDD1 /* WhisperKit */ = {
+		9BA11CAD3021C07A003EFDD1 /* WhisperKit */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 9BA1018B3018B110003EFDD1 /* XCLocalSwiftPackageReference "../argmax-oss-swift" */;
+			package = 9BA11CAC3021C07A003EFDD1 /* XCRemoteSwiftPackageReference "argmax-oss-swift" */;
 			productName = WhisperKit;
 		};
 /* End XCSwiftPackageProductDependency section */
