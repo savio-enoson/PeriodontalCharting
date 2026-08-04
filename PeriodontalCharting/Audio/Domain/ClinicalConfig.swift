@@ -216,7 +216,7 @@ enum ClinicalConfig {
         // Must run here (before the snap). Leaves "pada"/"ada"/"tidak ada" untouched.
         (#"\bgak?\s?a?d+a+\b"#, "gak ada"),
         // "disto" corruptions, only when a site word / number follows
-        (#"\b(?:di\s*situ|disitu|justru|di\s*stok|stok|situl|di\s*situl|di\s*setiap|di\s*semua|di\s*1)\b(?=\s+(?:bukal|lingual|\d))"#, "disto"),
+        (#"\b(?:di\s*situ|disitu|justru|di\s*stok|di\s*stop|stok|situl|di\s*situl|di\s*setiap|di\s*semua|di\s*1)\b(?=\s+(?:bukal|lingual|\d))"#, "disto"),
         (#"\bdi\s*situ\b"#, "disto"),
         (#"\bdisitu\b"#, "disto"),
         (#"\bjustru\b"#, "disto"),

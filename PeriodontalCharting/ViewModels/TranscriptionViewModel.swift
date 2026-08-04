@@ -2,18 +2,19 @@
 //  TranscriptionViewModel.swift
 //  transcript
 //
-//  MVVM view-model: owns WhisperKit, all transcription state, and the business
-//  logic for the three input modes. The View (ContentView) only observes and
-//  sends intents; it holds no logic or WhisperKit references.
-//
-//  Batch (file/upload): Silero VAD finds the speech, which is packed into ≤30 s
-//  chunks and transcribed — the on-device-efficient shape of app.py's `transcribe()`.
+//  MVVM view-model: owns WhisperKit, all live-transcription state, and the
+//  business logic for live mic dictation. The View only observes and sends
+//  intents; it holds no logic or WhisperKit references.
 //
 //  Live (mic): WhisperKit's AudioStreamTranscriber, which captures the mic, runs
 //  VAD + windowing with running context, and fires a state callback (confirmed +
 //  unconfirmed segments) as speech arrives — so the transcript updates continuously.
 //  (app.py hand-rolls a rolling window only because Gradio has no streaming decoder;
 //  on WhisperKit the native streamer avoids the per-window 30 s-pad + overlap dupes.)
+//
+//  The speaker gate runs alongside and now ENFORCES: segments whose nearest verdict
+//  is `reject` are withheld from both the display transcript and the parser. See
+//  `passesGate` for the measurements that justified turning it on.
 //
 
 import Foundation
@@ -26,19 +27,7 @@ import WhisperKit
 @Observable
 final class TranscriptionViewModel: LiveCaptureDriver {
 
-    // MARK: - Input mode
-
-    enum InputMode: String, CaseIterable, Identifiable {
-        case sample = "Sample File"
-        case upload = "Upload File"
-        case live = "Live Mic"
-        var id: String { rawValue }
-    }
-
     // MARK: - Observable state (the View binds to these)
-
-    var inputMode: InputMode = .sample
-    var selectedFileURL: URL?
 
     /// Cleaned, display-ready transcript (updated live while streaming).
     private(set) var transcript: String = ""
@@ -48,21 +37,11 @@ final class TranscriptionViewModel: LiveCaptureDriver {
     private(set) var isTranscribing: Bool = false
     private(set) var isRecording: Bool = false
 
-    /// Benchmark readouts (file/upload modes).
-    private(set) var benchmarkTime: TimeInterval = 0
-    private(set) var rtfValue: Double = 0
-
-    var canTranscribe: Bool {
-        isModelReady && !isTranscribing &&
-        (inputMode != .upload || selectedFileURL != nil)
-    }
-
     // MARK: - Private
 
     // The model is shared app-wide and preloaded at launch — see TranscriptionEngine.
     // These just forward to it so all the transcription logic below is unchanged.
     private var whisperKit: WhisperKit? { TranscriptionEngine.shared.whisperKit }
-    private var vad: SileroVADEngine? { TranscriptionEngine.shared.vad }
 
     // Live mic: WhisperKit's native streaming transcriber + the task driving it.
     private var streamTranscriber: AudioStreamTranscriber?
@@ -98,6 +77,43 @@ final class TranscriptionViewModel: LiveCaptureDriver {
     private var lastConfirmedSegmentCount = 0
     private var lastConfirmedCumulative = ""
     private var liveConfirmedCarryOver = ""
+    /// Speaker gate. ENFORCING — see `passesGate`.
+    var speakerGate: SpeakerGateService?
+
+    // MARK: - Speaker filter status
+    //
+    // Surfaced in AI Mode and the Transcribe sheet rather than a debug view. A
+    // filter that runs invisibly is indistinguishable from Whisper simply missing
+    // words — the clinician has to be able to see what it is doing.
+    struct GateStatus {
+        var active = false
+        var extractorReady = false
+        var spans = 0
+        var rejected = 0
+        var routed = 0
+        var rescued = 0
+        var withheldSegments = 0
+        var lastDistance: Double?
+
+        var summary: String {
+            guard active else { return "Speaker filter off" }
+            var parts = ["\(spans) span\(spans == 1 ? "" : "s")"]
+            if rejected > 0 { parts.append("\(rejected) not you") }
+            if withheldSegments > 0 {
+                parts.append("\(withheldSegments) line\(withheldSegments == 1 ? "" : "s") withheld")
+            }
+            if routed > 0 { parts.append("\(rescued)/\(routed) rescued") }
+            return parts.joined(separator: " · ")
+        }
+    }
+    private(set) var gateStatus = GateStatus()
+
+    @ObservationIgnored private var gateMonitorTask: Task<Void, Never>?
+    @ObservationIgnored private var liveStreamStart: Date?
+    @ObservationIgnored private var lastGatedAbsoluteSeconds: Double = 0
+    /// Every span judged this session, for the summary printed at stop. Keyed by
+    /// start sample because overlapping windows re-judge the same span.
+    @ObservationIgnored private var sessionSpans: [Int: RescuedSpan] = [:]
 
     /// WhisperKit decodes a fixed 30 s window; batch speech is packed into chunks
     /// no larger than this so each decode fills the window (not one pass per burst).
@@ -151,93 +167,6 @@ final class TranscriptionViewModel: LiveCaptureDriver {
         ClinicalConfig.decodingOptions(for: whisper.tokenizer)
     }
 
-    // MARK: - Intents
-
-    /// Transcribe the current file/upload selection (batch; one result at the end).
-    func transcribeSelection() {
-        guard let whisper = whisperKit, inputMode != .live else { return }
-
-        var audioURL: URL?
-        var scoped = false
-        switch inputMode {
-        case .sample:
-            audioURL = Bundle.main.url(forResource: "sample", withExtension: "mp3")
-            if audioURL == nil {
-                statusMessage = "Bundled 'sample.mp3' not found."
-                return
-            }
-        case .upload:
-            guard let url = selectedFileURL else {
-                statusMessage = "Please select a file first."
-                return
-            }
-            scoped = url.startAccessingSecurityScopedResource()
-            guard scoped else {
-                statusMessage = "Cannot access the selected file."
-                return
-            }
-            audioURL = url
-        case .live:
-            return
-        }
-
-        guard let url = audioURL else { return }
-
-        isTranscribing = true
-        statusMessage = "Transcribing…"
-        transcript = ""
-        benchmarkTime = 0
-        rtfValue = 0
-
-        let vad = self.vad
-        Task {
-            let start = Date()
-            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-            do {
-                let options = clinicalOptions(whisper)
-
-                // Load as a 16 kHz mono float array.
-                let audio = try AudioProcessor.loadAudioAsFloatArray(fromPath: url.path)
-                let audioDuration = Double(audio.count) / Double(SileroVADEngine.sampleRate)
-
-                // Silero VAD finds the speech, but WhisperKit's encoder ALWAYS runs on
-                // a fixed 30 s (480k-sample) window — a 2 s burst still costs a full 30 s
-                // pass. So instead of one decode per burst (app.py's shape, which explodes
-                // the pass count on-device), we pack the speech back-to-back into ≤30 s
-                // chunks: silence is dropped, each chunk fills the window, and a clip
-                // needs ~ceil(speech / 30 s) passes instead of one-per-burst.
-                let chunks: [[Float]] = await Task.detached {
-                    guard let vad else { return [audio] }
-                    let ts = vad.speechTimestamps(
-                        audio, minSpeechDurationMs: 250, minSilenceDurationMs: 500)
-                    guard !ts.isEmpty else { return [audio] }
-                    return Self.packSpeech(audio, ts, maxLen: Self.maxChunkSamples)
-                }.value
-
-                statusMessage = "Transcribing \(chunks.count) chunk\(chunks.count == 1 ? "" : "s")…"
-
-                let perChunk = await whisper.transcribe(audioArrays: chunks, decodeOptions: options)
-                let raw = perChunk
-                    .compactMap { $0?.map(\.text).joined(separator: " ") }
-                    .map { $0.trimmingCharacters(in: .whitespaces) }
-                    .filter { !$0.isEmpty }
-                    .joined(separator: " ")
-
-                let elapsed = Date().timeIntervalSince(start)
-                transcript = ClinicalConfig.clean(raw).ifEmpty("No result")
-                benchmarkTime = elapsed
-                rtfValue = (audioDuration > 0 && elapsed > 0) ? audioDuration / elapsed : 0
-                statusMessage = "Done (\(chunks.count) chunk\(chunks.count == 1 ? "" : "s"))"
-                isTranscribing = false
-                print(String(format: "[RTF] batch: %.1fs audio in %.1fs -> %.2fx realtime (%d chunks)",
-                             audioDuration, elapsed, rtfValue, chunks.count))
-            } catch {
-                statusMessage = "Error: \(error.localizedDescription)"
-                isTranscribing = false
-            }
-        }
-    }
-
     // MARK: - Live streaming (mic) — WhisperKit AudioStreamTranscriber
 
     func toggleRecording() {
@@ -261,8 +190,6 @@ final class TranscriptionViewModel: LiveCaptureDriver {
         liveConfirmedCarryOver = ""
         lastConfirmedCumulative = ""
         lastConfirmedSegmentCount = 0
-        benchmarkTime = 0
-        rtfValue = 0
         isRecording = true
         isTranscribing = true
         statusMessage = "Requesting microphone access…"
@@ -299,6 +226,11 @@ final class TranscriptionViewModel: LiveCaptureDriver {
                 return
             }
 
+            // ORDER MATTERS: `launchStreamTranscriber` captures the gate into its
+            // @Sendable callback, so assigning it afterwards would capture nil.
+            self.speakerGate = TranscriptionEngine.shared.makeSpeakerGateIfNeeded()
+            self.startGateMonitor()
+
             self.statusMessage = "Listening…"
             self.launchStreamTranscriber()
         }
@@ -312,6 +244,11 @@ final class TranscriptionViewModel: LiveCaptureDriver {
         guard let whisper = whisperKit, let tokenizer = whisper.tokenizer else { return }
         let options = clinicalOptions(whisper)
 
+        // Captured once, here on the main actor. SpeakerGateService is @unchecked
+        // Sendable and its timeline is lock-guarded, so the streaming callback can
+        // consult it directly without hopping.
+        let gate = (speakerGate?.isEnrolled == true) ? speakerGate : nil
+
         // AudioStreamTranscriber captures the mic, runs VAD + windowing with running
         // context, and calls back with confirmed + unconfirmed segments as speech
         // arrives. We clean the running transcript on every update so the UI shows
@@ -324,22 +261,29 @@ final class TranscriptionViewModel: LiveCaptureDriver {
             tokenizer: tokenizer,
             audioProcessor: whisper.audioProcessor,
             decodingOptions: options,
-            // Confirm a segment only after 2 following segments (WhisperKit default).
-            // The AI Mode chart commits off *confirmed* text, and confirmed text with
-            // more following context is more stabilized/accurate — Whisper keeps
-            // refining the unconfirmed tail, so freezing too early (tried 1) fed the
-            // chart a rougher hypothesis than the Transcribe sheet shows. Kept at 2:
-            // charting accuracy is worth ~one phrase of latency (which felt the same
-            // in practice). See STT_ISSUES.md #2/#6 for the full latency-vs-accuracy
-            // reasoning (Tier 3 preview is the way to get both).
-            requiredSegmentsForConfirmation: 2,
+            // Keep a 2-segment UNCONFIRMED (revisable) tail DURING speech: unclear
+            // audio commits with full following context, so it's accurate — Whisper
+            // keeps refining the last segments, and freezing early (tried 1/0) fed
+            // rougher text on unclear audio. The de-ghost lag this normally costs is
+            // reclaimed by Tier 3b below: `finalizeOnSilence` confirms the current
+            // utterance the instant VAD hits a pause, so each tooth's values solidify
+            // at the gap before the next one — accurate mid-phrase, snappy at pauses.
+            // Measured decode headroom is 10–50× realtime, so this costs nothing.
+            // See STT_ISSUES.md #2/#6 for the full latency-vs-accuracy history.
+            requiredSegmentsForConfirmation: 1,
             // [LATENCY Tier 1] Bound the live buffer. The streamer re-decodes the
             // ENTIRE retained buffer every ~100 ms tick, so 60 s = two full 30 s
             // Whisper windows decoded per tick. 32 s keeps a full 30 s window (+
             // margin) while ~halving per-tick decode cost, and retains less silence
             // (which is what fed the biased-vocabulary runaway) — strictly safer.
             // Do NOT drop below ~30 s: that truncates Whisper's own decode window.
-            maxRetainedAudioSeconds: 32
+            maxRetainedAudioSeconds: 32,
+            // [LATENCY Tier 3b] Commit on silence. VAD is already on (default); this
+            // finalizes the pending tail at each detected pause so a charting burst
+            // solidifies the moment the clinician stops, without lowering the mid-
+            // speech confirmation buffer. Reclaims the de-ghost lag that keeping
+            // requiredSegmentsForConfirmation at 2 would otherwise cost.
+            finalizeOnSilence: true
         ) { [weak self] _, newState in
             // Callback is @Sendable / off the main actor — hop back to update UI state.
             //
@@ -355,8 +299,35 @@ final class TranscriptionViewModel: LiveCaptureDriver {
                 segments.map { tokenizer.decode(tokens: $0.tokens.filter { $0 < specialTokenBegin }) }
                     .joined(separator: " ")
             }
-            let confirmed = cleanText(newState.confirmedSegments)
-            let unconfirmed = cleanText(newState.unconfirmedSegments)
+
+            /// ENFORCING. Withhold a segment whose nearest verdict is `reject`.
+            ///
+            /// Measured on this hardware, three sessions:
+            ///     enrolled speaker   d 0.383 – 0.730   (one 0.815 outlier)
+            ///     other speaker      d 0.824, 0.941, 0.997, 1.061 — all reject
+            /// The reject threshold at 0.775 separates them, so REJECT-only is the
+            /// rule. Accept-only was tried and withheld the clinician's own
+            /// dictation, because his own spans reach into the confirm band.
+            ///
+            /// `nearestSpan`, not `coveringSpan`: energy segmentation leaves gaps
+            /// and Whisper produces text inside them. Inheriting the nearest verdict
+            /// within 1.5 s means a gap during the other speaker is withheld too,
+            /// while a gap mid-dictation still passes.
+            ///
+            /// Fails OPEN only where there is no verdict within 1.5 s — the leading
+            /// edge of a session, before the gate has caught up. Those segments are
+            /// re-filtered on the next callback, so they appear briefly and vanish.
+            func passesGate(_ segment: TranscriptionSegment) -> Bool {
+                guard let gate else { return true }
+                let mid = Double((segment.start + segment.end) / 2)
+                guard let span = gate.nearestSpan(toSeconds: mid) else { return true }
+                return span.verdict != .reject
+            }
+            let gatedConfirmed = newState.confirmedSegments.filter(passesGate)
+            let gatedUnconfirmed = newState.unconfirmedSegments.filter(passesGate)
+
+            let confirmed = cleanText(gatedConfirmed)
+            let unconfirmed = cleanText(gatedUnconfirmed)
             let raw = (confirmed + " " + unconfirmed).trimmingCharacters(in: .whitespaces)
             let cleaned = ClinicalConfig.clean(raw)
             Task { @MainActor [weak self] in
@@ -374,7 +345,32 @@ final class TranscriptionViewModel: LiveCaptureDriver {
                 // so annotations never react to unconfirmed hypotheses.
                 if newState.confirmedSegments.count != self.lastConfirmedSegmentCount {
                     self.lastConfirmedSegmentCount = newState.confirmedSegments.count
+
+                    // Three cases look identical from the transcript: no verdict
+                    // nearby (fail open), a verdict that passed, or one that
+                    // withheld. Name which one. Uses the SAME rule as passesGate.
+                    for segment in newState.confirmedSegments.suffix(3) {
+                        let mid = Double((segment.start + segment.end) / 2)
+                        if let span = gate?.nearestSpan(toSeconds: mid) {
+                            print(String(format: "[Gate/seg] %.2fs -> %.2f–%.2f %@ (d %@) -> %@",
+                                         mid, span.startSeconds, span.endSeconds,
+                                         span.verdict.rawValue,
+                                         span.distance.map { String(format: "%.3f", $0) } ?? "-",
+                                         span.verdict != .reject ? "PASS" : "WITHHELD"))
+                        } else {
+                            print(String(format: "[Gate/seg] %.2fs NO VERDICT WITHIN 1.5s -> PASS", mid))
+                        }
+                    }
+                    self.gateStatus.withheldSegments =
+                        newState.confirmedSegments.count - gatedConfirmed.count
+
                     let cleanedConfirmed = ClinicalConfig.clean(confirmed)
+                    // [STT diag] The exact confirmed text that feeds the chart, before
+                    // and after ClinicalConfig.clean. `raw` is what Whisper actually
+                    // heard (pre-phraseFix); `clean` is what the parser sees. Diff the
+                    // two to catch mishears clean MISSED vs. ones it fixed. Grep `[STT]`.
+                    print("[STT] raw:   \(confirmed)")
+                    print("[STT] clean: \(cleanedConfirmed)")
                     let confirmedCumulative = self.liveConfirmedCarryOver.isEmpty
                         ? cleanedConfirmed
                         : (self.liveConfirmedCarryOver + " " + cleanedConfirmed).trimmingCharacters(in: .whitespaces)
@@ -386,16 +382,15 @@ final class TranscriptionViewModel: LiveCaptureDriver {
 
                 // `currentText` is the framework's live status signal ("Waiting for
                 // speech...", or interim decode progress) — without this the UI gives
-                // zero feedback between "Listening…" and the first *confirmed* segment
-                // (2 segments by default), which reads as "not capturing audio" even
-                // when the mic and VAD are working correctly.
+                // zero feedback between "Listening…" and the first *confirmed* segment,
+                // which reads as "not capturing audio" even when the mic and VAD are
+                // working correctly.
                 if !newState.currentText.isEmpty {
                     self.statusMessage = newState.currentText
                 }
 
                 // [RTF] debug logging: how much *new* confirmed audio landed per how
-                // much wall-clock time actually passed since the last update. Answers
-                // "do I have to wait 30s per chunk" with real numbers instead of a guess.
+                // much wall-clock time actually passed since the last update.
                 let now = Date()
                 let confirmedSeconds = newState.lastConfirmedSegmentEndSeconds
                 let audioDelta = confirmedSeconds - self.lastLiveConfirmedSeconds
@@ -449,6 +444,11 @@ final class TranscriptionViewModel: LiveCaptureDriver {
     }
 
     private func stopLiveTranscription() {
+        printGateSummary()
+        gateMonitorTask?.cancel()
+        gateMonitorTask = nil
+        liveStreamStart = nil
+
         Task { [weak self] in
             guard let self else { return }
             await self.streamTranscriber?.stopStreamTranscription()
@@ -460,6 +460,141 @@ final class TranscriptionViewModel: LiveCaptureDriver {
             self.isRecording = false
             self.isTranscribing = false
             self.statusMessage = self.transcript.isEmpty ? "No speech captured" : "Done"
+        }
+    }
+
+    // MARK: - Live speaker gate
+
+    /// Poll WhisperKit's retained buffer and judge only the audio that is new.
+    ///
+    /// POLLING, not a tap: `AudioStreamTranscriber` claims
+    /// `audioProcessor.audioBufferCallback` for itself, so setting it here breaks
+    /// the streamer.
+    ///
+    /// TIME BASE: `audioSamples` is trimmed from the FRONT at 32 s and its origin
+    /// (`bufferOriginSeconds`) is private, while the segment timestamps reaching
+    /// the callback are already ABSOLUTE — `offsetSegments` adds that origin
+    /// before we see them. Absolute stream time is therefore reconstructed from
+    /// the wall clock: a live mic produces samples in real time, so
+    /// `now - streamStart` is the stream time of the buffer's last sample.
+    private func startGateMonitor() {
+        gateStatus = GateStatus()
+        guard let gate = speakerGate, gate.isEnrolled else {
+            print("[Gate/live] not enrolled — nothing to compare against")
+            return
+        }
+        let extractor = TSEEngine.shared.extractor
+        gateStatus.active = true
+        gateStatus.extractorReady = extractor?.isPrepared == true
+        sessionSpans.removeAll()
+        // Stream time restarts at 0 every session, so last session's spans sit on
+        // top of this one's timestamps — and a stale span also BLOCKS the new
+        // verdict from being recorded, because overlapping ranges are not
+        // re-judged. Observed: a friend-only session reading `accept (d 0.418)`
+        // from an earlier recording of the enrolled speaker.
+        gate.resetTimeline()
+        // `gate.gate` is the SpeakerGate inside the service. Add
+        // `var rejectThreshold: Double { gate.rejectThreshold }` to
+        // SpeakerGateService if you want this to read less awkwardly.
+        print(String(format: "[Gate/live] armed — %d template(s), accept d < %.3f, "
+                     + "reject d >= %.3f, extractor %@",
+                     gate.templateCount,
+                     TSEConfig.postAcceptThreshold,
+                     gate.gate.rejectThreshold,
+                     gateStatus.extractorReady ? "ready" : "unavailable"))
+
+        // Anchored lazily on the first non-empty buffer, NOT here: WhisperKit's
+        // startRecordingLive clears audioSamples and begins capture a few hundred
+        // ms after this call, and its segment timestamps are relative to buffer[0].
+        // Anchoring here would bake that setup delay in as a constant offset.
+        liveStreamStart = nil
+        lastGatedAbsoluteSeconds = 0
+        gateMonitorTask?.cancel()
+        gateMonitorTask = Task { [weak self] in
+            let sr = Double(SpeakerGate.sampleRate)
+            // Re-read this much already-judged audio each pass so an utterance
+            // crossing a window boundary is still seen whole.
+            let overlapSeconds = 2.5
+            // Do not judge less than this at once — mergeSpans drops sub-1 s spans
+            // and the embedder wants 3 s.
+            let minWindowSeconds = 4.0
+
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                guard let self else { return }
+                // `continue`, not `return`: a transient gap — restartLiveStream
+                // rebuilding the capture graph on a route change — must not kill
+                // the monitor for the rest of the session. stopLiveTranscription
+                // cancels this task explicitly, so exiting here is never needed.
+                guard self.isRecording, let whisper = self.whisperKit else { continue }
+
+                let buffer = Array(whisper.audioProcessor.audioSamples)
+                guard !buffer.isEmpty else { continue }
+
+                if self.liveStreamStart == nil {
+                    self.liveStreamStart = Date().addingTimeInterval(-Double(buffer.count) / sr)
+                }
+                guard let streamStart = self.liveStreamStart else { continue }
+
+                let absoluteEnd = Date().timeIntervalSince(streamStart)
+                let origin = max(0, absoluteEnd - Double(buffer.count) / sr)
+                let from = max(origin, self.lastGatedAbsoluteSeconds - overlapSeconds)
+                guard absoluteEnd - from >= minWindowSeconds else { continue }
+
+                let startIndex = Int((from - origin) * sr)
+                guard startIndex >= 0, startIndex < buffer.count else { continue }
+                let slice = Array(buffer[startIndex...])
+
+                let results = await Task.detached(priority: .utility) {
+                    (try? gate.appendEvaluation(audio: slice,
+                                                absoluteOffsetSeconds: from,
+                                                extractor: extractor)) ?? []
+                }.value
+                self.applyGateResults(results)
+                self.lastGatedAbsoluteSeconds = absoluteEnd
+            }
+        }
+    }
+
+    private func applyGateResults(_ results: [RescuedSpan]) {
+        guard !results.isEmpty else { return }
+        for r in results { sessionSpans[r.start] = r }   // overlaps overwrite, not duplicate
+        // Windows overlap, so these describe the LAST pass rather than the session.
+        gateStatus.spans = results.count
+        gateStatus.rejected = results.filter { $0.verdictMixed == .reject }.count
+        gateStatus.routed = results.filter(\.routed).count
+        gateStatus.rescued = results.filter(\.rescued).count
+        gateStatus.lastDistance = results.last?.distanceMixed
+    }
+
+    /// Printed once per session. The distance distributions have to stay separable
+    /// for enforcement to be safe: if the worst kept span and the best dropped span
+    /// overlap, the threshold is wrong for this centroid and the fix is a better
+    /// calibration recording, not code.
+    private func printGateSummary() {
+        let spans = sessionSpans.values.sorted { $0.start < $1.start }
+        guard !spans.isEmpty else {
+            print("[Gate/summary] no spans judged this session")
+            return
+        }
+        func stats(_ xs: [Double]) -> String {
+            guard !xs.isEmpty else { return "—" }
+            let s = xs.sorted()
+            return String(format: "min %.3f / med %.3f / max %.3f", s.first!, s[s.count / 2], s.last!)
+        }
+        let accepted = spans.filter { $0.verdictMixed == .accept }.compactMap(\.distanceMixed)
+        let confirmed = spans.filter { $0.verdictMixed == .confirm }.compactMap(\.distanceMixed)
+        let rejected = spans.filter { $0.verdictMixed == .reject }.compactMap(\.distanceMixed)
+        let seconds = spans.reduce(0) { $0 + $1.durationSeconds }
+
+        print(String(format: "[Gate/summary] %d spans, %.1fs judged", spans.count, seconds))
+        print("[Gate/summary]   accept  \(accepted.count)  \(stats(accepted))")
+        print("[Gate/summary]   confirm \(confirmed.count)  \(stats(confirmed))")
+        print("[Gate/summary]   reject  \(rejected.count)  \(stats(rejected))")
+
+        if let worstKept = (accepted + confirmed).max(), let bestDropped = rejected.min() {
+            print(String(format: "[Gate/summary]   separation: worst kept %.3f vs best dropped %.3f -> %+.3f",
+                         worstKept, bestDropped, bestDropped - worstKept))
         }
     }
 }

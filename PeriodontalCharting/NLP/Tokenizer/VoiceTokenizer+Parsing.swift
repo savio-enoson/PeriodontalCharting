@@ -4,6 +4,15 @@ extension VoiceTokenizer {
     static func tokenize(text: String, isFinal: Bool = false) -> [VoiceToken] {
         var tokens: [VoiceToken] = []
         let cleaned = text.lowercased()
+            // A decimal point BETWEEN digits ("1.5", "2.5", chained "1.5.3") is never
+            // one charting value — depths/recession are whole mm dictated one digit
+            // per site, so "1.5" is the two values 1 and 5. Split it to a space FIRST,
+            // before the "." -> _sep_ rule below: left intact, that rule turns the dot
+            // into a command boundary and scatters "1" and "5" onto different sites
+            // (parser treats _sep_ like "dan"). Zero-width lookaround so it only fires
+            // on a dot flanked by digits — real sentence periods and "b.o.p" are left
+            // for the rules below.
+            .replacingOccurrences(of: #"(?<=\d)\.(?=\d)"#, with: " ", options: .regularExpression)
             .replacingOccurrences(of: ".", with: " _sep_ ")
             .replacingOccurrences(of: ",", with: " ")
             .replacingOccurrences(of: "\n", with: " _sep_ ")
@@ -51,9 +60,95 @@ extension VoiceTokenizer {
             }
         }
         
+        // ---- Fused directional-compound splitter ------------------------------------
+        // Whisper sometimes GLUES the stem and site into a single token, with the site
+        // half itself fuzzed ("mesiyobukal", "distobuqal"). The positional recovery
+        // below only fires when the site is a SEPARATE token, so peel a (fuzzy) trailing
+        // site suffix off any m/d-initial token first — restoring the canonical site and
+        // leaving the stem prefix ("mesiyo"/"disto"/…) for the positional pass to resolve
+        // (mesio/disto by leading sound). Guarded to m/d-initial tokens with a ≥2-char
+        // prefix so bare sites ("bukal") and "distal"/"mesial" are never split.
+        let compoundSites: [(suffixes: [String], site: String)] = [
+            (["bukal", "buccal", "bucal", "buqal", "bukkal", "bukhal"], "bukal"),
+            (["lingual", "lingval", "linggual", "lingal", "linguol"], "lingual"),
+            (["palatal", "palatial", "palatel", "palatual"], "palatal"),
+        ]
+        words = words.flatMap { word -> [String] in
+            guard let first = word.first, first == "m" || first == "d" else { return [word] }
+            for (suffixes, site) in compoundSites {
+                for suf in suffixes where word.count > suf.count && word.hasSuffix(suf) {
+                    let prefix = String(word.dropLast(suf.count))
+                    if prefix.count >= 2 { return [prefix, site] }
+                }
+            }
+            return [word]
+        }
+
+        // ---- Directional-stem recovery (generalized, position-based) ----------------
+        // Whisper mangles the directional STEM ("disto"/"mesio") into an open-ended,
+        // un-enumerable set of junk ("di situ"/"justru"/"stok"/"di slow"/"misi"/"mili"/…)
+        // while the SITE word after it ("bukal"/"lingual"/"palatal") stays reliable.
+        // Rather than chase every variant with a ClinicalConfig regex, use POSITION: a
+        // word sitting immediately before a site word that the tokenizer does NOT
+        // otherwise recognize is almost always a mis-heard stem. Resolve direction by
+        // leading sound — 'm' → mesio, otherwise disto (covers di*/s*/j* → disto,
+        // misi/mili → mesio) — and swallow a leading "di"/"the" fragment so
+        // "di situ bukal" doesn't leave a stray "di" (which would tokenize as the "at"
+        // action and spuriously start post-targeting). Bare "di bukal" (= "at buccal")
+        // is left untouched because "di" IS recognized, so it never triggers. This
+        // must run BEFORE the main loop tokenizes "di" into an action. See STT_ISSUES #5.
+        let stemSites: Set<String> = ["bukal", "lingual", "palatal"]
+        // Words that may legitimately precede a site — real directionals/positions,
+        // at-actions, structural words, and the clinical vocabulary we must never
+        // clobber. Anything NOT here (and not a number) before a site is a mis-hear.
+        let recognizedBeforeSite: Set<String> = [
+            "mesio", "mesial", "disto", "distal", "mid", "tengah",
+            "di", "pada", "semua", "seluruh", "dan", "sampai", "hingga", "dari",
+            "lanjut", "selesai", "kemudian", "gigi", "rahang", "atas", "bawah",
+            "bukal", "lingual", "palatal", "labial", "_sep_",
+            "bop", "berdarah", "poket", "probing", "kedalaman", "resesi", "kemunduran",
+            "margin", "gingival", "enlargement", "pembengkakan", "pembesaran",
+            "plak", "plaque", "furkasi", "furcation", "kegoyangan", "mobilitas",
+            "mobility", "implan", "implant", "gak", "tidak", "ada", "minus", "mm",
+            // region/surface words that legitimately precede a site aspect
+            "bagian", "permukaan", "sekitar", "maupun", "sisi", "setelah", "disini",
+        ]
+        let stemLeadFragments: Set<String> = ["di", "the", "de", "dee", "dih", "dis"]
+        if words.count >= 2 {
+            var recovered: [String] = []
+            for word in words {
+                if stemSites.contains(word), let prev = recovered.last,
+                   prev.count >= 2, prev.allSatisfy({ $0.isLetter }),
+                   !recognizedBeforeSite.contains(prev), parseIntOrWord(prev) == nil {
+                    let stem = prev.hasPrefix("m") ? "mesio" : "disto"
+                    recovered.removeLast()                                   // drop the junk stem
+                    if let lead = recovered.last, stemLeadFragments.contains(lead) {
+                        recovered.removeLast()                               // drop a leading "di"/"the"/…
+                    }
+                    recovered.append(stem)
+                    recovered.append(word)
+                } else {
+                    recovered.append(word)
+                }
+            }
+            words = recovered
+        }
+
         var i = 0
         var expectedValues = 3
         var currentValues = 0
+
+        // "disto bukal" acoustically compressed by STT into a "<di-fragment>
+        // <bop-fragment>" pair ("di bop"/"di bob"/"the bop"/…). Dangerous because a
+        // bare "bop" is the BLEEDING metric, so the site would silently mark bleeding
+        // instead of disto-buccal. Collapsed here on ADJACENCY, not spelling: a legit
+        // "di" (the "at" action) is ALWAYS followed by a site word, never "bop", and a
+        // real BOP command has the other word order ("bop di bukal") — so the pair only
+        // ever occurs as this mishear. This lives in the parser (not a ClinicalConfig
+        // regex) because only here is the site-vs-metric grammar visible; both halves
+        // are fuzzy sets so acoustic variants collapse in one rule. See STT_ISSUES #5.
+        let distoFragments: Set<String> = ["di", "the", "de", "dee", "dih"]
+        let bukalBopFragments: Set<String> = ["bop", "bob", "pop", "bup"]
         
         func updateExpectedValues(for anatomy: AnatomyType) {
             switch anatomy {
@@ -87,7 +182,16 @@ extension VoiceTokenizer {
                 i += 1
                 continue
             }
-            
+
+            // "disto bukal" mis-heard as a "<di> <bop>" pair — collapse before the
+            // generic `di`→at-action / `bop`→bleeding rules below can split it.
+            if distoFragments.contains(w) && bukalBopFragments.contains(nextW) {
+                tokens.append(.anatomy(.distoBuccal))
+                updateExpectedValues(for: .distoBuccal)
+                i += 2
+                continue
+            }
+
             if (w == "gak" || w == "tidak") && nextW == "ada" {
                 tokens.append(.action(.missing))
                 expectedValues = 3; currentValues = 0

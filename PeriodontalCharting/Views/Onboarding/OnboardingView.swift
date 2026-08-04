@@ -11,6 +11,10 @@ struct OnboardingView: View {
     @State private var config = ChartingConfiguration()
     @State private var hasRecorded = false
     @State private var recordingPermissionGranted = false
+    @State private var enrollmentStatus = ""
+    @State private var enrollmentDetail = ""
+    @State private var enrollmentSucceeded = false
+    @State private var isEnrolling = false
     
     init(hasCompletedOnboarding: Binding<Bool>, isSettingsMode: Bool = false) {
         self._hasCompletedOnboarding = hasCompletedOnboarding
@@ -37,12 +41,30 @@ struct OnboardingView: View {
                         .fontWeight(.semibold)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     
-                    Text("Please record a voice sample speaking this text:")
+                    Text("Please read the whole passage aloud at a normal pace. The length is what lets the app tell "
+                         + "your voice apart from an assistant's.")
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    
-                    Text("\"Dokter gigi menyarankan untuk menggosok gigi sebanyak dua kali sehari, terutama sebelum tidur malam, guna menjaga kesehatan gusi Anda.\"")
-                        .font(.title3)
+
+                    // ~80 words. Two separate mechanisms depend on the length:
+                    // the GATE builds its centroid from 3 s windows (several beat
+                    // one — worth ~8x EER), and the EXTRACTOR needs 10.24 s of
+                    // speech to fill its 1024 conditioning keys, below which it
+                    // refuses to enroll at all.
+                    //
+                    // The digit run at the end is deliberate: it is the speech
+                    // style the clinician actually dictates in, and it is the
+                    // dominant ASR failure mode, so the enrollment should cover it
+                    // rather than being all prose.
+                    Text("""
+                    "Dokter gigi menyarankan untuk menggosok gigi sebanyak dua kali \
+                    sehari, terutama sebelum tidur malam, guna menjaga kesehatan gusi Anda.
+
+                    Pemeriksaan periodontal dilakukan menyeluruh pada setiap permukaan \
+                    gigi, mulai dari kuadran satu sampai kuadran empat."
+                    """)
+                        .font(.body)
+                        .lineSpacing(4)
                         .padding()
                         .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -52,6 +74,7 @@ struct OnboardingView: View {
                             if audioManager.isRecording {
                                 audioManager.stopRecording()
                                 hasRecorded = true
+                                enrollCalibration()
                             } else {
                                 if !recordingPermissionGranted {
                                     audioManager.requestPermission { granted in
@@ -108,6 +131,28 @@ struct OnboardingView: View {
                             }
                         }
                         Spacer()
+                    }
+
+                    if isEnrolling || !enrollmentStatus.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(spacing: 8) {
+                                if isEnrolling {
+                                    ProgressView()
+                                } else {
+                                    Image(systemName: enrollmentSucceeded
+                                          ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                                        .foregroundStyle(enrollmentSucceeded ? .green : .orange)
+                                }
+                                Text(isEnrolling ? "Registering your voice…" : enrollmentStatus)
+                                    .font(.footnote)
+                            }
+                            if !enrollmentDetail.isEmpty && !isEnrolling {
+                                Text(enrollmentDetail)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
                 .padding()
@@ -176,6 +221,62 @@ struct OnboardingView: View {
             if let data = UserDefaults.standard.data(forKey: "ChartingConfiguration"),
                let savedConfig = try? JSONDecoder().decode(ChartingConfiguration.self, from: data) {
                 config = savedConfig
+            }
+        }
+    }
+
+    // MARK: - Enrollment
+
+    /// Build the speaker centroid from the calibration recording.
+    ///
+    /// The work lives on TranscriptionEngine so onboarding and launch-time restore
+    /// share ONE implementation; this is purely state assignment and message
+    /// mapping. Reports every stage, because "no usable speech" on its own cannot
+    /// distinguish a half-written file from a dead mic from spans that were merely
+    /// too short.
+    ///
+    /// The EXTRACTOR is re-enrolled from the same recording afterwards, and it is
+    /// a genuinely different mechanism: the gate wants a centroid over a few clean
+    /// 3 s windows (WeSpeaker vs SpeechBrain ECAPA — different weights, different
+    /// embedding space), the extractor wants 1024 frame-level keys, which needs
+    /// >= 10.3 s of speech. A recording can succeed for one and fail for the
+    /// other, so both results are reported.
+    private func enrollCalibration() {
+        isEnrolling = true
+        enrollmentStatus = ""
+        enrollmentDetail = ""
+
+        Task {
+            let result = await TranscriptionEngine.shared.enrollFromCalibration(
+                reset: true, waitForFile: true)
+
+            isEnrolling = false
+            enrollmentSucceeded = result.templates > 0
+
+            let base = String(format: "%.1f s audio · %d speech segment(s) · %d at least 3 s",
+                              result.seconds, result.totalSpans, result.eligibleSpans)
+
+            if result.templates > 0 {
+                enrollmentStatus = "Voice registered — \(result.templates) template(s)."
+                enrollmentDetail = base
+
+                // Rebuild enroll_kv from the NEW recording. Skipping this leaves
+                // the extractor conditioned on the previous clinician's voice —
+                // which would still "work", on the wrong person.
+                await TSEEngine.shared.reprepare()
+                enrollmentDetail = base + "\n" + TSEEngine.shared.status
+            } else if result.seconds < 1.0 {
+                enrollmentStatus = "Recording is too short or unreadable."
+                enrollmentDetail = String(format: "Read %.1f s after 3 s of retries. "
+                                        + "Record for at least 5 seconds.", result.seconds)
+            } else if result.totalSpans == 0 {
+                enrollmentStatus = "No speech detected in the recording."
+                enrollmentDetail = base + ". Check the microphone is not muted, and "
+                                 + "play the recording back to confirm."
+            } else {
+                enrollmentStatus = "Speech found, but no template could be built."
+                enrollmentDetail = base + ". The embedder rejected every segment — "
+                                 + "check SpeakerEmbedding_ECAPA.mlpackage is in the target."
             }
         }
     }

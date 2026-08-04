@@ -14,6 +14,12 @@ class AIVoiceViewModel: ObservableObject {
     /// chunks; the standalone LiveTranscriptionView uses its own instance.
     private let transcriber = TranscriptionViewModel()
     
+    /// Speaker-filter state for the AI Mode header. The transcriber is private, so
+    /// this is the only way the view can see it. Reading it inside a SwiftUI body
+    /// tracks the @Observable transcriber directly — no @Published mirror needed,
+    /// and it cannot go stale.
+    var gateStatus: TranscriptionViewModel.GateStatus { transcriber.gateStatus }
+    
     // Stubs for future parsing architecture
     @Published var currentCommand: AnnotationCommand? = nil
     /// The commands driving the chart. In live dictation this is the *preview*
@@ -108,7 +114,6 @@ resesi 18, 17, 16, -1 -1
         currentCommand = nil
         initializeCursorIfNeeded()
 
-        transcriber.inputMode = .live
         transcriber.onLiveTranscript = { [weak self] text in
             self?.liveTranscription = text
             self?.ingestPreview(text)         // full text → chart values + cursor

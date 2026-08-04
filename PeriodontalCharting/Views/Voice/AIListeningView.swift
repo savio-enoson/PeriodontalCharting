@@ -50,6 +50,26 @@ struct AIListeningView: View {
                 }
                 .padding(.bottom, 8)
                 
+                // Speaker filter — visible whenever real dictation is running, so a
+                // withheld line is never mistaken for Whisper missing words.
+                if viewModel.isDictating {
+                    let status = viewModel.gateStatus
+                    HStack(spacing: 6) {
+                        Image(systemName: status.active ? "person.wave.2.fill" : "person.slash")
+                            .foregroundStyle(status.active ? Color.blue : Color.orange)
+                        Text(status.summary)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        if let d = status.lastDistance {
+                            Text(String(format: "d %.2f", d))
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                    .padding(.bottom, 4)
+                }
+                
                 // Section 1: Live Transcription
                 VStack(alignment: .leading, spacing: 8) {
                     Text("LIVE TRANSCRIPTION")

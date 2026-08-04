@@ -19,6 +19,10 @@
 //  file group flattens Models/ so SileroVAD.mlmodelc lands alongside the WhisperKit
 //  *.mlmodelc bundles (same mechanism ContentView/VM rely on for AudioEncoder).
 //
+//  RUNS ON CPU ONLY — see the note in init(). Prediction failures are swallowed as
+//  prob 0 in speechProbabilities, so anything that breaks inference surfaces as
+//  "no speech detected" rather than as an error.
+//
 
 import Foundation
 import CoreML
@@ -54,7 +58,15 @@ final class SileroVADEngine: @unchecked Sendable {
     init() throws {
         guard let url = Self.locateModel() else { throw VADError.modelNotFound }
         let cfg = MLModelConfiguration()
-        cfg.computeUnits = .cpuAndNeuralEngine
+        // CPU ONLY, deliberately. This graph takes 512 samples per call — the ANE
+        // buys nothing at that size, and asking for it puts this model in
+        // contention with WhisperKit's encoder compile, which runs for MINUTES on
+        // first launch (see [ModelLoad] in TranscriptionEngine). During onboarding
+        // a second SileroVADEngine is built while that compile is still in flight;
+        // when its predictions fail, speechProbabilities appends 0 for every hop
+        // and returns all zeros, which reads downstream as "no speech detected"
+        // with no error anywhere. CPU is fast enough: ~31 hops per second of audio.
+        cfg.computeUnits = .cpuOnly
         self.model = try MLModel(contentsOf: url, configuration: cfg)
         resolveOutputNames()
     }
@@ -85,6 +97,11 @@ final class SileroVADEngine: @unchecked Sendable {
 
     /// Speech probability for every 512-sample hop across `audio`, threading the
     /// LSTM state exactly as the Python model does (state reset to zeros up front).
+    ///
+    /// NOTE: a failed prediction contributes 0, not an error. That keeps the loop
+    /// robust to a single bad hop, but means a wholly broken model returns all
+    /// zeros and looks like silence. Callers that get no spans should check
+    /// `max()` of this before concluding the audio was silent.
     func speechProbabilities(_ audio: [Float]) -> [Float] {
         let n = audio.count
         guard n > 0, let state = try? MLMultiArray(shape: Self.stateShape, dataType: .float32),
