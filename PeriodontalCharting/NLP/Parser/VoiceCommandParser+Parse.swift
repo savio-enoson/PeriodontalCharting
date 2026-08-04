@@ -2,65 +2,16 @@ import Foundation
 
 extension VoiceCommandParser {
     func parse(text: String, isFinal: Bool = false) -> [AnnotationCommand] {
-        self.tokens = TokenizerManager.shared.tokenize(text: text, isFinal: isFinal)
+        self.tokens = VoiceTokenizer.tokenize(text: text, isFinal: isFinal)
         self.commands = []
         self.tokenIndex = 0
         
         self.currentNumbers = []
         self.currentMetricMultiplier = 1
         self.lastAutoAdvancedFromTooth = nil
-        return parseTokens(isFinal: isFinal)
-    }
-    
-    func parseTokens(isFinal: Bool = false) -> [AnnotationCommand] {
         var consumedIndices = Set<Int>()
         
         while tokenIndex < tokens.count {
-            if self.tokens.isEmpty { break }
-            
-            // Apply heuristic to transform e.g. "3" "1" into "31" if 'Gigi' was omitted
-            if case .number(let n) = tokens[tokenIndex], n >= 1 && n <= 8 {
-                let lookaheadIdx = tokenIndex + 1
-                var nextNum: Int? = nil
-                while lookaheadIdx < tokens.count {
-                    if case .word(let w) = tokens[lookaheadIdx], w == "_sep_" {
-                        break
-                    }
-                    if case .number(let nn) = tokens[lookaheadIdx] {
-                        nextNum = nn
-                    }
-                    break
-                }
-                
-                if let nn = nextNum, nn >= 1 && nn <= 8 {
-                    var thirdIsNum = false
-                    var followedByAnatomy = false
-                    var lookahead3Idx = lookaheadIdx + 1
-                    while lookahead3Idx < tokens.count {
-                        if case .word(let w) = tokens[lookahead3Idx], w == "_sep_" {
-                            lookahead3Idx += 1; continue
-                        }
-                        if case .number(_) = tokens[lookahead3Idx] {
-                            thirdIsNum = true
-                        } else if case .anatomy(_) = tokens[lookahead3Idx] {
-                            followedByAnatomy = true
-                        }
-                        break
-                    }
-                    
-                    let canMerge = currentNumbers.isEmpty ? !thirdIsNum : (!thirdIsNum && followedByAnatomy)
-                    
-                    if canMerge {
-                        if !currentNumbers.isEmpty {
-                            flushNumbers(force: true)
-                        }
-                        let toothId = n * 10 + nn
-                        self.tokens[tokenIndex] = .toothIdentifier(toothId)
-                        self.tokens.remove(at: lookaheadIdx)
-                    }
-                }
-            }
-            
             // print("PROCESSING INDEX", tokenIndex, tokens[tokenIndex])
             let token = tokens[tokenIndex]
             
@@ -69,7 +20,26 @@ extension VoiceCommandParser {
                 flushPostTargetIfPending()
                 isPostTargeting = false
                 
-
+                if currentNumbers.isEmpty {
+                    var numCount = 0
+                    var lookaheadIdx = tokenIndex
+                    while lookaheadIdx < tokens.count {
+                        if case .number(_) = tokens[lookaheadIdx] {
+                            numCount += 1
+                            lookaheadIdx += 1
+                        } else if case .word(let w) = tokens[lookaheadIdx], w == "_sep_" {
+                            lookaheadIdx += 1
+                        } else {
+                            break
+                        }
+                    }
+                    
+                    let metric = self.cursor.currentMetric
+                    if numCount >= 3 && metric != .probingDepth && metric != .gingivalMargin {
+                        self.cursor.setMetric(.probingDepth)
+                    }
+                }
+                
                 if let sel = activeSelection, sel.expectedSlots == 1, self.cursor.currentMetric == .probingDepth {
                     var numCount = 0
                     var j = tokenIndex
@@ -116,21 +86,9 @@ extension VoiceCommandParser {
                     }
                     
                     if isRange {
-                        var endAnatomies: [AnatomyType] = []
-                        while peek < tokens.count {
-                            if case .word(let w) = tokens[peek], w != "_sep_" { peek += 1; continue }
-                            if case .anatomy(let anat) = tokens[peek] {
-                                endAnatomies.append(anat)
-                                peek += 1
-                                continue
-                            }
-                            break
-                        }
-                        if let ea = endAnatomies.last { endAnatomy = ea }
-                        
-                        while peek < tokens.count {
-                            if case .word(let w) = tokens[peek], w != "_sep_" { peek += 1; continue }
-                            break
+                        if peek < tokens.count, case .anatomy(let anat) = tokens[peek] {
+                            endAnatomy = anat
+                            peek += 1
                         }
                         if peek < tokens.count, case .toothIdentifier(let et) = tokens[peek] {
                             endTooth = et
@@ -198,7 +156,7 @@ extension VoiceCommandParser {
                     commands.append(cmd)
                     
                     if let targetTooth = endTooth ?? Optional(tooth) {
-                        _ = self.cursor.jumpTo(tooth: targetTooth, aspect: finalSel.startAspect ?? self.cursor.currentAspect, updateSequenceIndex: true)
+                        _ = self.cursor.jumpTo(tooth: targetTooth, aspect: finalSel.startAspect ?? self.cursor.currentAspect, updateSequenceIndex: self.cursor.currentMetric == .probingDepth)
                     }
                     
                     consumedIndices.insert(originalToothIndex)
@@ -216,7 +174,7 @@ extension VoiceCommandParser {
                 /* print("BEFORE EMIT METRIC..."); */ emitBoolIfPending()
                 flushNumbers(force: true)
                 
-                _ = self.cursor.jumpTo(tooth: tooth, aspect: self.cursor.currentAspect, updateSequenceIndex: true)
+                _ = self.cursor.jumpTo(tooth: tooth, aspect: self.cursor.currentAspect, updateSequenceIndex: self.cursor.currentMetric == .probingDepth)
                 
                 var isRange = false
                 var peek = tokenIndex + 1
@@ -235,18 +193,14 @@ extension VoiceCommandParser {
                 var endTooth: Int? = nil
                 
                 if isRange {
-                    var endAnatomies: [AnatomyType] = []
                     while peek < tokens.count {
                         if case .word(let w) = tokens[peek], w != "_sep_" { peek += 1; continue }
-                        if case .anatomy(let anat) = tokens[peek] {
-                            endAnatomies.append(anat)
-                            peek += 1
-                            continue
-                        }
                         break
                     }
-                    if let ea = endAnatomies.last { endAnatomy = ea }
-                    
+                    if peek < tokens.count, case .anatomy(let anat) = tokens[peek] {
+                        endAnatomy = anat
+                        peek += 1
+                    }
                     while peek < tokens.count {
                         if case .word(let w) = tokens[peek], w != "_sep_" { peek += 1; continue }
                         break
@@ -284,7 +238,6 @@ extension VoiceCommandParser {
                         eAspect = sAspect; eSite = sSite
                     }
                     self.activeSelection = TeethSelection(startTooth: ToothObject.create(number: tooth), startAspect: sAspect, startSite: sSite, endTooth: ToothObject.create(number: et), endAspect: eAspect, endSite: eSite)
-                    _ = self.cursor.jumpTo(tooth: et, aspect: eAspect ?? self.cursor.currentAspect, updateSequenceIndex: true)
                     for i in tokenIndex..<peek { consumedIndices.insert(i) }
                     tokenIndex = peek
                 } else if isRange {
@@ -401,10 +354,8 @@ extension VoiceCommandParser {
                 } else if a == .all {
                     metricHadSpecificTargets = true
                     
-                    let upperSeq = cursor.configuration.getSequence(for: .upper, aspect: .buccal)
-                    let lowerSeq = cursor.configuration.getSequence(for: .lower, aspect: .buccal)
-                    let selUpper = TeethSelection(startTooth: ToothObject.create(number: upperSeq.first ?? 18), startAspect: nil, startSite: nil, endTooth: ToothObject.create(number: upperSeq.last ?? 28), endAspect: nil, endSite: nil)
-                    let selLower = TeethSelection(startTooth: ToothObject.create(number: lowerSeq.first ?? 48), startAspect: nil, startSite: nil, endTooth: ToothObject.create(number: lowerSeq.last ?? 38), endAspect: nil, endSite: nil)
+                    let selUpper = TeethSelection(startTooth: ToothObject.create(number: 18), startAspect: nil, startSite: nil, endTooth: ToothObject.create(number: 28), endAspect: nil, endSite: nil)
+                    let selLower = TeethSelection(startTooth: ToothObject.create(number: 48), startAspect: nil, startSite: nil, endTooth: ToothObject.create(number: 38), endAspect: nil, endSite: nil)
                     
                     if isPostTargeting, let template = postTargetTemplate {
                         let cmdUpper = AnnotationCommand(operation: template.operation, teethSelection: selUpper, aspect: nil, values: Array(repeating: template.values.first ?? "True", count: selUpper.expectedSlots))
@@ -440,10 +391,6 @@ extension VoiceCommandParser {
                     
                     restoreToMainSequence()
                 } else if a == .missing || a == .missing2 {
-                    if tokenIndex > 0, case .action(let prevA) = tokens[tokenIndex - 1], (prevA == .missing || prevA == .missing2) {
-                        tokenIndex += 1
-                        continue
-                    }
                     flushPostTargetIfPending()
                     /* print("BEFORE EMIT METRIC..."); */ emitBoolIfPending()
                     flushNumbers(force: true)
@@ -456,8 +403,8 @@ extension VoiceCommandParser {
                         case .toothIdentifier(let t):
                             targets.insert(t, at: 0)
                             j -= 1
-                        case .word(let w):
-                            if w == "_sep_" { j = -1 } else { j -= 1 }
+                        case .word(_):
+                            j -= 1
                         default:
                             j = -1 // break
                         }
@@ -496,18 +443,14 @@ extension VoiceCommandParser {
                     var endAnatomy: AnatomyType? = nil
                     var endTooth: Int? = nil
                     
-                    var endAnatomies: [AnatomyType] = []
                     while peek < tokens.count {
                         if case .word(let w) = tokens[peek], w != "_sep_" { peek += 1; continue }
-                        if case .anatomy(let anat) = tokens[peek] {
-                            endAnatomies.append(anat)
-                            peek += 1
-                            continue
-                        }
                         break
                     }
-                    if let ea = endAnatomies.last { endAnatomy = ea }
-                    
+                    if peek < tokens.count, case .anatomy(let anat) = tokens[peek] {
+                        endAnatomy = anat
+                        peek += 1
+                    }
                     while peek < tokens.count {
                         if case .word(let w) = tokens[peek], w != "_sep_" { peek += 1; continue }
                         break

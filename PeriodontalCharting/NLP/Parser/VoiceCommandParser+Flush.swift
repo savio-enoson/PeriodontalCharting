@@ -2,6 +2,8 @@ import Foundation
 
 extension VoiceCommandParser {
     func restoreToMainSequence() {
+        cursor.setMetric(.probingDepth)
+        currentMetricMultiplier = 1
         activeSelection = nil
         cursor.resyncToothToSequence()
         cursor.syncWithSequence()

@@ -68,24 +68,18 @@ resesi 18, 17, 16, -1 -1
         stopSimulation()
         committedCommands = nil   // debug/instant: no ghosting, everything solid
         liveTranscription = text
-        let config = self.getConfiguration()
+        let parser = VoiceCommandParser(configuration: self.getConfiguration())
+        let parsedFinal = parser.parse(text: text, isFinal: true)
         
-        Task.detached {
-            let parser = VoiceCommandParser(configuration: config)
-            let parsedFinal = parser.parse(text: text, isFinal: true)
-            
-            await MainActor.run {
-                self.commandHistory = parsedFinal
-                if let last = parsedFinal.last, last.operation == parser.cursor.currentMetric {
-                    self.currentCommand = last
-                } else {
-                    self.currentCommand = nil
-                }
-                self.currentCursor = parser.cursor
-                self.activeSelection = parser.activeSelection
-                self.pendingValues = parser.pendingValues
-            }
+        self.commandHistory = parsedFinal
+        if let last = parsedFinal.last, last.operation == parser.cursor.currentMetric {
+            self.currentCommand = last
+        } else {
+            self.currentCommand = nil
         }
+        self.currentCursor = parser.cursor
+        self.activeSelection = parser.activeSelection
+        self.pendingValues = parser.pendingValues
     }
     
     private func internalStopSimulation() {
@@ -265,7 +259,8 @@ resesi 18, 17, 16, -1 -1
     }
 }
 
-
+// Silence strict concurrency warnings for struct models crossed through Task.detached
+extension ChartingConfiguration: @unchecked Sendable {}
 
 extension AnnotationCommand: @unchecked Sendable {}
 extension ChartingCursor: @unchecked Sendable {}

@@ -3,8 +3,53 @@ import Foundation
 extension VoiceTokenizer {
     static func tokenize(text: String, isFinal: Bool = false) -> [VoiceToken] {
         var tokens: [VoiceToken] = []
-        // Normalization is now handled centrally by TokenizerManager.normalizeSTT
-        let words = text.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
+        let cleaned = text.lowercased()
+            .replacingOccurrences(of: ".", with: " _sep_ ")
+            .replacingOccurrences(of: ",", with: " ")
+            .replacingOccurrences(of: "\n", with: " _sep_ ")
+            .replacingOccurrences(of: "\r", with: " ")
+            .replacingOccurrences(of: "{", with: " ")
+            .replacingOccurrences(of: "}", with: " ")
+            .replacingOccurrences(of: "mesiolingual", with: "mesio lingual")
+            .replacingOccurrences(of: "distolingual", with: "disto lingual")
+            .replacingOccurrences(of: "mesiobukal", with: "mesio bukal")
+            .replacingOccurrences(of: "distobukal", with: "disto bukal")
+            .replacingOccurrences(of: "mesiopalatal", with: "mesio palatal")
+            .replacingOccurrences(of: "distopalatal", with: "disto palatal")
+            .replacingOccurrences(of: "mesiolabial", with: "mesio labial")
+            .replacingOccurrences(of: "distolabial", with: "disto labial")
+            .replacingOccurrences(of: "mid-", with: "mid ")
+            .replacingOccurrences(of: "mid ", with: "mid")
+            .replacingOccurrences(of: " -", with: " minus ")
+            .replacingOccurrences(of: "-", with: " ")
+            .replacingOccurrences(of: "b o p", with: "bop")
+            .replacingOccurrences(of: "b.o.p", with: "bop")
+            .replacingOccurrences(of: "bleeding on probing", with: "bop")
+            .replacingOccurrences(of: "bleeding or probing", with: "bop")
+            .replacingOccurrences(of: "probing depth", with: "poket")
+        
+        var words = cleaned.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
+        
+        words = words.map { word in
+            switch word {
+            case "misio", "mesyio", "mesyu", "meso", "mezzo": return "mesio"
+            case "sampe": return "sampai"
+            case "disco": return "disto"
+            case "misial", "mesyal": return "mesial"
+            case "diso", "distio", "dista": return "disto"
+            case "disal": return "distal"
+            case "bocal", "vocal", "buka", "buckal", "buk": return "bukal"
+            case "plat", "plug", "flak", "plek", "flek", "black", "flag": return "plak"
+            case "pocket", "poke", "poked": return "poket"
+            case "beope", "biopi", "tiopi", "bleeding": return "bop"
+            case "palato", "palat": return "palatal"
+            case "linguo": return "lingual"
+            case "enggak", "nda", "ndak": return "gak"
+            case "mobiliti": return "mobility"
+            case "purkasi", "furkasion", "forkasi": return "furkasi"
+            default: return word
+            }
+        }
         
         var i = 0
         var expectedValues = 3
@@ -12,7 +57,7 @@ extension VoiceTokenizer {
         
         func updateExpectedValues(for anatomy: AnatomyType) {
             switch anatomy {
-            case .mesioBuccal, .distoBuccal, .mesioLingual, .distoLingual, .mesioPalatal, .distoPalatal, .mesial, .distal, .midBuccal, .midLingual, .midPalatal, .midLabial, .mesioLabial, .distoLabial:
+            case .mesioBuccal, .distoBuccal, .mesioLingual, .distoLingual, .mesioPalatal, .distoPalatal, .mesial, .distal, .midBuccal, .midLingual, .midPalatal, .midLabial:
                 expectedValues = 1
             case .buccal, .lingual, .palatal, .labial, .upperJaw, .lowerJaw:
                 expectedValues = 3
@@ -141,6 +186,32 @@ extension VoiceTokenizer {
                     i += 1; continue
                 }
                 
+                if num >= 1 && num <= 8 {
+                    if i + 1 < words.count, let nextNum = parseIntOrWord(words[i+1]), nextNum >= 1 && nextNum <= 8 {
+                        let combined = num * 10 + nextNum
+                        var thirdIsSingleDigit = false
+                        var isStreamEnd = false
+                        if i + 2 < words.count {
+                            if let thirdNum = parseIntOrWord(words[i+2]), thirdNum >= 0 && thirdNum <= 9 {
+                                thirdIsSingleDigit = true
+                            }
+                        } else {
+                            isStreamEnd = true
+                        }
+                        
+                        let isStartOfBlock = currentValues == 0 || (expectedValues >= 3 && currentValues % expectedValues == 0)
+                        
+                        if !thirdIsSingleDigit && isStartOfBlock {
+                            if isStreamEnd && !isFinal {
+                                // Defer merging: we might just be waiting for the user to dictate the 3rd value.
+                            } else {
+                                tokens.append(.toothIdentifier(combined))
+                                expectedValues = 3; currentValues = 0
+                                i += 2; continue
+                            }
+                        }
+                    }
+                }
                 tokens.append(.number(num))
                 currentValues += 1
                 i += 1; continue
@@ -181,7 +252,6 @@ extension VoiceTokenizer {
             tokens.append(.word(w))
             i += 1
         }
-        _ = expectedValues
         return tokens
     }
 }

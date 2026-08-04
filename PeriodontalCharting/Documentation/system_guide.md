@@ -2,7 +2,7 @@
 
 This document is the definitive high-level reference for anyone who wants to understand the inner logic of the Periodontal Charting voice command system. It covers the full pipeline from raw speech to chart annotation: how text becomes tokens, how tokens drive a state machine, and how that state machine produces structured commands that update the clinical record.
 
-For the project brief, getting started, and roadmap, see [project_guide.md](project_guide.md). For the file-by-file Swift reference, see [frontend_guide.md](frontend_guide.md). For the ML tokenizer architecture, training pipeline, and evaluation details, see [ml_tokenizer_guide.md](ml_tokenizer_guide.md).
+For the project brief, getting started, and roadmap, see [project_guide.md](project_guide.md). For the file-by-file Swift reference, see [frontend_guide.md](frontend_guide.md).
 
 ---
 
@@ -11,7 +11,6 @@ For the project brief, getting started, and roadmap, see [project_guide.md](proj
 1. [System Overview](#1-system-overview)
 2. [Pipeline Architecture](#2-pipeline-architecture)
 3. [Phase 1 — Tokenization](#3-phase-1--tokenization)
-   - [TokenizerManager Dispatch](#30-tokenizermanager-dispatch)
    - [Pre-tokenization Normalization](#31-pre-tokenization-normalization)
    - [Token Types](#32-token-types)
    - [Multi-word Alias Matching](#33-multi-word-alias-matching)
@@ -60,35 +59,19 @@ The key constraints this creates for the NLP engine:
 ## 2. Pipeline Architecture
 
 ```
-Live Microphone (Indonesian clinical dictation)
+Raw Speech (Indonesian)
         │
         ▼
-┌────────────────────────────────┐
-│  SileroVADEngine              │  Pre-filter: detect speech segments
-└────────────────────────────────┘
-        │  [SpeechSegment]
-        ▼
-┌────────────────────────────────┐
-│  TranscriptionEngine          │  WhisperKit (Whisper large-v3-turbo)
-│  + SequenceBiasFilter         │  Clinical vocabulary logit biasing
-└────────────────────────────────┘
-        │  Indonesian text (word by word)
-        ▼
-┌────────────────────────────────┐
-│  TokenizerManager             │  normalizeSTT() + dispatch
-│  (singleton)                  │
-│    ├─ [ML path]               │
-│    │  MLVoiceTokenizer        │  Phase 1a: VoiceTokenizerModel.mlmodel
-│    │  (IndoBERT + CoreML)     │  99.43% F1 word-level classifier
-│    └─ [Fallback / CLI]        │
-│       VoiceTokenizer          │  Phase 1b: rule-based (regression tests)
-└────────────────────────────────┘
+┌─────────────────────┐
+│   VoiceTokenizer    │  Phase 1: text → [VoiceToken]
+│  (+Helpers, +Parse) │
+└─────────────────────┘
         │  [VoiceToken]
         ▼
-┌────────────────────────────────┐
-│  VoiceCommandParser           │  Phase 2: tokens → state changes → [AnnotationCommand]
-│  (+Parse, +Flush, +Lookahead) │
-└────────────────────────────────┘
+┌──────────────────────────────┐
+│      VoiceCommandParser      │  Phase 2: tokens → state changes → [AnnotationCommand]
+│  (+Parse, +Flush, +Lookahead)│
+└──────────────────────────────┘
         │  [AnnotationCommand]
         ▼
 ┌──────────────────┐
@@ -99,12 +82,7 @@ Live Microphone (Indonesian clinical dictation)
     ChartDashboard  (SwiftUI view re-render)
 ```
 
-> [!NOTE]
-> The STT layer (`SileroVADEngine` → `TranscriptionEngine`) and the annotation pipeline (`TokenizerManager` → `VoiceCommandParser` → `ChartProcessor`) are currently separate. The transcription output feeds into the annotation pipeline via `AIVoiceViewModel` in simulation mode. Wiring live WhisperKit output into `AIVoiceViewModel` is the remaining integration step.
-
-**Phase 0 (Speech-to-Text):** `SileroVADEngine` pre-segments the audio into speech spans. `TranscriptionEngine` (WhisperKit) transcribes each span to Indonesian text, with `SequenceBiasFilter` boosting clinical vocabulary at each decoder step.
-
-**Phase 1 (Tokenization):** `TokenizerManager.tokenize(text:isFinal:)` normalizes the raw STT text and dispatches to either `MLVoiceTokenizer` (primary: CoreML IndoBERT classifier) or `VoiceTokenizer` (fallback). The result is a flat array of typed `VoiceToken` values. This is a pure, stateless function — given the same text, it always returns the same token array.
+**Phase 1 (Tokenization):** `VoiceTokenizer` converts a raw string into a flat array of typed `VoiceToken` values. This is a pure, stateless function — given the same text, it always returns the same token array.
 
 **Phase 2 (Parsing):** `VoiceCommandParser` iterates the token array with a stateful cursor. It accumulates numbers, tracks the current tooth and surface selection, and emits `AnnotationCommand` objects at the right moments. The parser is a *class* (reference semantics) but its mutable state is reset on every `parse(text:isFinal:)` call — the parser instance itself is recreated fresh for every call from `AIVoiceViewModel`.
 
@@ -114,35 +92,11 @@ Live Microphone (Indonesian clinical dictation)
 
 ## 3. Phase 1 — Tokenization
 
-Phase 1 converts a raw Indonesian text string into a flat array of typed `VoiceToken` values. All calls flow through `TokenizerManager.shared.tokenize(text:isFinal:)`, which owns shared preprocessing and dispatches to either the ML or legacy tokenizer.
-
-### 3.0 TokenizerManager Dispatch
-
-`TokenizerManager` is an `ObservableObject` singleton that acts as the **single entry point** for all tokenization calls. It provides:
-
-1. **`normalizeSTT(text:isForML:)`** — shared preprocessing applied to the raw STT output before any tokenization. This function is the canonical home of the normalization that was previously embedded inside `VoiceTokenizer+Parsing.swift`. It handles:
-   - Sentence boundary replacement (`. \n` → `_sep_`)
-   - Clinical shorthand normalization (`b.o.p` → `bop`, `probing depth` → `poket`)
-   - Word-level spell correction (e.g., `bocal` → `bukal`, `purkasi` → `furkasi`)
-   - Compound-word handling: *for ML path* (`mesio bukal` → `mesiobukal` so IndoBERT sees the whole compound as one token); *for legacy path* (the reverse — `mesiobukal` → `mesio bukal` for the multi-word alias matcher).
-   - Long-number splitting (3+ consecutive digit strings are space-separated before tokenization)
-   - Tooth-number merging (`gigi satu enam` → `gigi 16`)
-
-2. **Dispatch:**
-   - If `useMLTokenizer == true` and `mlTokenizer != nil`: call `MLVoiceTokenizer.tokenize(text:isFinal:)` on the ML-normalized text. This is the primary runtime path.
-   - Otherwise: call `VoiceTokenizer.tokenize(text:isFinal:)` on the legacy-normalized text. Used by the CLI regression test runner and as a fallback if the CoreML model fails to load.
-
-3. **`useMLTokenizer` flag** — `true` by default. Can be set to `false` at runtime for regression testing or debugging against the rule-based baseline.
-
-> [!NOTE]
-> The CLI regression test runner (`run_regression_tests.swift` / `test_parser.sh`) compiles and links `VoiceTokenizer.swift` directly, bypassing `TokenizerManager`. This means CLI tests always run against the legacy rule-based path. To test the ML tokenizer path end-to-end, use the in-app Debug menu's **Test vs Ground Truth** button.
+`VoiceTokenizer` (`NLP/Tokenizer/`) performs a **single left-to-right pass** over the input text. It first applies string-level normalization, then walks word by word, attempting multi-word alias matches before falling back to single-word matches.
 
 ### 3.1 Pre-tokenization Normalization
 
-> [!NOTE]
-> The normalization rules described in this section are now implemented in `TokenizerManager.normalizeSTT(text:isForML:)` and apply to **both** the ML and legacy tokenizer paths. The ML path additionally joins compound anatomy words (e.g. `mesio bukal` → `mesiobukal`) so that IndoBERT sees them as a single token; the legacy path splits them back so the multi-word alias matcher fires correctly.
-
-Before tokenization, the following regex/string substitutions are applied to handle common transcription artefacts and clinical shorthand:
+Before splitting into words, the tokenizer applies regex/string substitutions to handle common transcription artefacts and clinical shorthand:
 
 | Input pattern | Normalized to | Reason |
 |---|---|---|
@@ -285,7 +239,7 @@ Each anatomy context carries an `expectedValues` count that tells the tokenizer 
 | `postTargetAnatomy` | `AnatomyType?` | The anatomy token captured when entering post-targeting mode. |
 | `metricHadSpecificTargets` | `Bool` | Tracks whether the active metric received any explicit tooth/anatomy targets. Used for plaque mass-assignment fallback. |
 | `lastAutoAdvancedFromTooth` | `Int?` | Guards against double-advancing the cursor when the same tooth appears again immediately after auto-advance. |
-| `currentMetricMultiplier` | `Int` | Multiplier from `.metric(_, multiplier:)`. Set to **-1** for recession GM (`METRIC_GM_NEG`) and **1** for all other metrics. Applied in `flushNumbers` and `startPostTargeting` so that recession values are stored negative. Preserved across interruptions — `restoreToMainSequence()` does not reset it. |
+| `currentMetricMultiplier` | `Int` | Multiplier from `.metric(_, multiplier:)` — reserved for future unit scaling. |
 | `commands` | `[AnnotationCommand]` | All emitted commands accumulating during this parse call. |
 | `tokens` | `[VoiceToken]` | The full tokenized array for the current parse call. |
 | `tokenIndex` | `Int` | Current position in the `tokens` array. |
@@ -295,9 +249,10 @@ Each anatomy context carries an `expectedValues` count that tells the tokenizer 
 #### `.number(n)`
 
 1. If a pending post-target template exists, flush it first (`flushPostTargetIfPending`) and exit post-targeting mode.
-2. **Single-site escape hatch:** If `activeSelection.expectedSlots == 1` and the current metric is `.probingDepth`, peek ahead — if 3 or more numbers are coming, clear `activeSelection` (the clinician is dictating a full-tooth sequence, not a single-site correction).
-3. If the current metric is boolean (bleeding/plaque/implant), emit any pending bool command and restore to main sequence before treating the number as a probing depth value.
-4. Append `n` to `currentNumbers`, then attempt `flushNumbers(force: false)`.
+2. **Array-Lookahead Fallback:** If `currentNumbers` is empty, look ahead in the token stream. If 3 or more contiguous numbers (ignoring `_sep_`) follow, and the current metric expects fewer than 3 values (e.g. `furcation` or `mobility`), the metric is automatically overridden to `.probingDepth`. This self-corrects cases where a user dictates 3 numbers sequentially for a 1-value metric without explicitly declaring the switch back to Probing Depth.
+3. **Single-site escape hatch:** If `activeSelection.expectedSlots == 1` and the current metric is `.probingDepth`, peek ahead — if 3 or more numbers are coming, clear `activeSelection` (the clinician is dictating a full-tooth sequence, not a single-site correction).
+4. If the current metric is boolean (bleeding/plaque/implant), emit any pending bool command and restore to main sequence before treating the number as a probing depth value.
+5. Append `n` to `currentNumbers`, then attempt `flushNumbers(force: false)`.
 
 #### `.toothIdentifier(tooth)`
 
@@ -329,7 +284,7 @@ Each anatomy context carries an `expectedValues` count that tells the tokenizer 
 - **`.missing` / `.missing2` (`"gak ada"` / `"tidak ada"`):** Walk backwards from the current token index collecting any adjacent `.toothIdentifier` tokens (the teeth the clinician just named). Emit `.missing` commands for all of them, add them to `missingTeeth`, and advance the cursor past them.
 - **`.until` / `.until2` (`"sampai"` / `"hingga"`):** Flush pending state. Look ahead for an optional end anatomy and end tooth. If found, set `activeSelection` from the cursor's current position to the end. If not yet in the stream, set `activeSelection = nil` (safe suspension) to prevent stale highlights.
 - **`.at` / `.at2` (`"pada"` / `"di"`):** For non-boolean metrics, enter post-targeting mode via `startPostTargeting()`. Has no effect for boolean metrics (they don't need post-targeting; their targets are set by direct anatomy/tooth selection).
-- **`.all` (`"semua"` / `"seluruh"`):** Immediately emit two whole-jaw commands derived from `cursor.configuration.getSequence(for:aspect:)` (respecting the configured tooth range — not hardcoded to 18–28/48–38) with `aspect = nil` for the current metric. Sets `metricHadSpecificTargets = true` to suppress the plaque fallback.
+- **`.all` (`"semua"` / `"seluruh"`):** Immediately emit two whole-jaw commands (upper 18→28, lower 48→38) with `aspect = nil` for the current metric. Sets `metricHadSpecificTargets = true` to suppress the plaque fallback.
 
 #### `.anatomy(a)`
 
@@ -556,13 +511,10 @@ Each 3-value block is flushed and the cursor advances without requiring `"lanjut
 
 `restoreToMainSequence()` is called after any out-of-band operation (explicit commit, missing tooth, post-target flush, jaw switch) to return to the default charting flow:
 
-1. **Preserves `cursor.currentMetric`** — the metric active at the moment of interruption is kept. The function does not reset it to `.probingDepth`. Returning to a metric after a `missing` or `commit` action leaves the clinician in the same metric context they were in before the interruption.
+1. Sets `cursor.currentMetric = .probingDepth` (the default sequence metric).
 2. Clears `activeSelection`.
 3. Calls `cursor.resyncToothToSequence()` then `cursor.syncWithSequence()` to ensure the cursor tooth matches its sequence position.
 4. Skips any `missingTeeth` by advancing until a non-missing tooth is found.
-
-> [!NOTE]
-> `currentMetricMultiplier` is also preserved across `restoreToMainSequence()`. A gingival-margin recession session (multiplier = -1) interrupted by a `missing` action will correctly continue with negative values after restoration.
 
 ---
 
@@ -616,7 +568,7 @@ struct ChartingCursor: Equatable {
 | `jumpTo(tooth:)` | Override `currentTooth` for immediate highlighting without touching the sequence. |
 | `jumpTo(jaw:)` | In `jawFirst` mode: jump `primaryIndex` to the target jaw, reset `secondaryIndex = 0`, call `setupSequence()`. |
 | `jumpTo(aspect:)` | Jump `secondaryIndex` to target aspect within the current jaw, maintaining tooth position if possible. |
-| `jumpTo(tooth:aspect:updateSequenceIndex:)` | Full search across all `(primary, secondary)` row pairs. If `updateSequenceIndex = true`, permanently reposition. If `false`, **all state (including `currentTooth`) is fully restored** — the call is a true no-op on cursor state used as a guard/check. |
+| `jumpTo(tooth:aspect:updateSequenceIndex:)` | Full search across all `(primary, secondary)` row pairs. If `updateSequenceIndex = true`, permanently reposition. If `false`, update `currentTooth` in-place for highlighting without disrupting the sequence. |
 | `setMetric(_:)` | Update `currentMetric`. |
 
 ---
@@ -768,13 +720,13 @@ These are the non-obvious rules that prevent subtle bugs. They are worth knowing
 
 | Rule | Rationale |
 |---|---|
-| **`_sep_` is an opaque wall.** Range lookahead stops at `_sep_`. List continuation stops at `_sep_`. The dual-number tooth-ID heuristic also stops at `_sep_`. The `.missing` backward-walk stops at `_sep_`. | A `.` or `\n` in the transcript ends the current dictation sentence. Allowing lookahead or lookback to cross it would collapse unrelated sentences into false ranges or wrong tooth targets. |
+| **`_sep_` is an opaque wall.** Range lookahead stops at `_sep_`. List continuation stops at `_sep_`. | A `.` or `\n` in the transcript ends the current dictation sentence. Allowing lookahead to cross it would collapse unrelated sentences into false ranges. |
 | **`"dan"` is not a structural operator.** The conjunction is simply a `.word` token that is skipped, not an action that triggers aggregation. Aggregation happens implicitly when consecutive anatomy tokens share the same tooth/aspect. | This prevents `"Bukal dan Resesi"` from being misread as a range instruction. |
 | **The metric never clears `activeSelection`.** Only tooth identifiers, jawbone jumps, explicit commits, and full flushes clear it. | Allows `"Mesio Bukal Resesi 1"` to work — the anatomy selects the site, then the metric changes, then `1` is applied to the still-active selection. |
-| **Boolean metrics bypass `flushNumbers`.** They are emitted only by `emitBoolIfPending()`. If a number arrives while a boolean metric is active, the parser emits the boolean first, restores to main sequence, then treats the number as a probing depth (or whatever the restored metric is) value. | Prevents ghost number commands from being emitted under boolean metrics. |
+| **Boolean metrics bypass `flushNumbers`.** They are emitted only by `emitBoolIfPending()`. If a number arrives while a boolean metric is active, the parser emits the boolean first, restores to main sequence, then treats the number as a probing depth value. | Prevents ghost number commands from being emitted under boolean metrics. |
 | **The `plaque` fallback is last-resort only.** If `metricHadSpecificTargets` is false when switching away from `.plaque`, a whole-sequence command is emitted. | Handles `"Plaque pada semua gigi"` naturally but does not emit duplicate commands if individual targets were already specified. |
 | **Auto-advance only on plain-tooth PD selections.** An `activeSelection` with a specific anatomy or site (`startAspect != nil`) blocks auto-advance after flushing. | Ensures that a corrective single-site PD annotation (`"Mesio Bukal 16 2"`) does not advance the cursor to the next tooth. |
 | **`lastAutoAdvancedFromTooth` is cleared on every new tooth identifier.** | Prevents the snap-back from triggering when a genuine new tooth was explicitly named. |
-| **`restoreToMainSequence` preserves the active metric and multiplier.** It does not reset to `.probingDepth`. The metric that was active at the time of the interruption is kept so the clinician can resume the same metric context immediately after a `commit`, `missing`, or post-target flush. | Prevents silent clinical errors where a recession session (GM, multiplier -1) would resume as probing depth after a brief interruption. |
+| **`restoreToMainSequence` short-circuits for boolean metrics.** It returns early before entering the numeric flush path when the current metric is `.bleeding`, `.plaque`, or `.implant`. | Prevents a spurious number-flush command from being emitted when restoring context after a boolean range (e.g., `"BOP dari bukal 16 hingga bukal 15"`). |
 | **`ChartProcessor` rebuilds from full `commandHistory` on every change.** | Guarantees idempotency. Mid-stream partial parses cannot corrupt the chart state because the history is always replayed from scratch. |
 | **`VoiceCommandParser` is re-instantiated on every word.** | Guarantees that no parser instance state leaks between words. The full accumulated text, not the parser, is the session state. |
