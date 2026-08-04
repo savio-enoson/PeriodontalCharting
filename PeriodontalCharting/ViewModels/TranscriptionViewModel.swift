@@ -431,31 +431,22 @@ final class TranscriptionViewModel: LiveCaptureDriver {
             tokenizer: tokenizer,
             audioProcessor: whisper.audioProcessor,
             decodingOptions: options,
-<<<<<<< Updated upstream
             // Confirm a segment only after 2 following segments (WhisperKit default).
             // The AI Mode chart commits off *confirmed* text, and confirmed text with
             // more following context is more stabilized/accurate — Whisper keeps
             // refining the unconfirmed tail, so freezing too early (tried 1) fed the
-            // chart a rougher hypothesis than the Transcribe sheet shows. Kept at 2:
-            // charting accuracy is worth ~one phrase of latency (which felt the same
-            // in practice). See STT_ISSUES.md #2/#6 for the full latency-vs-accuracy
-            // reasoning (Tier 3 preview is the way to get both).
-            requiredSegmentsForConfirmation: 2,
-=======
-            // Confirm as soon as one segment follows. Whisper keeps refining the
-            // unconfirmed tail, so freezing early trades accuracy on unclear audio
-            // for latency; measured decode headroom is 10–50x realtime, so the cost
-            // is de-ghost lag rather than throughput.
+            // chart a rougher hypothesis than the Transcribe sheet shows.
             //
-            // NOTE: `finalizeOnSilence: true` (Tier 3b — commit the pending tail at
-            // each VAD pause, which is what made a value of 1 acceptable) is removed
-            // here because it does not exist in the WhisperKit this project actually
-            // resolves. It lives in the local fork at ../argmax-oss-swift, whose path
-            // is currently missing on disk. Restore the fork, then re-add it.
+            // The latency branch set this to 1, paired with `finalizeOnSilence: true`
+            // (Tier 3b — commit the pending tail at each VAD pause), which is what
+            // made 1 acceptable. That parameter does NOT exist in the WhisperKit this
+            // project resolves; it lives in the local fork at ../argmax-oss-swift,
+            // whose path is currently missing on disk. Until the fork is restored,
+            // 1 without it is just the rough setting with no compensation — so this
+            // stays at 2. Restore the fork, re-add finalizeOnSilence, THEN drop to 1.
             //
             // See STT_ISSUES.md #2/#6 for the full latency-vs-accuracy history.
-            requiredSegmentsForConfirmation: 1,
->>>>>>> Stashed changes
+            requiredSegmentsForConfirmation: 2,
             // [LATENCY Tier 1] Bound the live buffer. The streamer re-decodes the
             // ENTIRE retained buffer every ~100 ms tick, so 60 s = two full 30 s
             // Whisper windows decoded per tick. 32 s keeps a full 30 s window (+
@@ -515,17 +506,6 @@ final class TranscriptionViewModel: LiveCaptureDriver {
                 // so annotations never react to unconfirmed hypotheses.
                 if newState.confirmedSegments.count != self.lastConfirmedSegmentCount {
                     self.lastConfirmedSegmentCount = newState.confirmedSegments.count
-<<<<<<< Updated upstream
-
-                    if gate != nil {
-                        // confirmedSegments is CUMULATIVE, so this difference is
-                        // already a running total — assigning, not adding, is what
-                        // keeps it from counting the same withheld line every tick.
-                        self.gateStatus.withheldSegments =
-                            newState.confirmedSegments.count - gatedConfirmed.count
-                    }
-=======
->>>>>>> Stashed changes
 
                     // What the gate WOULD do, printed but not acted on. Three cases
                     // look identical from the transcript: no span covers the time, a
@@ -548,9 +528,6 @@ final class TranscriptionViewModel: LiveCaptureDriver {
                     }
                     if gate != nil { self.gateStatus.withheldSegments = wouldWithhold }
 
-<<<<<<< Updated upstream
-                    let cleanedConfirmed = ClinicalConfig.clean(cleanText(gatedConfirmed))
-=======
                     let cleanedConfirmed = ClinicalConfig.clean(confirmed)
                     // [STT diag] The exact confirmed text that feeds the chart, before
                     // and after ClinicalConfig.clean. `raw` is what Whisper actually
@@ -558,7 +535,6 @@ final class TranscriptionViewModel: LiveCaptureDriver {
                     // two to catch mishears clean MISSED vs. ones it fixed. Grep `[STT]`.
                     print("[STT] raw:   \(confirmed)")
                     print("[STT] clean: \(cleanedConfirmed)")
->>>>>>> Stashed changes
                     let confirmedCumulative = self.liveConfirmedCarryOver.isEmpty
                         ? cleanedConfirmed
                         : (self.liveConfirmedCarryOver + " " + cleanedConfirmed).trimmingCharacters(in: .whitespaces)
