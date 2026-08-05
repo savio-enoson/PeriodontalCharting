@@ -3,7 +3,7 @@ import Foundation
 struct ChartTestingUtilities {
     
     static func getProjectDirectoryURL() -> URL {
-        return URL(fileURLWithPath: "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/PeriodontalCharting/TestTranscripts/")
+        return URL(fileURLWithPath: "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/PeriodontalCharting/Testing/Ground/")
     }
     
     static func getFileURL() -> URL {

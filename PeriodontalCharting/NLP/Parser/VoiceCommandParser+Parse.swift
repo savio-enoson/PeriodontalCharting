@@ -2,7 +2,7 @@ import Foundation
 
 extension VoiceCommandParser {
     func parse(text: String, isFinal: Bool = false) -> [AnnotationCommand] {
-        self.tokens = VoiceTokenizer.tokenize(text: text, isFinal: isFinal)
+        self.tokens = TokenizerManager.shared.tokenize(text: text, isFinal: isFinal)
         self.commands = []
         self.tokenIndex = 0
         
@@ -596,6 +596,10 @@ extension VoiceCommandParser {
                                     let sSite = min(existingSel.startSite ?? resolved.site!, resolved.site!)
                                     let eSite = max(existingSel.endSite ?? resolved.site!, resolved.site!)
                                     self.activeSelection = TeethSelection(startTooth: existingSel.startTooth, startAspect: existingSel.startAspect, startSite: sSite, endTooth: existingSel.endTooth, endAspect: existingSel.endAspect, endSite: eSite)
+                                } else if let existingSel = self.activeSelection,
+                                          existingSel.startTooth.toothNumber != existingSel.endTooth.toothNumber,
+                                          self.currentNumbers.isEmpty {
+                                    // Ignore unexpected standalone anatomy tokens if a range was just formed and is awaiting numbers.
                                 } else {
                                     self.activeSelection = TeethSelection(startTooth: ToothObject.create(number: refTooth), startAspect: resolved.aspect, startSite: resolved.site, endTooth: ToothObject.create(number: refTooth), endAspect: resolved.aspect, endSite: resolved.site)
                                 }

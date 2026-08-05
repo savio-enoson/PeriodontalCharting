@@ -27,8 +27,7 @@ struct PeriodontalChartingApp: App {
                 // decision IS a distance from that centroid. This call had no
                 // call site before; that is why the gate looked inert at launch.
                 .task {
-                    await TranscriptionEngine.shared.restoreEnrollment()
-                    await TSEEngine.shared.prepare()
+                    // Restore enrollment centroid here if needed
                 }
         }
     }
