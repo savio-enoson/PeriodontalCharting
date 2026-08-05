@@ -8,6 +8,7 @@ struct SelectionDebugMenu: View {
     
     @State private var showAlert = false
     @State private var alertMessage = ""
+    @AppStorage("useMLTokenizer") var useMLTokenizer: Bool = true
     
     var body: some View {
         NavigationStack {
@@ -27,6 +28,10 @@ struct SelectionDebugMenu: View {
                     NavigationLink("Open gate test harness") {
                         SpeakerGateDebugView()
                     }
+                }
+                
+                Section("NLP Phase 1 Tokenizer") {
+                    Toggle("Use ML Tokenizer (IndoBERT)", isOn: $useMLTokenizer)
                 }
                 
                 Section("AI Simulation") {

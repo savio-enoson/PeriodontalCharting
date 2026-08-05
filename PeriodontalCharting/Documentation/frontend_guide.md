@@ -4,6 +4,7 @@ This guide covers the project structure, component architecture, and Swift file-
 
 For the project brief and getting started instructions, see [project_guide.md](project_guide.md).
 For the NLP command inference system, see [system_guide.md](system_guide.md).
+For the ML tokenizer internals, see [ml_tokenizer_guide.md](ml_tokenizer_guide.md).
 
 ---
 
@@ -23,6 +24,7 @@ For the NLP command inference system, see [system_guide.md](system_guide.md).
    - [Audio/](#39-audio)
    - [NLP/](#310-nlp-overview)
    - [Testing/](#311-testing)
+   - [AI/ (Model Bundles)](#312-ai-model-bundles)
 4. [Performance Architecture](#4-performance-architecture)
 
 ---
@@ -48,9 +50,13 @@ PeriodontalCharting/
     │   ├── Models/
     │   │   └── VoiceToken.swift                   <- Enums: ActionType, AnatomyType, VoiceToken
     │   ├── Tokenizer/
-    │   │   ├── VoiceTokenizer.swift               <- Core base class
-    │   │   ├── VoiceTokenizer+Helpers.swift       <- Tokenizing utilities
-    │   │   └── VoiceTokenizer+Parsing.swift       <- Main text-to-token transformation loop
+    │   │   ├── TokenizerManager.swift             <- Singleton dispatcher: ML vs. rule-based path
+    │   │   ├── MLVoiceTokenizer.swift             <- CoreML inference + label→VoiceToken mapping
+    │   │   ├── MLTokenizerState.swift             <- Per-sentence state (activeMetric, priorLabels)
+    │   │   ├── BertTokenizer.swift                <- WordPiece tokenizer backed by vocab.txt
+    │   │   ├── VoiceTokenizer.swift               <- Rule-based base class (fallback path)
+    │   │   ├── VoiceTokenizer+Helpers.swift       <- Rule-based utilities
+    │   │   └── VoiceTokenizer+Parsing.swift       <- Rule-based text-to-token transformation loop
     │   └── Parser/
     │       ├── VoiceCommandParser.swift           <- State properties and init
     │       ├── VoiceCommandParser+Parse.swift     <- Main token processing loop
@@ -62,10 +68,24 @@ PeriodontalCharting/
     │   └── ChartingCursor.swift                   <- Traversal state machine
     │
     ├── Audio/
-    │   └── AudioManager.swift                     <- AVFoundation recording/playback
+    │   ├── AudioManager.swift                     <- AVFoundation recording/playback (calibration)
+    │   ├── SileroVADEngine.swift                  <- Silero VAD v5 CoreML wrapper
+    │   ├── TranscriptionEngine.swift              <- App-wide WhisperKit singleton + SpeakerGate owner
+    │   ├── SpeakerGate.swift                      <- ECAPA-TDNN CoreML wrapper + Verdict enum
+    │   ├── SpeakerGateService.swift               <- Enrollment + multi-template centroid logic
+    │   ├── Domain/
+    │   │   ├── ClinicalConfig.swift               <- Clinical vocabulary bias values
+    │   │   └── SequenceBiasFilter.swift           <- Per-step Whisper logit biasing
+    │   └── TSE/
+    │       ├── TSEConfig.swift                    <- TSE pipeline configuration
+    │       ├── TSEEngine.swift                    <- Top-level TSE orchestrator
+    │       ├── TSEExtractor.swift                 <- BSRNN feature extraction
+    │       ├── TSEFeatures.swift                  <- Audio feature computation
+    │       └── TSERescue.swift                    <- Fallback / rescue logic
     │
     ├── ViewModels/
-    │   └── AIVoiceViewModel.swift                 <- Voice simulation + parser orchestration
+    │   ├── AIVoiceViewModel.swift                 <- Voice pipeline orchestration + simulation
+    │   └── TranscriptionViewModel.swift           <- WhisperKit streaming + speaker gate integration
     │
     ├── Views/
     │   ├── Chart/
@@ -79,7 +99,8 @@ PeriodontalCharting/
     │   │   └── NumberPadPopoverView.swift         <- Full-screen numeric entry popover
     │   │
     │   ├── Voice/
-    │   │   └── AIListeningView.swift              <- Voice overlay panel
+    │   │   ├── AIListeningView.swift              <- Voice overlay panel (simulation + live mic)
+    │   │   └── LiveTranscriptionView.swift        <- Standalone live mic transcription sheet
     │   │
     │   └── Onboarding/
     │       ├── OnboardingView.swift               <- Main onboarding/settings view
@@ -100,20 +121,34 @@ PeriodontalCharting/
     │   │   ├── I-01.txt … I-07.txt               <- Implant feature tests
     │   │   ├── M-01.txt … M-06.txt               <- Mobility feature tests
     │   │   └── N-01.txt … N-05.txt               <- Number/range feature tests
-    │   └── Ground/
-    │       ├── ground_truth.json                  <- Reference output for dr_lucky_ground
-    │       ├── C-01_ground.json … N-05_ground.json <- Per-feature ground truth JSONs
+    │   ├── Ground/
+    │   │   ├── ground_truth.json                  <- Reference output for dr_lucky_ground
+    │   │   └── C-01_ground.json … N-05_ground.json <- Per-feature ground truth JSONs
+    │   └── TestResults/                           <- Output directory for CLI test runner results
+    │
+    ├── AI/                                        <- CoreML model bundles + vocab (gitignored)
+    │   ├── vocab.txt                              <- IndoBERT WordPiece vocabulary (BertTokenizer)
+    │   ├── SileroVAD.mlpackage                   <- Silero VAD v5 (~2 MB)
+    │   ├── SpeakerEmbedding_ECAPA.mlpackage      <- ECAPA-TDNN speaker embedder (~6 MB)
+    │   ├── EnrollmentEncoder_WeSpeaker.mlpackage <- WeSpeaker ResNet34 enrollment encoder
+    │   ├── EnrollmentProjection_BSRNN.mlpackage  <- BSRNN enrollment projection
+    │   ├── SpeakerConditioning_BSRNN.mlpackage   <- BSRNN speaker conditioning
+    │   ├── TSEFrontend_BSRNN.mlpackage           <- BSRNN TSE frontend
+    │   ├── TSEMasker_BSRNN.mlpackage             <- BSRNN masker
+    │   ├── TargetSeparator_BSRNN.mlpackage       <- BSRNN target separator
+    │   └── openai_whisper-large-v3_turbo_632MB/  <- Whisper model (~632 MB, downloaded on first launch)
     │
     ├── Documentation/
     │   ├── project_guide.md
     │   ├── frontend_guide.md                      <- This file
-    │   └── system_guide.md
+    │   ├── system_guide.md
+    │   └── ml_tokenizer_guide.md
     │
     └── Assets.xcassets/
 ```
 
 > [!NOTE]
-> The testing infrastructure has been significantly expanded since the original documentation. `TestTranscripts/` has been reorganised into `Testing/` with `Raw/` and `Ground/` subdirectories. There are now 29 feature-specific transcripts (prefixed `C-`, `F-`, `I-`, `M-`, `N-`) alongside the two full-session transcripts, each paired with a ground truth JSON.
+> The `AI/` directory and all `.mlpackage`/`.mlmodelc` bundles are gitignored. A fresh clone has no bundled models; `TranscriptionEngine` downloads Whisper from HuggingFace on first launch and remembers the path in `UserDefaults`. The `VoiceTokenizerModel_int8.mlmodelc` used by `MLVoiceTokenizer` must be placed at the project root for the `#if DEBUG` fallback path to work during development.
 
 ---
 
@@ -159,6 +194,7 @@ PeriodontalChartingApp
 - **`ChartDashboard`** owns `mouth: [Int: ToothObject]` (the entire clinical record) and two `@StateObject`s: `ChartSelectionModel` (which cells are highlighted orange) and `AIVoiceViewModel` (the voice pipeline state).
 - **`ChartSelectionModel`** is injected as an `@EnvironmentObject`, allowing `ToothColumnView` to read highlight state without prop-drilling. It relies entirely on the native `@Published` wrapper for invalidation, avoiding manual `objectWillChange.send()` calls that can cause double-publishing SwiftUI warnings.
 - When `AIVoiceViewModel.commandHistory` changes, `ChartDashboard.onChange` rebuilds `mouth` from scratch by replaying all commands in order via `ChartProcessor.apply`. This ensures idempotency — replaying the full history always produces the same chart state regardless of mid-stream parsing artefacts.
+- During live dictation, `AIVoiceViewModel.committedCommands` is non-nil. `ChartDashboard` compares it against `commandHistory` to determine which cells are "committed" (solid) vs. "preview" (ghosted).
 - **`ChartDashboard`** observes `aiViewModel.currentCursor` to keep the `ScrollViewProxy` camera in sync with the underlying parser tooth position. It deliberately does not listen to `activeSelection` changes directly during zoom operations to prevent jittery camera panning.
 
 ### FDI Quadrant Order
@@ -238,6 +274,10 @@ When AI Mode is active, massive content insets (`contentInset`) equal to the scr
 **Command application:**
 
 When the parser emits commands, `ChartDashboard` replays the entire `commandHistory` by rebuilding `mouth` from `fullMouthEmpty()` and calling `ChartProcessor.apply(command:to:)` for each command. This ensures determinism regardless of mid-stream partial parses.
+
+**Ghosted preview:**
+
+When `aiViewModel.committedCommands` is non-nil (i.e. live dictation is active), each cell checks whether its coordinate is backed by the committed set. Cells present in `commandHistory` but not in `committedCommands` render with reduced opacity, signalling that Whisper has not yet confirmed that portion of the transcript.
 
 ---
 
@@ -349,7 +389,17 @@ A floating overlay panel that slides in from the trailing edge in AI Mode. Fills
 
 **Visual design:** `.ultraThinMaterial` background forced to `.light` color scheme, clipped to `RoundedRectangle(cornerRadius: 24)`. An orange-to-deep-orange gradient border (`LinearGradient`) pulses on a 1.5s repeating `easeInOut` animation. A soft shadow (`radius: 20, x: -10, y: 10`) creates depth.
 
-**Three sections:**
+**Header controls:**
+
+- **AI Mode icon** — `apple.intelligence` SF Symbol with orange gradient and `.pulse` symbol effect.
+- **Live mic button** — Gated on `TranscriptionEngine.shared.isReady`. Shows a `ProgressView` spinner while the Whisper model is loading, then a `mic` / `mic.fill` icon. Tapping calls `viewModel.toggleLiveDictation()`. Active state renders the icon red with a pulse effect.
+- **Simulation play/stop button** — `play.circle.fill` / `stop.circle.fill`. Calls `viewModel.toggleSimulation(from: viewModel.selectedTestTranscript)`. Independent of the live mic — the two modes are mutually exclusive at runtime.
+
+**Speaker gate status strip** (visible only during live dictation):
+
+Displays `viewModel.gateStatus` — a computed property forwarded from the private `TranscriptionViewModel`. Shows whether the speaker filter is active and the last cosine distance measurement.
+
+**Three content sections:**
 
 1. **Live Transcription** — scrollable monospace `footnote`-sized `Text` showing the accumulating `liveTranscription` string. Minimum 120pt height (~5 lines).
 2. **Current Command** — structured card with three rows:
@@ -358,7 +408,15 @@ A floating overlay panel that slides in from the trailing edge in AI Mode. Fills
    - *Pending / Last Applied Values* — `HStack` of capsule-outlined value chips. Shows `pendingValues` when non-empty, otherwise the last applied command's values.
 3. **History** — last 5 `AnnotationCommand` values in reverse-chronological order, each rendered as a `HistoryCard` with operation name and tooth/values.
 
-**Simulation trigger:** A play/stop button in the header calls `viewModel.toggleSimulation(from: viewModel.selectedTestTranscript)`, running whichever transcript is currently selected in the debug menu at the configured WPM.
+---
+
+#### `Views/Voice/LiveTranscriptionView.swift`
+
+A standalone view for testing live microphone transcription independently of the chart. Uses its own `@State private var viewModel = TranscriptionViewModel()` instance (not the one owned by `AIVoiceViewModel`).
+
+Displays: a status line (recording dot / transcribing spinner / message), a speaker gate status strip, a scrollable transcript text area, and a Start Recording / Stop button. Loads the model on `.task { await viewModel.loadModel() }`.
+
+This view is primarily used during development and can be presented from any debug surface. It does not interact with `ChartDashboard` or the annotation pipeline.
 
 ---
 
@@ -401,16 +459,18 @@ A unified configuration interface for both initial onboarding and in-app setting
 
 #### `ViewModels/AIVoiceViewModel.swift`
 
-An `@MainActor` `ObservableObject` that orchestrates the voice parsing simulation and maintains the live state of the NLP pipeline.
+An `@MainActor` `ObservableObject` that orchestrates the voice pipeline — both debug simulation and real live dictation — and maintains the live state of the NLP pipeline.
 
 **State properties:**
 
 | Property | Type | Role |
 |---|---|---|
-| `liveTranscription` | `String` | The raw incoming text stream, updated word-by-word during simulation. |
-| `isListening` | `Bool` | Whether the simulation or live microphone recording is currently active. |
+| `liveTranscription` | `String` | The raw incoming text stream, updated continuously during simulation or live dictation. |
+| `isListening` | `Bool` | True while the debug simulation is running. |
+| `isDictating` | `Bool` | True while real Whisper live dictation is active. The two modes are mutually exclusive. |
 | `currentCommand` | `AnnotationCommand?` | The most recent command emitted by the parser. |
-| `commandHistory` | `[AnnotationCommand]` | Complete list of all applied mutations. `ChartDashboard` listens to this to rebuild the mouth. |
+| `commandHistory` | `[AnnotationCommand]` | Complete list of all applied mutations. `ChartDashboard` listens to this to rebuild the mouth. During live dictation, derived from the full preview transcript. |
+| `committedCommands` | `[AnnotationCommand]?` | Commands parsed from Whisper-confirmed chunks only. `nil` during simulation/instant fill (no ghosting). Non-nil during live dictation — cells not in this set render ghosted. |
 | `currentCursor` | `ChartingCursor?` | Current traversal position of the parser. |
 | `activeSelection` | `TeethSelection?` | Any explicitly targeted out-of-sequence selection. |
 | `pendingValues` | `[String]` | Numbers buffered by the parser but not yet committed. |
@@ -420,11 +480,44 @@ An `@MainActor` `ObservableObject` that orchestrates the voice parsing simulatio
 
 **Key methods:**
 
-- **`toggleSimulation(from:)`** — If already listening, stops the simulation. Otherwise starts it.
-- **`startSimulation(from:)`** *(private)* — Splits the transcript into words (expanding `\n`, `.`, `,` as discrete tokens). Resets state, then spawns an `@MainActor` bound `Task` that appends one word per loop iteration. The actual parsing is offloaded to a detached thread via `Task.detached` calling a `nonisolated` helper (`parseOffline`) to prevent UI hitching during dense token streams.
-- **`parseInstant(text:)`** — Stops any running simulation, sets `liveTranscription = text`, and runs a fresh `VoiceCommandParser` with `isFinal: true`. All state is committed immediately. Used by the Debug menu's **Fill Chart** button.
-- **`initializeCursorIfNeeded()`** — If `currentCursor == nil`, creates a new `VoiceCommandParser` and copies its initial cursor position. Called when AI Mode is first opened.
-- **Flush timer** — A 1.5-second inactivity timer. If no new words arrive, the timer fires and runs a detached parse (`isFinal: true`) to force-flush any buffered values. After the last word in the array is consumed, a final flush also runs unconditionally. All view state mutations safely rejoin the main thread. Model types and the `VoiceCommandParser` itself explicitly conform to `@unchecked Sendable` to safely cross isolation boundaries without triggering incorrect `@MainActor` inference in Swift 6.
+- **`toggleSimulation(from:)`** — If already listening, stops the simulation. Otherwise starts it. Stops live dictation first (mutually exclusive).
+- **`startSimulation(from:)`** *(private)* — Splits the transcript into words (expanding `\n`, `.`, `,` as discrete tokens). Resets state, then spawns an `@MainActor` bound `Task` that appends one word per loop iteration. Parsing is offloaded to a detached thread via `Task.detached` calling a `nonisolated` helper (`parseOffline`) to prevent UI hitching during dense token streams. Sets `committedCommands = nil` (no ghosting in simulation mode).
+- **`parseInstant(text:)`** — Stops any running simulation/dictation, sets `liveTranscription = text`, runs a fresh `VoiceCommandParser` with `isFinal: true`. Sets `committedCommands = nil` (no ghosting). Used by the Debug menu's **Fill Chart** button.
+- **`startLiveDictation()`** — Hooks `TranscriptionViewModel.onLiveTranscript` → `ingestPreview` (full transcript → chart preview) and `onConfirmedTranscript` → `ingestCommitted` (confirmed-only → committed set). Calls `TokenizerManager.shared.loadModel()` if not yet loaded, then starts the live stream.
+- **`stopLiveDictation()`** — Stops the stream, performs a final `isFinal: true` parse over the full accumulated transcript, and sets `committedCommands = commandHistory` so no cells remain ghosted.
+- **`ingestPreview(_:isFinal:)`** *(private)* — Parses the full running transcript (skips if text unchanged). Updates `commandHistory`, `currentCommand`, `currentCursor`, `activeSelection`, `pendingValues`.
+- **`ingestCommitted(_:)`** *(private)* — Parses confirmed-only text. Updates `committedCommands`. The chart uses this to determine ghosting.
+- **`initializeCursorIfNeeded()`** — Creates an initial `ChartingCursor` when AI Mode is first opened.
+
+---
+
+#### `ViewModels/TranscriptionViewModel.swift`
+
+An `@MainActor @Observable` class that owns the WhisperKit live streaming logic and exposes two callback hooks for `AIVoiceViewModel` to consume.
+
+**Observable state:**
+
+| Property | Meaning |
+|---|---|
+| `transcript` | Cleaned, display-ready running transcript (confirmed + unconfirmed). |
+| `statusMessage` | Human-readable loading/recording status. |
+| `isModelReady` | True once `TranscriptionEngine` reports `isReady`. |
+| `isTranscribing` | True while the audio pipeline is active. |
+| `isRecording` | True while the microphone stream is open. |
+
+**Callback hooks (set by `AIVoiceViewModel.startLiveDictation`):**
+
+| Hook | Fires when | Used for |
+|---|---|---|
+| `onLiveTranscript` | Every stream state update (confirmed + unconfirmed) | Live transcript display + preview parse |
+| `onConfirmedTranscript` | Only when Whisper confirms a new chunk | Committed command parse (ghosting boundary) |
+
+**Key design decisions:**
+
+- **Model sharing:** `TranscriptionViewModel` does not own WhisperKit — it reads `TranscriptionEngine.shared.whisperKit`. The model is ~632 MB; a per-view-model copy would exceed memory limits. All live and batch transcription shares the same singleton instance.
+- **Carry-over on restart:** Route/interruption changes (Bluetooth blip, call interrupt) rebuild the `AudioStreamTranscriber`, which resets its internal segment state. `liveCarryOver` stashes the transcript text accumulated before the restart and prepends it, so a mid-session interruption does not wipe the note.
+- **Speaker gate:** `speakerGate: SpeakerGateService?` is set from `TranscriptionEngine.shared.speakerGate`. Confirmed Whisper segments whose time range falls in a REJECTED span from the gate are withheld from the parser callbacks.
+- **`GateStatus`** — a computed struct surfaced as `viewModel.gateStatus`. Contains `active: Bool` (enrollment present), `summary: String`, and `lastDistance: Double?`. Consumed by `AIListeningView` and `LiveTranscriptionView` without requiring direct access to the private transcriber.
 
 ---
 
@@ -645,9 +738,11 @@ struct ChartingCursor: Equatable {
 
 ### 3.9 `Audio/`
 
+The `Audio/` directory owns all real-time audio processing: voice recording, on-device speech-to-text, and speaker isolation. The speaker isolation components (`SpeakerGate`, `SpeakerGateService`, `TSE/`) are handled by a separate peer module; they are present in the codebase and integrated into the pipeline but their deep specification is out of scope here.
+
 #### `Audio/AudioManager.swift`
 
-Singleton `ObservableObject` managing all `AVFoundation` interactions.
+Singleton `ObservableObject` managing voice calibration recording and playback via `AVFoundation`.
 
 **Published state:**
 
@@ -658,7 +753,7 @@ Singleton `ObservableObject` managing all `AVFoundation` interactions.
 | `hasRecording` | True if `voice_sample.wav` exists in Documents directory |
 | `recordingURL` | Path to the WAV file |
 
-**Recording format:** 16kHz, mono, 16-bit linear PCM WAV — matches input requirements of typical STT models (e.g., Whisper).
+**Recording format:** 16kHz, mono, 16-bit linear PCM WAV — matches input requirements of Whisper and the ECAPA-TDNN speaker embedder.
 
 ```swift
 AVFormatIDKey: kAudioFormatLinearPCM
@@ -671,18 +766,79 @@ Session configured as `.playAndRecord` with `.allowBluetoothHFP` so clinicians c
 
 ---
 
+#### `Audio/SileroVADEngine.swift`
+
+Wraps **Silero VAD v5** (`SileroVAD.mlpackage`, ~2 MB). The model is a streaming LSTM that processes **32 ms audio chunks at 16 kHz** and outputs a speech probability per chunk.
+
+**Two usage modes:**
+
+- **Batch mode (`speechTimestamps`)** — runs the full audio array and returns `[SpeechSegment]` (half-open sample index ranges). Used to identify speech spans before Whisper transcription.
+- **Streaming mode (`speechProbabilities`)** — returns per-chunk probability array for gating live Whisper windows.
+
+VAD failure degrades gracefully: if `SileroVADEngine` fails to initialize, batch transcription falls back to whole-clip mode and live mode decodes every window.
+
+---
+
+#### `Audio/TranscriptionEngine.swift`
+
+App-wide `@MainActor @Observable` singleton. Loaded once at launch; all transcription (`AIVoiceViewModel`, `TranscriptionViewModel`, `LiveTranscriptionView`) draws from this one instance.
+
+**Owned resources:**
+
+| Resource | Description |
+|---|---|
+| `whisperKit: WhisperKit?` | Whisper large-v3-turbo (~632 MB). Loaded from bundle, cached path in `UserDefaults`, or downloaded from HuggingFace with progress reporting. |
+| `vad: SileroVADEngine?` | Silero VAD, loaded independently of WhisperKit so enrollment can proceed without waiting for the large model. |
+| `speakerGate: SpeakerGateService?` | Enrollment lives here (not in a per-view instance) so the centroid survives view lifecycle changes. |
+
+**Observable state:** `isReady: Bool`, `statusMessage: String`, `downloadProgress: Double` (0…1 during download, 0 otherwise). `AIListeningView` gates the mic button on `TranscriptionEngine.shared.isReady`.
+
+**Model sourcing order:** bundled at app root → previously downloaded (remembered in `UserDefaults`) → downloaded from HuggingFace with progress and retry.
+
+---
+
+#### `Audio/SpeakerGate.swift`
+
+CoreML wrapper around `SpeakerEmbedding_ECAPA.mlpackage`. Computes a 192-dim speaker embedding from a 3.0 s, 16 kHz mono waveform (`[1, 48000] f32`). Shorter input is zero-padded; longer is centre-cropped.
+
+Returns a `GateResult` with a `Verdict` (`.accept`, `.confirm`, `.reject`, `.tooShort`) and the cosine distance to the enrolled centroid. Thresholds: `d < 0.675` → ACCEPT; `d < 0.775` → CONFIRM; `d ≥ 0.775` → REJECT.
+
+---
+
+#### `Audio/SpeakerGateService.swift`
+
+Orchestrates enrollment and per-segment verification using `SpeakerGate` and `SileroVADEngine`. Maintains a multi-template centroid (average embedding over all enrollment clips) for improved speaker separation vs. single-template enrollment.
+
+---
+
+#### `Audio/Domain/ClinicalConfig.swift` & `Audio/Domain/SequenceBiasFilter.swift`
+
+`ClinicalConfig` defines the clinical vocabulary word tiers and their logit bias values. `SequenceBiasFilter` applies these biases per decoder step inside WhisperKit, steering Whisper output toward clinically valid words without using `initialPrompt` (which was found to cause >50% of audio to be silently dropped in multi-minute sessions).
+
+---
+
+#### `Audio/TSE/`
+
+Five files implementing the BSRNN target source enhancement pipeline: `TSEConfig.swift` (pipeline parameters), `TSEEngine.swift` (top-level orchestrator), `TSEExtractor.swift` (feature extraction from model bundles), `TSEFeatures.swift` (audio feature computation), `TSERescue.swift` (fallback/rescue logic). This sub-system is handled by a separate peer module.
+
+---
+
 ### 3.10 `NLP/` (Overview)
 
-The NLP pipeline implements a three-phase architecture: **Tokenization → Parsing → Application**. For the complete specification of token types, parsing rules, targeting modes, lookahead utilities, and worked examples, see [system_guide.md](system_guide.md).
+The NLP pipeline implements a **three-phase architecture**: **Tokenization → Parsing → Application**. For the complete specification of token types, parsing rules, targeting modes, lookahead utilities, and worked examples, see [system_guide.md](system_guide.md). For the ML tokenizer internals, see [ml_tokenizer_guide.md](ml_tokenizer_guide.md).
 
 **Directory structure:**
 
 | File | Responsibility |
 |---|---|
 | `NLP/Models/VoiceToken.swift` | `ActionType`, `AnatomyType`, `VoiceToken` enum definitions |
-| `NLP/Tokenizer/VoiceTokenizer.swift` | Base class declaration |
-| `NLP/Tokenizer/VoiceTokenizer+Helpers.swift` | Utility helpers |
-| `NLP/Tokenizer/VoiceTokenizer+Parsing.swift` | Main `tokenize(text:isFinal:)` loop — normalization, spell correction, multi-word matching, number disambiguation |
+| `NLP/Tokenizer/TokenizerManager.swift` | Singleton entry point: normalisation, `_sep_` splitting, ML/rule-based dispatch, post-processing pass |
+| `NLP/Tokenizer/MLVoiceTokenizer.swift` | CoreML model load, pre-allocated buffer inference, `mapLabelToVoiceTokens()` |
+| `NLP/Tokenizer/MLTokenizerState.swift` | Per-sentence state struct (`activeMetric`, `priorLabels`, `contextWindow`) |
+| `NLP/Tokenizer/BertTokenizer.swift` | WordPiece tokenizer backed by `AI/vocab.txt` |
+| `NLP/Tokenizer/VoiceTokenizer.swift` | Rule-based base class declaration (fallback path) |
+| `NLP/Tokenizer/VoiceTokenizer+Helpers.swift` | Rule-based utility helpers |
+| `NLP/Tokenizer/VoiceTokenizer+Parsing.swift` | Rule-based main `tokenize(text:isFinal:)` loop — normalization, spell correction, multi-word matching, number disambiguation |
 | `NLP/Parser/VoiceCommandParser.swift` | State property declarations and `init(configuration:)` |
 | `NLP/Parser/VoiceCommandParser+Parse.swift` | Main `parse(text:isFinal:)` token loop — all case handlers |
 | `NLP/Parser/VoiceCommandParser+Flush.swift` | `flushNumbers`, `emitBoolIfPending`, `startPostTargeting`, `flushPostTargetIfPending`, `restoreToMainSequence` |
@@ -701,7 +857,6 @@ struct TestTranscripts {
     static let student_ground: String = "..."
     static let dr_lucky_ground: String = "..."
 
-    static let allTranscripts = ["dr_lucky_ground", "student_ground"]
     static let all = [
         ("student_ground", student_ground),
         ("dr_lucky_ground", dr_lucky_ground),
@@ -709,12 +864,11 @@ struct TestTranscripts {
 }
 ```
 
-> [!NOTE]
-> The three-transcript `student_1_ground` / `student_2_ground` / `dr_lucky_ground` split from the original documentation has been consolidated. The current `student_ground` is a unified site-by-site transcript and `dr_lucky_ground` is the realistic clinician transcript. The `all` array drives the `Picker` in `SelectionDebugMenu` and `AIVoiceViewModel.selectedTestTranscript`.
+The `all` array drives the `Picker` in `SelectionDebugMenu` and `AIVoiceViewModel.selectedTestTranscript`.
 
 **`dr_lucky_ground`:**
 
-A realistic **sequence-based** full-mouth charting session by an experienced clinician. Demonstrates the broadest command vocabulary and is the primary regression test transcript. Exercises: tooth exclusion (`"gigi 18 gak ada"`), implicit sequence (`"2 2 2"` streams), range commands (`"resesi dari mesio bukal 17 sampai disto bukal 15 minus 1"`), BOP ranges, navigation (`"Lanjut"`, `"Lanjut palatal"`), jaw switching (`"rahang bawah"`), single-site targeting, verbal numbers (`"satu mili"`), and boolean mass-assignment (`"Plaque pada semua gigi"`).
+A realistic **sequence-based** full-mouth charting session by an experienced clinician. Exercises the broadest command vocabulary and is the primary regression test transcript. Covers: tooth exclusion (`"gigi 18 gak ada"`), implicit sequence (`"2 2 2"` streams), range commands (`"resesi dari mesio bukal 17 sampai disto bukal 15 minus 1"`), BOP ranges, navigation (`"Lanjut"`, `"Lanjut palatal"`), jaw switching (`"rahang bawah"`), single-site targeting, verbal numbers (`"satu mili"`), and boolean mass-assignment (`"Plaque pada semua gigi"`).
 
 **`student_ground`:**
 
@@ -734,32 +888,42 @@ The `Testing/Raw/` directory contains 29 focused unit transcripts, each testing 
 
 Each has a paired ground truth JSON in `Testing/Ground/` (e.g. `C-01_ground.json`).
 
+**`Testing/TestResults/`** — Output directory written by the CLI test runner (`test_parser.sh`) for structured results across all ground truth comparisons.
+
 #### CLI Regression Testing (`test_parser.sh` + `run_regression_tests.swift`)
 
 A fully **headless, terminal-executable** regression test for the NLP parsing pipeline. No Xcode or simulator required.
 
 **Files at project root:**
-- **`test_parser.sh`** — Compiles all necessary Swift source files (NLP, Models, Configuration, `ChartTestingUtilities`, `TestTranscripts`) using `swiftc` into a standalone binary (`test_runner`), then executes it.
-- **`run_regression_tests.swift`** — The `@main` entry point for the CLI binary. Loads `ground_truth.json` from `Testing/Ground/`, parses `dr_lucky_ground` using the default `ChartingConfiguration()`, and reports differences.
+- **`test_parser.sh`** — Compiles all necessary Swift source files (NLP, Models, Configuration, `ChartTestingUtilities`, `TestTranscripts`) using `swiftc` into a standalone binary, then executes it against all ground truth files in `Testing/Ground/`.
+- **`run_regression_tests.swift`** — `@main` Swift entry point for the CLI binary. Iterates all ground truth files, re-parses the corresponding transcript, and prints a pass/fail report.
 
-**Usage:**
-```bash
-cd /path/to/PeriodontalCharting   # project root (where test_parser.sh lives)
-./test_parser.sh
-```
+---
 
-**Exit codes:**
-- `0` — `✅ Regression Test PASSED: No differences found.`
-- `1` — `❌ Regression Test FAILED:` followed by per-tooth difference strings, or an error if `ground_truth.json` is missing.
+### 3.12 `AI/` (Model Bundles)
 
-> [!IMPORTANT]
-> The CLI runner always uses `ChartingConfiguration()` defaults (the zig-zag pattern). If you change the default configuration, re-generate `ground_truth.json` using the **Save as Ground Truth** button in the app's Debug menu before running the CLI test.
+The `AI/` directory contains all CoreML model packages and the BERT vocabulary file. It is **gitignored** — these files must be obtained separately and placed here for the app to function.
+
+| File / Directory | Size (approx.) | Used by |
+|---|---|---|
+| `vocab.txt` | ~200 KB | `BertTokenizer` — WordPiece vocabulary for `MLVoiceTokenizer` |
+| `SileroVAD.mlpackage` | ~2 MB | `SileroVADEngine` — speech segment detection |
+| `SpeakerEmbedding_ECAPA.mlpackage` | ~6 MB | `SpeakerGate` — 192-dim speaker embedding |
+| `EnrollmentEncoder_WeSpeaker.mlpackage` | — | `SpeakerGateService` — WeSpeaker ResNet34 enrollment |
+| `EnrollmentProjection_BSRNN.mlpackage` | — | TSE pipeline — enrollment projection |
+| `SpeakerConditioning_BSRNN.mlpackage` | — | TSE pipeline — speaker conditioning |
+| `TSEFrontend_BSRNN.mlpackage` | — | `TSEExtractor` — BSRNN frontend |
+| `TSEMasker_BSRNN.mlpackage` | — | `TSEExtractor` — BSRNN masker |
+| `TargetSeparator_BSRNN.mlpackage` | — | `TSEExtractor` — final separator |
+| `openai_whisper-large-v3_turbo_632MB/` | ~632 MB | `TranscriptionEngine` — STT model (downloaded on first launch) |
+
+`MLVoiceTokenizer` loads `VoiceTokenizerModel_int8.mlmodelc` from `Bundle.main`. In `#if DEBUG` builds, if the bundle resource is absent, it falls back to a hardcoded absolute path at the project root: `/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/VoiceTokenizerModel_int8.mlmodelc`.
 
 ---
 
 ## 4. Performance Architecture
 
-Given the visual density of the chart (32 teeth, each with complex vector paths and dozens of data cells), rendering performance is critical. The app maintains a steady 60fps during zoom gestures and rapid AI cursor movements through three core architectural optimisations:
+The chart maintains 60 fps through gesture interactions and rapid AI cursor movements through three core architectural optimisations:
 
 1. **Chart Culling (`ChartContentView`):** The entire layout of the 32 teeth is encapsulated in a dedicated `ChartContentView` that conforms to `Equatable`. Because dragging the zoom slider continuously mutates state on `ChartDashboard`, SwiftUI relies on the `.equatable()` modifier to mathematically skip layout re-evaluations for the chart content. This completely cuts the CPU overhead of diffing teeth, rows, and text fields during a slider drag, rendering it buttery smooth at 60fps.
 

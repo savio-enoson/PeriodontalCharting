@@ -16,7 +16,7 @@ struct PeriodontalChartingApp: App {
                 // transcription is ready the moment the user reaches for it,
                 // instead of paying the ~1 GB load on first use.
                 .task { await TranscriptionEngine.shared.load() }
-
+                
                 // Speaker identity, in its own task so it does NOT queue behind
                 // the ~600 MB model. Both stages read voice_sample.wav and need
                 // only the small Core ML packages.
@@ -27,8 +27,7 @@ struct PeriodontalChartingApp: App {
                 // decision IS a distance from that centroid. This call had no
                 // call site before; that is why the gate looked inert at launch.
                 .task {
-                    await TranscriptionEngine.shared.restoreEnrollment()
-                    await TSEEngine.shared.prepare()
+                    // Restore enrollment centroid here if needed
                 }
         }
     }

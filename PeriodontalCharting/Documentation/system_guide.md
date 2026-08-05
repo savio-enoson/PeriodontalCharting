@@ -1,8 +1,8 @@
 # Periodontal Charting — System Guide
 
-This document is the definitive high-level reference for anyone who wants to understand the inner logic of the Periodontal Charting voice command system. It covers the full pipeline from raw speech to chart annotation: how text becomes tokens, how tokens drive a state machine, and how that state machine produces structured commands that update the clinical record.
+This document is the definitive high-level reference for anyone who wants to understand the inner logic of the Periodontal Charting voice command system. It covers the full pipeline from raw speech to chart annotation: how speech is transcribed, how text becomes tokens, how tokens drive a state machine, and how that state machine produces structured commands that update the clinical record.
 
-For the project brief, getting started, and roadmap, see [project_guide.md](project_guide.md). For the file-by-file Swift reference, see [frontend_guide.md](frontend_guide.md).
+For the project brief, getting started, and roadmap, see [project_guide.md](project_guide.md). For the file-by-file Swift reference, see [frontend_guide.md](frontend_guide.md). For the ML tokenizer internals (label schema, state conditioning, inference loop, post-processing heuristics), see [ml_tokenizer_guide.md](ml_tokenizer_guide.md).
 
 ---
 
@@ -11,6 +11,7 @@ For the project brief, getting started, and roadmap, see [project_guide.md](proj
 1. [System Overview](#1-system-overview)
 2. [Pipeline Architecture](#2-pipeline-architecture)
 3. [Phase 1 — Tokenization](#3-phase-1--tokenization)
+   - [TokenizerManager — Unified Entry Point](#30-tokenizermanager--unified-entry-point)
    - [Pre-tokenization Normalization](#31-pre-tokenization-normalization)
    - [Token Types](#32-token-types)
    - [Multi-word Alias Matching](#33-multi-word-alias-matching)
@@ -59,13 +60,30 @@ The key constraints this creates for the NLP engine:
 ## 2. Pipeline Architecture
 
 ```
-Raw Speech (Indonesian)
+Live microphone audio
         │
         ▼
-┌─────────────────────┐
-│   VoiceTokenizer    │  Phase 1: text → [VoiceToken]
-│  (+Helpers, +Parse) │
-└─────────────────────┘
+┌──────────────────────────────────────────┐
+│  Phase 0a: Speaker Isolation             │
+│  SpeakerGateService (ECAPA-TDNN)         │  Accepts / rejects segments by speaker ID
+│  TSEEngine (BSRNN)                       │  Target source enhancement pre-filter
+└──────────────────────────────────────────┘
+        │  Filtered audio
+        ▼
+┌──────────────────────────────────────────┐
+│  Phase 0b: Speech-to-Text                │
+│  TranscriptionEngine (WhisperKit)        │  Whisper large-v3-turbo, on-device
+│  SileroVADEngine                         │  Speech segment detection (32 ms hops)
+│  SequenceBiasFilter (ClinicalConfig)     │  Per-step clinical vocabulary logit biasing
+└──────────────────────────────────────────┘
+        │  Indonesian text
+        ▼
+┌──────────────────────────────────────────┐
+│  Phase 1: Tokenization                   │
+│  TokenizerManager                        │  Normalisation, ML/rule-based dispatch
+│    ├── MLVoiceTokenizer  (default)       │  CoreML word classifier → [VoiceToken]
+│    └── VoiceTokenizer    (fallback)      │  Rule-based alias dictionary → [VoiceToken]
+└──────────────────────────────────────────┘
         │  [VoiceToken]
         ▼
 ┌──────────────────────────────┐
@@ -82,7 +100,11 @@ Raw Speech (Indonesian)
     ChartDashboard  (SwiftUI view re-render)
 ```
 
-**Phase 1 (Tokenization):** `VoiceTokenizer` converts a raw string into a flat array of typed `VoiceToken` values. This is a pure, stateless function — given the same text, it always returns the same token array.
+**Phase 0a (Speaker Isolation):** `SpeakerGateService` runs ECAPA-TDNN speaker verification on each confirmed Whisper segment. `TSEEngine` applies BSRNN target source enhancement as a pre-filter to suppress non-target speech before it reaches Whisper. This layer is handled by a separate peer module; the components live in `Audio/` and `Audio/TSE/`. See [frontend_guide.md §3.9](frontend_guide.md) for the file reference.
+
+**Phase 0b (Speech-to-Text):** `TranscriptionEngine` is an app-wide singleton that owns one `WhisperKit` instance (Whisper large-v3-turbo, ~632 MB, loaded once at launch). `SileroVADEngine` detects speech segments on 32 ms hops before Whisper transcription. `SequenceBiasFilter` (configured by `ClinicalConfig`) biases Whisper's decoder log-probabilities toward the clinical vocabulary at each decoding step. `TranscriptionViewModel` drives the live stream and fires `onLiveTranscript` / `onConfirmedTranscript` callbacks into `AIVoiceViewModel`.
+
+**Phase 1 (Tokenization):** `TokenizerManager.shared.tokenize(text:isFinal:)` is the unified entry point. It applies string normalisation, then dispatches to either `MLVoiceTokenizer` (the CoreML word classifier, default when the model is loaded) or the rule-based `VoiceTokenizer` (fallback). The output in both cases is a flat `[VoiceToken]` array. For full ML tokenizer internals, see [ml_tokenizer_guide.md](ml_tokenizer_guide.md).
 
 **Phase 2 (Parsing):** `VoiceCommandParser` iterates the token array with a stateful cursor. It accumulates numbers, tracks the current tooth and surface selection, and emits `AnnotationCommand` objects at the right moments. The parser is a *class* (reference semantics) but its mutable state is reset on every `parse(text:isFinal:)` call — the parser instance itself is recreated fresh for every call from `AIVoiceViewModel`.
 
@@ -91,6 +113,16 @@ Raw Speech (Indonesian)
 ---
 
 ## 3. Phase 1 — Tokenization
+
+### 3.0 TokenizerManager — Unified Entry Point
+
+All tokenization calls go through `TokenizerManager.shared.tokenize(text:isFinal:)`. The manager:
+
+1. Reads the `useMLTokenizer` `UserDefaults` key (defaults to `true`).
+2. If `true` and `MLVoiceTokenizer` is loaded, routes through the ML path — applying `normalize(text:)`, splitting on `_sep_` boundaries to reset ML state between sentences, running word-by-word inference, then applying a post-processing pass for tooth-ID disambiguation and multi-word token assembly.
+3. If `false` or the model is unavailable (e.g. `.mlmodelc` missing from the bundle), falls back to `VoiceTokenizer.tokenize(text:isFinal:)` directly.
+
+The ML path's full specification — label schema, state conditioning, inference loop, post-processing heuristics, and fallback behavior — is covered in [ml_tokenizer_guide.md](ml_tokenizer_guide.md). The rule-based fallback path is documented in the sections below.
 
 `VoiceTokenizer` (`NLP/Tokenizer/`) performs a **single left-to-right pass** over the input text. It first applies string-level normalization, then walks word by word, attempting multi-word alias matches before falling back to single-word matches.
 
