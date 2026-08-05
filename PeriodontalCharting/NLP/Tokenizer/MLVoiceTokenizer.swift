@@ -116,17 +116,24 @@ final class MLVoiceTokenizer: @unchecked Sendable {
             attentionMask.append(0)
         }
         
-        // Fill buffers
+        // Fill buffers using fast pointer access
+        let inputIdsPtr = inputIdsBuffer.dataPointer.bindMemory(to: Int32.self, capacity: maxLen)
+        let attentionMaskPtr = attentionMaskBuffer.dataPointer.bindMemory(to: Int32.self, capacity: maxLen)
+        
         for i in 0..<maxLen {
-            inputIdsBuffer[[0, NSNumber(value: i)]] = NSNumber(value: inputIds[i])
-            attentionMaskBuffer[[0, NSNumber(value: i)]] = NSNumber(value: attentionMask[i])
+            inputIdsPtr[i] = Int32(inputIds[i])
+            attentionMaskPtr[i] = Int32(attentionMask[i])
         }
         
-        targetTokenIdxBuffer[0] = NSNumber(value: targetIdx)
-        activeMetricIdBuffer[0] = NSNumber(value: state.activeMetric)
+        let targetTokenPtr = targetTokenIdxBuffer.dataPointer.bindMemory(to: Int32.self, capacity: 1)
+        targetTokenPtr[0] = Int32(targetIdx)
         
+        let activeMetricPtr = activeMetricIdBuffer.dataPointer.bindMemory(to: Int32.self, capacity: 1)
+        activeMetricPtr[0] = Int32(state.activeMetric)
+        
+        let priorLabelsPtr = priorLabelIdsBuffer.dataPointer.bindMemory(to: Int32.self, capacity: 3)
         for i in 0..<3 {
-            priorLabelIdsBuffer[[0, NSNumber(value: i)]] = NSNumber(value: state.priorLabels[i])
+            priorLabelsPtr[i] = Int32(state.priorLabels[i])
         }
         
         // Predict
@@ -143,11 +150,12 @@ final class MLVoiceTokenizer: @unchecked Sendable {
             if let outputName = output.featureNames.first,
                let outputMultiArray = output.featureValue(for: outputName)?.multiArrayValue {
                 
+                let outputPtr = outputMultiArray.dataPointer.bindMemory(to: Float32.self, capacity: MLVoiceTokenizer.validLabels.count)
                 var maxIndex = 0
-                var maxValue: Float = -Float.greatestFiniteMagnitude
+                var maxValue: Float32 = -Float32.greatestFiniteMagnitude
                 
                 for i in 0..<MLVoiceTokenizer.validLabels.count {
-                    let val = outputMultiArray[[0, NSNumber(value: i)]].floatValue
+                    let val = outputPtr[i]
                     if val > maxValue {
                         maxValue = val
                         maxIndex = i

@@ -448,8 +448,10 @@ extension VoiceCommandParser {
                         break
                     }
                     if peek < tokens.count, case .anatomy(let anat) = tokens[peek] {
-                        endAnatomy = anat
-                        peek += 1
+                        if anat != .upperJaw && anat != .lowerJaw {
+                            endAnatomy = anat
+                            peek += 1
+                        }
                     }
                     while peek < tokens.count {
                         if case .word(let w) = tokens[peek], w != "_sep_" { peek += 1; continue }
@@ -557,11 +559,15 @@ extension VoiceCommandParser {
                     flushNumbers(force: true)
                     self.activeSelection = nil
                     _ = self.cursor.jumpTo(jaw: .lower)
+                    self.cursor.setMetric(.probingDepth)
+                    self.currentMetricMultiplier = 1
                 } else if a == .upperJaw {
                     /* print("BEFORE EMIT METRIC..."); */ emitBoolIfPending()
                     flushNumbers(force: true)
                     self.activeSelection = nil
                     _ = self.cursor.jumpTo(jaw: .upper)
+                    self.cursor.setMetric(.probingDepth)
+                    self.currentMetricMultiplier = 1
                 } else {
                     if hasUpcomingToothIdentifier(from: tokenIndex, in: tokens) {
                         // Defer selection until the following tooth identifier is processed

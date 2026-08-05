@@ -27,8 +27,17 @@ final class BertTokenizer: @unchecked Sendable {
             print("WARNING: Could not load vocab.txt from Bundle.main")
         }
     }
+    private var encodeCache: [String: [Int]] = [:]
+    private let cacheLock = NSLock()
     
     func encode(_ word: String) -> [Int] {
+        cacheLock.lock()
+        if let cached = encodeCache[word] {
+            cacheLock.unlock()
+            return cached
+        }
+        cacheLock.unlock()
+        
         let text = word.lowercased()
         var tokens: [Int] = []
         var start = 0
@@ -52,9 +61,15 @@ final class BertTokenizer: @unchecked Sendable {
                 tokens.append(matchId)
                 start = end
             } else {
-                return [unkTokenId]
+                tokens = [unkTokenId]
+                break
             }
         }
+        
+        cacheLock.lock()
+        encodeCache[word] = tokens
+        cacheLock.unlock()
+        
         return tokens
     }
 }
