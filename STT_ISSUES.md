@@ -88,6 +88,11 @@ Status: `[ ]` open · `[~]` in progress · `[x]` done
 
 ## Resolved
 
+- [x] **9. Bool metric + full-face site over a range charted only the mid site** 🔴 · PARSE · _2026-08-05_
+  - **Symptom:** `"bop dari bukal 16 hingga bukal 15"` (BOP on the whole buccal of teeth 16→15) charted only the middle sites and spilled across the 16/15 boundary (`16=[F,T,T]`, `15=[T,T,F]`) instead of both full buccal faces. **Not the decimal** — `1.6`/`1.5` tokenizes identically to `16`/`15` (`1.6`→`1 6`→`tooth 16`); verified the token stream and chart output are byte-identical with and without the decimal.
+  - **Root cause:** `VoiceCommandParser+Lookahead.swift` `resolveAnatomyWithLookahead` collapses a full-aspect word (`bukal`/`lingual`/…) to the single mid site (`resolved.site = 1`) whenever fewer than 3 numbers follow it. That heuristic is for NUMERIC commands (`"bukal 3"` = one value on the mid site), but bool metrics (BOP/plaque/implant) carry **zero** numbers, so `numCount` is always `0 < 3` and the full face was always wrongly shrunk.
+  - **Fix:** skip the collapse when `cursor.currentMetric` is a bool metric (`bleeding`/`plaque`/`implant`) — a full-aspect word then keeps `site == nil` (whole face). Verified end-to-end through the real `VoiceCommandParser` + `ChartProcessor`: bop/plaque full-face single-tooth and range now mark all 3 sites; numeric `"poket bukal 3"` still collapses to the mid site and `"poket bukal 3 4 5"` still fills the full face.
+
 - [x] **8. "gak ada" wrongly corrected to "pada"** 🔴 · STT · _2026-07-28_
   - **Cause:** when STT merges "gak ada" (tooth missing) into one token (`gada`/`gaada`/`gakda`/`gadda`…), `ClinicalConfig.clean`'s Levenshtein snap sends it to **"pada"** — verified: `pada` precedes `ada` in `lexiconList` and is 1 edit from `gada`, so the first-closest tie-break picks it. `pada` = the "at" action, so the tooth never gets marked missing.
   - **Fix:** `phraseFixes` regex `\bgak?\s?a?d+a+\b → "gak ada"` (runs before the snap). Verified to catch `gada/gaada/gakada/gakda/gadda/gadaa/ga da` and leave `pada/ada/tidak ada/dada` untouched.

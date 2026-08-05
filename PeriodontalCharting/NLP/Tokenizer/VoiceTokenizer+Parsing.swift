@@ -64,21 +64,50 @@ extension VoiceTokenizer {
         // Whisper sometimes GLUES the stem and site into a single token, with the site
         // half itself fuzzed ("mesiyobukal", "distobuqal"). The positional recovery
         // below only fires when the site is a SEPARATE token, so peel a (fuzzy) trailing
-        // site suffix off any m/d-initial token first — restoring the canonical site and
+        // site suffix off any m/d/s-initial token first — restoring the canonical site and
         // leaving the stem prefix ("mesiyo"/"disto"/…) for the positional pass to resolve
-        // (mesio/disto by leading sound). Guarded to m/d-initial tokens with a ≥2-char
-        // prefix so bare sites ("bukal") and "distal"/"mesial" are never split.
+        // (mesio/disto by leading sound). 's' is allowed because STT frequently drops the
+        // leading 'd' of "disto" ("setobukal"/"situbukal"/"stobukal"); the full site suffix
+        // is still required, so real s-words ("selesai"/"semua"/"membuka") never split.
+        // A tooth number spoken right after the site is often GLUED on too
+        // ("mesiyobukal17"), so peel a trailing digit run first and re-emit it as its own
+        // token. Guarded to a ≥2-char stem prefix so bare sites ("bukal") and
+        // "distal"/"mesial" are never split.
         let compoundSites: [(suffixes: [String], site: String)] = [
             (["bukal", "buccal", "bucal", "buqal", "bukkal", "bukhal"], "bukal"),
             (["lingual", "lingval", "linggual", "lingal", "linguol"], "lingual"),
             (["palatal", "palatial", "palatel", "palatual"], "palatal"),
         ]
+        // First peel a tooth number GLUED onto any site-ending word ("bukal15" ->
+        // "bukal","15"). STT welds the tooth id to the preceding site, and the top-of-
+        // function literal splits ("distobukal" -> "disto bukal") leave the digit on the
+        // bare site ("bukal15"). Only fires when the alpha core ends in a canonical site,
+        // so plain numbers ("155"/"16") and ordinary words are untouched.
+        func peelTrailingDigits(_ word: String) -> (core: String, digits: String) {
+            var core = Substring(word)
+            var digits = ""
+            while let last = core.last, last.isNumber { digits.insert(last, at: digits.startIndex); core = core.dropLast() }
+            return (String(core), digits)
+        }
         words = words.flatMap { word -> [String] in
-            guard let first = word.first, first == "m" || first == "d" else { return [word] }
+            guard let last = word.last, last.isNumber else { return [word] }
+            let (core, digits) = peelTrailingDigits(word)
+            for (suffixes, site) in compoundSites where suffixes.contains(where: { core == $0 }) {
+                return [site, digits]
+            }
+            return [word]
+        }
+        words = words.flatMap { word -> [String] in
+            guard let first = word.first, first == "m" || first == "d" || first == "s" else { return [word] }
+            // Peel a tooth number glued onto a stem+site compound ("mesiyobukal17" -> …, "17").
+            let (core, trailingDigits) = peelTrailingDigits(word)
+            let coreSub = Substring(core)
             for (suffixes, site) in compoundSites {
-                for suf in suffixes where word.count > suf.count && word.hasSuffix(suf) {
-                    let prefix = String(word.dropLast(suf.count))
-                    if prefix.count >= 2 { return [prefix, site] }
+                for suf in suffixes where coreSub.count > suf.count && coreSub.hasSuffix(suf) {
+                    let prefix = String(coreSub.dropLast(suf.count))
+                    if prefix.count >= 2 {
+                        return trailingDigits.isEmpty ? [prefix, site] : [prefix, site, trailingDigits]
+                    }
                 }
             }
             return [word]

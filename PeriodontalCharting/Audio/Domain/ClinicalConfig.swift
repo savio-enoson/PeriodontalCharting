@@ -233,6 +233,17 @@ enum ClinicalConfig {
         (#"\bmezio\s*limual\b"#, "mesio lingual"),
         // "disto bukal"
         (#"\b(?:kistobukal|disubukal|disubuka)\b"#, "disto bukal"),
+        // "disto bukal" glued into one token with the leading 'd' dropped (disto ->
+        // seto/situ/sto) and/or the site's final 'l' dropped (bukal -> buka), optionally
+        // with a stray leading "di" and/or the tooth number glued on: "di setobuka",
+        // "setobukal", "situbuka", "stobukal", "setobukal17". The trailing (\d+) is
+        // re-spaced so the tooth id survives. Runs before tokenizing so BOTH the displayed
+        // transcript and the parser see "disto bukal". Requires the "buk" core, so
+        // "setelah"/"sibuk"/"setubuh"/"membuka" are untouched. See STT_ISSUES #3/#5.
+        (#"\b(?:di\s+)?s[ei]?t[ou]?buka?l?(\d+)?\b"#, "disto bukal $1"),
+        // "mesio bukal" glued/compressed variants, likewise with an optional glued tooth
+        // number ("mesiyobukal", "msiyobukal", "mesiobuka", "mesiyobukal17").
+        (#"\bm[e]?s[iy]+o?buka?l?(\d+)?\b"#, "mesio bukal $1"),
         // "mesio bukal"
         (#"\bmili\s*bukal\b"#, "mesio bukal"),
         // stray "lingual"
@@ -243,7 +254,8 @@ enum ClinicalConfig {
         // Split it back so "satu" -> 1 survives (the sign still comes from the
         // metric, e.g. resesi). Matches the merged form only; leaves the correct
         // spaced "minus satu"/"minus dua" untouched. Add sibling numbers as observed.
-        (#"\bmin[ou]sat[ou]o?\b"#, "minus satu"),
+        (#"\bmin[oau]sat[ou]o?\b"#, "minus satu"),
+        (#"\bmissed\b"#, "missing"),
         // Compound site terms: normalize to the SPACED form.
         //
         // Both spellings mean the same site, and both occur in dictation and in

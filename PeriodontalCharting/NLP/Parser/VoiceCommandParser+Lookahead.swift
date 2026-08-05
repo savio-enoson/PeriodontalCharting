@@ -22,7 +22,15 @@ extension VoiceCommandParser {
     func resolveAnatomyWithLookahead(anatomy: AnatomyType, for tooth: Int, toothIndex: Int, tokens: [VoiceToken]) -> (aspect: ChartAspect, site: Int?)? {
         guard var resolved = ChartAnatomyResolver.resolve(anatomy: anatomy, for: tooth, currentAspect: cursor.currentAspect) else { return nil }
         let isFullAspectTarget = (anatomy == .buccal || anatomy == .labial || anatomy == .lingual || anatomy == .palatal)
-        if isFullAspectTarget {
+        // The `numCount < 3 → site 1` collapse below is a NUMERIC heuristic: "bukal 3"
+        // (one value) means the single mid site, not the whole face. Bool metrics
+        // (BOP/plaque/implant) carry NO numbers, so numCount is always 0 — applying the
+        // collapse there would wrongly shrink a full-face "bukal" to just the mid site
+        // (e.g. "bop dari bukal 16 hingga bukal 15" charted only the middle sites and
+        // spilled across the 16/15 boundary). For a bool metric a full-aspect word always
+        // means the ENTIRE face, so keep site == nil. See STT_ISSUES.
+        let isBoolMetric = cursor.currentMetric == .bleeding || cursor.currentMetric == .plaque || cursor.currentMetric == .implant
+        if isFullAspectTarget && !isBoolMetric {
             var numCount = 0
             var j = toothIndex + 1
             lookaheadLoop: while j < tokens.count {
