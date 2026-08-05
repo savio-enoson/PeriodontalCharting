@@ -11,19 +11,13 @@
 //
 //  Gate 1 ("do no harm") killed every always-on candidate. Under the rescue path
 //  clean audio never reaches the extractor, so Gate 1 is moot BY CONSTRUCTION —
-//  measured on the bench: `clean controls routed: 0`. Do not "simplify" this into
-//  always-on; that is a different, worse system that has been measured.
+//  measured on the bench: `clean controls routed: 0`.
 //
-//  Rescue-path bench result: 13 routed, mean SDRi +9.6 dB, 13/13 recovered,
-//  0 unsafe promotions, 0 clean controls routed.
-//
-//  ONE ROUTING ROUTINE, TWO ENTRY POINTS. The file path and the live path used to
-//  be separate files with the same per-span logic copy-pasted, and they drifted
-//  the first time the span parameters were tuned — the live path got the fix, the
-//  file path silently kept the old defaults. `route(slice:)` is now the only place
-//  a routing decision is made.
+//  ONE ROUTING ROUTINE, TWO ENTRY POINTS. `route(slice:)` is the only place a
+//  routing decision is made, so the file and live paths cannot drift apart.
 //
 
+import Accelerate
 import Foundation
 
 /// One span's journey through the rescue path. `distanceSeparated` is nil when
@@ -37,6 +31,10 @@ struct RescuedSpan {
     let distanceSeparated: Double?
     let routed: Bool
     let extractionSeconds: Double
+    /// RMS of the span. Distinguishes real speech from a fallback window that
+    /// tiled silence — a distance measured on near-silence is meaningless, and
+    /// without this the log gives no way to tell the two apart.
+    let level: Float
     /// Only populated when `keepAudio` was requested.
     var extractedAudio: [Float]?
 
@@ -49,31 +47,29 @@ struct RescuedSpan {
 
     /// A span the extractor pulled back over the line.
     var rescued: Bool { routed && effectiveVerdict != .reject }
+
+    /// Cosine SIMILARITY to the centroid — the complement of the distance the
+    /// thresholds use. 1.0 is identical, 0.0 is orthogonal.
+    var similarity: Double? { distanceMixed.map { 1.0 - $0 } }
 }
 
 extension SpeakerGateService {
 
     // MARK: - Tuning
 
-    /// Span parameters for the RESCUE paths. Deliberately tighter than
-    /// `mergeSpans`' defaults, which `evaluate(audio:)` keeps so its distances
-    /// stay comparable with the Python harness.
     enum RescueTuning {
-        /// Silero's 0.5 default finds nothing on this microphone — measured max
-        /// probability on clean, deliberate, close-mic speech was 0.409. At the
-        /// default the gate produces no spans and then fails open over everything.
-        static let vadThreshold: Float = 0.3
-
-        /// 0.35 s, not 1.5 s. This is the difference between gating a PERSON and
-        /// gating a CONVERSATION: every offline number came from spans cut out of
-        /// single-speaker recordings, but in a real room one speaker's turn and
-        /// the next are usually well under 1.5 s apart, so the default merge fuses
-        /// them into a single span whose embedding contains the target — and so
-        /// reads as the target, carrying the other voice through inside an accept.
+        /// Frames below `noiseFloor * speechFloorMultiple` are silence. RELATIVE,
+        /// because the microphone level swings widely between sessions (measured
+        /// window peaks 0.015 to 0.597).
+        static let speechFloorMultiple: Float = 3.0
+        /// Absolute minimum, so a dead-quiet room cannot promote its own hiss.
+        static let absoluteFloor: Float = 0.01
+        /// 0.35 s, not 1.5 s — gating a PERSON, not a CONVERSATION. Offline numbers
+        /// came from single-speaker recordings, but in a real room consecutive turns
+        /// are well under 1.5 s apart, so the default merge fuses them into one span
+        /// whose embedding contains the target — and so reads as the target.
         static let maxGapSeconds = 0.35
-
-        /// Matches `SpeakerGate.inputSamples` (3.0 s) exactly, so no span is
-        /// centre-cropped before embedding.
+        /// Matches `SpeakerGate.inputSamples` (3.0 s), so no span is centre-cropped.
         static let maxSpanSeconds = 3.0
     }
 
@@ -89,6 +85,9 @@ extension SpeakerGateService {
                        end: Int,
                        extractor: TargetSpeakerExtractor?,
                        keepAudio: Bool) throws -> RescuedSpan {
+
+        var level: Float = 0
+        vDSP_rmsqv(slice, 1, &level, vDSP_Length(slice.count))
 
         let mixed = (try? gate.classify(slice))
             ?? GateResult(verdict: .tooShort, distance: nil)
@@ -107,7 +106,7 @@ extension SpeakerGateService {
                                distanceMixed: mixed.distance,
                                verdictSeparated: nil, distanceSeparated: nil,
                                routed: false, extractionSeconds: 0,
-                               extractedAudio: nil)
+                               level: level, extractedAudio: nil)
         }
 
         let began = CFAbsoluteTimeGetCurrent()
@@ -130,14 +129,87 @@ extension SpeakerGateService {
                            verdictSeparated: verdict,
                            distanceSeparated: separated.distance,
                            routed: true, extractionSeconds: elapsed,
+                           level: level,
                            extractedAudio: keepAudio ? extracted : nil)
     }
 
-    private func rescueSpans(in audio: [Float]) -> [SpeechSegment] {
-        Self.mergeSpans(vad.speechTimestamps(audio, threshold: RescueTuning.vadThreshold),
-                        totalSamples: audio.count,
-                        maxGapSeconds: RescueTuning.maxGapSeconds,
-                        maxDurationSeconds: RescueTuning.maxSpanSeconds)
+    /// Speech spans to judge — segmented on ENERGY, not Silero.
+    ///
+    /// Silero is non-functional on this device: peak probability 0.005 on speech at
+    /// amplitude 0.597, 0.003 at 0.279, and it finds nothing on the calibration file
+    /// either — which `SpeakerGate.loadSamples` already peak-normalises, so input
+    /// level is not the variable. It loads and predicts; the outputs are simply
+    /// wrong. Its probability is still logged on the fallback path so that a future
+    /// fix, or a regression, is visible.
+    ///
+    /// RMS separates speech from silence by ~20x on this hardware (0.053 speech vs
+    /// 0.003 silence), so an adaptive energy threshold is strictly more reliable.
+    private func rescueSpans(in audio: [Float]) -> (spans: [SpeechSegment], fromFallback: Bool) {
+        let hop = SpeakerGate.sampleRate / 100 * 3        // 30 ms frames
+        guard audio.count >= hop * 8 else { return ([], true) }
+
+        var frameLevels: [Float] = []
+        frameLevels.reserveCapacity(audio.count / hop)
+        audio.withUnsafeBufferPointer { buffer in
+            var i = 0
+            while i + hop <= buffer.count {
+                var r: Float = 0
+                vDSP_rmsqv(buffer.baseAddress! + i, 1, &r, vDSP_Length(hop))
+                frameLevels.append(r)
+                i += hop
+            }
+        }
+        guard !frameLevels.isEmpty else { return ([], true) }
+
+        // 20th percentile as the noise floor: robust whether the window is mostly
+        // speech or mostly silence.
+        let ordered = frameLevels.sorted()
+        let noiseFloor = ordered[min(ordered.count - 1, ordered.count / 5)]
+        let threshold = max(noiseFloor * RescueTuning.speechFloorMultiple,
+                            RescueTuning.absoluteFloor)
+
+        var raw: [SpeechSegment] = []
+        var runStart: Int?
+        for k in 0...frameLevels.count {
+            let isSpeech = k < frameLevels.count && frameLevels[k] > threshold
+            if isSpeech, runStart == nil { runStart = k }
+            if !isSpeech, let s = runStart {
+                raw.append(SpeechSegment(start: s * hop, end: min(k * hop, audio.count)))
+                runStart = nil
+            }
+        }
+
+        let merged = Self.mergeSpans(raw,
+                                     totalSamples: audio.count,
+                                     maxGapSeconds: RescueTuning.maxGapSeconds,
+                                     maxDurationSeconds: RescueTuning.maxSpanSeconds)
+        if !merged.isEmpty {
+            print(String(format: "[Gate] energy: floor %.4f, threshold %.4f -> %d span(s)",
+                         noiseFloor, threshold, merged.count))
+            return (merged, false)
+        }
+
+        // Nothing above the floor — genuinely quiet, or one steady level throughout.
+        // Fall back to fixed windows so coverage never has a hole, and never let
+        // that be silent: an empty span list used to return before any logging, and
+        // the gate then failed open across an entire session with no trace.
+        let seconds = Double(audio.count) / Double(SpeakerGate.sampleRate)
+        let sileroPeak = vad.speechProbabilities(audio).max() ?? 0
+        let window = SpeakerGate.inputSamples
+        guard audio.count >= window else {
+            print(String(format: "[Gate] no spans in %.1fs (floor %.4f, silero %.3f), window too short",
+                         seconds, noiseFloor, sileroPeak))
+            return ([], true)
+        }
+        var windows: [SpeechSegment] = []
+        var start = 0
+        while start + window <= audio.count {
+            windows.append(SpeechSegment(start: start, end: start + window))
+            start += window
+        }
+        print(String(format: "[Gate] no energy above %.4f in %.1fs (floor %.4f, silero %.3f) — %d blind window(s)",
+                     threshold, seconds, noiseFloor, sileroPeak, windows.count))
+        return (windows, true)
     }
 
     /// Verdict to install in the timeline. Only `.enforce` lets an extraction
@@ -152,17 +224,12 @@ extension SpeakerGateService {
 
     // MARK: - Entry point 1: a whole file (batch transcription)
 
-    /// Gate every span in a completed recording, routing the ones the gate does
-    /// not accept. Runs inference — call off the main actor.
-    ///
-    /// - Parameter keepAudio: retain the extracted waveform per span. Needed by
-    ///   `rebuild(audio:with:)`; costs memory, so off by default.
     @discardableResult
     func evaluateWithRescue(audio: [Float],
                             extractor: TargetSpeakerExtractor?,
                             keepAudio: Bool = false) throws -> [RescuedSpan] {
 
-        let spans = rescueSpans(in: audio)
+        let (spans, fromFallback) = rescueSpans(in: audio)
         var results: [RescuedSpan] = []
         results.reserveCapacity(spans.count)
 
@@ -173,19 +240,14 @@ extension SpeakerGateService {
         }
 
         let enforcing = TSEConfig.mode == .enforce
-        Self.log(results, tag: "file", enforcing: enforcing)
+        Self.log(results, tag: "file", enforcing: enforcing, fromFallback: fromFallback)
         if enforcing {
             replaceTimeline(results.map { Self.timelineSpan($0, enforcing: true) })
         }
         return results
     }
 
-    /// Splice extracted audio back over the routed spans. This is what a BATCH
-    /// transcription path feeds to Whisper.
-    ///
-    /// The LIVE path cannot use it: WhisperKit's `AudioStreamTranscriber`
-    /// captures, VADs, windows and decodes as one unit, and
-    /// `audioProcessor.audioSamples` is a READ-ONLY tap.
+    /// Splice extracted audio back over the routed spans — for a BATCH path only.
     static func rebuild(audio: [Float], with results: [RescuedSpan]) -> [Float] {
         var out = audio
         for r in results where r.routed {
@@ -198,21 +260,15 @@ extension SpeakerGateService {
 
     // MARK: - Entry point 2: a live window (streaming)
 
-    /// Gate a window of live audio and merge the verdicts into the timeline,
-    /// replacing any that overlap the same range.
+    /// Judge a window of live audio and merge the verdicts into the timeline.
     ///
-    /// OVERLAPPING WINDOWS, not disjoint slices: `mergeSpans` drops anything
-    /// under 1 s and the embedder wants 3 s, so chopping the stream into short
-    /// adjacent chunks destroys exactly the spans it is supposed to judge — an
-    /// utterance crossing a boundary becomes two discarded fragments and the gate
-    /// fails open over both. Each pass re-reads a few seconds of already-gated
-    /// audio, and verdicts covering the re-read range are REPLACED rather than
-    /// appended, so a timestamp never has two conflicting spans.
+    /// OVERLAPPING WINDOWS, not disjoint slices: `mergeSpans` drops anything under
+    /// 1 s and the embedder wants 3 s, so short adjacent chunks destroy exactly the
+    /// spans they are meant to judge.
     ///
-    /// TIME BASE: absolute seconds since the stream started, because
+    /// TIME BASE: absolute seconds since the stream started —
     /// `AudioStreamTranscriber.offsetSegments` adds its buffer origin before the
-    /// callback fires — the timestamps `isTargetSpeaking(atSeconds:)` compares
-    /// against are already absolute.
+    /// callback fires, so the timestamps compared against are already absolute.
     @discardableResult
     func appendEvaluation(audio: [Float],
                           absoluteOffsetSeconds: Double,
@@ -223,7 +279,7 @@ extension SpeakerGateService {
         let base = Int(absoluteOffsetSeconds * sr)
         let windowEnd = absoluteOffsetSeconds + Double(audio.count) / sr
 
-        let spans = rescueSpans(in: audio)
+        let (spans, fromFallback) = rescueSpans(in: audio)
         guard !spans.isEmpty else { return [] }
 
         var results: [RescuedSpan] = []
@@ -236,41 +292,83 @@ extension SpeakerGateService {
 
         let enforcing = TSEConfig.mode == .enforce
         var timeline = currentTimeline
-        // Drop anything overlapping the window we just re-judged, so the overlap
-        // refines a verdict instead of leaving a stale one in front of it.
-        timeline.removeAll { $0.endSeconds > absoluteOffsetSeconds && $0.startSeconds < windowEnd }
-        timeline.append(contentsOf: results.map { Self.timelineSpan($0, enforcing: enforcing) })
+        // NEVER delete an existing verdict. The overlap exists so an utterance
+        // crossing a window boundary is seen whole by SOME pass; whichever pass saw
+        // it whole already recorded it, and a later pass sees only its tail.
+        // Deleting overlapped spans silently erased verdicts and left uncovered
+        // holes, which the segment filter then read as "no opinion".
+        let fresh = results
+            .map { Self.timelineSpan($0, enforcing: enforcing) }
+            .filter { candidate in
+                !timeline.contains { $0.endSeconds > candidate.startSeconds
+                                  && $0.startSeconds < candidate.endSeconds }
+            }
+        timeline.append(contentsOf: fresh)
         timeline.sort { $0.start < $1.start }
         let cutoff = windowEnd - retainSeconds
         if cutoff > 0 { timeline.removeAll { $0.endSeconds < cutoff } }
         replaceTimeline(timeline)
 
-        Self.log(results, tag: "live", enforcing: enforcing)
+        Self.log(results, tag: "live", enforcing: enforcing, fromFallback: fromFallback)
         return results
     }
 
     /// The span covering a timestamp, or nil when the gate has not reached it.
-    /// Exposed so the segment filter can log WHY a line passed — "no span covers
-    /// this" and "a span accepted this" are different failures with different fixes.
     func coveringSpan(atSeconds t: Double) -> GatedSpan? {
         currentTimeline.first { t >= $0.startSeconds && t < $0.endSeconds }
+    }
+    
+    /// The span covering a timestamp, or the nearest one within `tolerance`.
+    ///
+    /// Energy segmentation leaves gaps — between merged spans, and where
+    /// `mergeSpans` drops something under its 1 s floor — and Whisper happily
+    /// produces text inside them. Failing open on every gap lets the other speaker
+    /// through; failing closed on every gap drops the clinician's own words.
+    /// Inheriting the nearest verdict resolves both: mid-utterance gaps take the
+    /// verdict of the speech around them, and only the leading edge of a session —
+    /// where there is no verdict within 1.5 s — genuinely falls open.
+    func nearestSpan(toSeconds t: Double, within tolerance: Double = 1.5) -> GatedSpan? {
+        let spans = currentTimeline
+        if let hit = spans.first(where: { t >= $0.startSeconds && t < $0.endSeconds }) {
+            return hit
+        }
+        return spans
+            .map { span -> (GatedSpan, Double) in
+                (span, t < span.startSeconds ? span.startSeconds - t : t - span.endSeconds)
+            }
+            .filter { $0.1 <= tolerance }
+            .min { $0.1 < $1.1 }?.0
     }
 
     // MARK: - Logging
 
-    private static func log(_ results: [RescuedSpan], tag: String, enforcing: Bool) {
+    /// One line per span. Reading order: does the LEVEL look like speech, is the
+    /// SOURCE nrg (energy-segmented, trustworthy) or win (blind fallback), then the
+    /// distance and its margin.
+    private static func log(_ results: [RescuedSpan],
+                            tag: String,
+                            enforcing: Bool,
+                            fromFallback: Bool) {
+        let source = fromFallback ? "win" : "nrg"
         for r in results {
-            let d = r.distanceMixed.map { String(format: "%.3f", $0) } ?? "  -  "
+            let d = r.distanceMixed
+            let dText = d.map { String(format: "%.3f", $0) } ?? " --- "
+            let cosText = r.similarity.map { String(format: "%.3f", $0) } ?? " --- "
+            // Positive margin = inside the accept region. Negative = how far over.
+            let marginText = d.map { String(format: "%+.3f", TSEConfig.postAcceptThreshold - $0) } ?? "  --- "
+
             if r.routed {
-                let ds = r.distanceSeparated.map { String(format: "%.3f", $0) } ?? "  -  "
-                print(String(format: "[TSE/%@] %6.2f–%6.2fs  d %@ -> %@  %@ -> %@  (%.2fs)%@",
-                             tag, r.startSeconds, r.endSeconds, d, ds,
+                let ds = r.distanceSeparated.map { String(format: "%.3f", $0) } ?? " --- "
+                print(String(format: "[TSE/%@] %6.2f–%6.2fs (%.1fs) %@ rms %.3f  d %@ -> %@  %@ -> %@  (%.2fs)%@",
+                             tag, r.startSeconds, r.endSeconds, r.durationSeconds,
+                             source, r.level, dText, ds,
                              r.verdictMixed.rawValue, r.effectiveVerdict.rawValue,
                              r.extractionSeconds,
-                             enforcing ? "" : "   [observe: text unchanged]"))
+                             enforcing ? "" : "   [observe]"))
             } else {
-                print(String(format: "[Gate/%@] %6.2f–%6.2fs (%.1fs)  d %@  %@",
-                             tag, r.startSeconds, r.endSeconds, r.durationSeconds, d,
+                print(String(format: "[Gate/%@] %6.2f–%6.2fs (%.1fs) %@ rms %.3f  d %@  cos %@  margin %@  %@",
+                             tag, r.startSeconds, r.endSeconds, r.durationSeconds,
+                             source, r.level, dText, cosText, marginText,
                              r.verdictMixed.rawValue))
             }
         }

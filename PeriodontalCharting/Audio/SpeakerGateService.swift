@@ -201,6 +201,18 @@ final class SpeakerGateService: @unchecked Sendable {
     func replaceTimeline(_ spans: [GatedSpan]) {
         lock.lock(); timeline = spans; lock.unlock()
     }
+    
+    /// Clear the timeline at the start of a live session.
+    ///
+    /// Stream time restarts at 0 every session, so the previous session's spans
+    /// sit directly on top of this one's timestamps — and because `appendEvaluation`
+    /// does not re-judge an overlapping range, a stale verdict also BLOCKS the new
+    /// one from ever being recorded. Both effects were observed: a friend-only
+    /// session read `covered by 2.55–5.10 accept (d 0.418)`, a span from an earlier
+    /// recording of the enrolled speaker.
+    func resetTimeline() {
+        lock.lock(); timeline = []; lock.unlock()
+    }
 
     // MARK: - Span merging
 
