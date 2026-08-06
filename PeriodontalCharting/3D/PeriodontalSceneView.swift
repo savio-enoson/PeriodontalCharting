@@ -13,6 +13,7 @@
 
 import SwiftUI
 import RealityKit
+import UIKit
 import simd
 
 /// Holds the long-lived RealityKit entities so gestures and the update closure
@@ -25,7 +26,10 @@ final class PeriodontalSceneHolder {
 
     var loaded: LoadedTeeth?
     var anatomy: GingivalAnatomyGenerator.Anatomy?
-    var originalMaterials: [Int: [any RealityKit.Material]] = [:]
+    /// A translucent glowing shell parented to the selected tooth. Selection is
+    /// shown by adding/removing this overlay — the tooth's own material is never
+    /// modified, so a deselected tooth is always its original colour.
+    var highlight: Entity?
     var selectedFDI: Int?
 
     var cameraBase: Float = 0.45
@@ -131,7 +135,7 @@ struct PeriodontalSceneView: View {
             holder.loaded = loaded
             holder.pivot.addChild(loaded.modelRoot)
             holder.cameraBase = max(0.3, loaded.boundingRadius * 2.6)
-            cacheOriginalMaterials(loaded)
+            setupToothColliders(loaded)
             rebuildAnatomy(loaded)
             positionCamera()
             holder.appliedMouth = nil
@@ -153,11 +157,8 @@ struct PeriodontalSceneView: View {
         holder.anatomy = anatomy
     }
 
-    private func cacheOriginalMaterials(_ loaded: LoadedTeeth) {
-        for (fdi, entity) in loaded.toothEntity {
-            if let model = entity.components[ModelComponent.self] {
-                holder.originalMaterials[fdi] = model.materials
-            }
+    private func setupToothColliders(_ loaded: LoadedTeeth) {
+        for (_, entity) in loaded.toothEntity {
             // Make teeth tappable via a cheap bounding-box collider.
             let bounds = entity.visualBounds(relativeTo: entity)
             entity.components.set(InputTargetComponent())
@@ -202,24 +203,45 @@ struct PeriodontalSceneView: View {
         holder.appliedSelection = .some(selectedFDI)
 
         // A tooth is shown only when its arch is visible and the chart doesn't
-        // record it as missing; the selected tooth gets a light emissive highlight.
+        // record it as missing.
         let visibleArches = archFilter.arches
         for (fdi, entity) in loaded.toothEntity {
             let inVisibleArch = visibleArches.contains(DentalArch.arch(ofFDI: fdi))
             entity.isEnabled = inVisibleArch && mouth[fdi]?.missing != true
-            guard var model = entity.components[ModelComponent.self] else { continue }
-            if fdi == selectedFDI {
-                var m = PhysicallyBasedMaterial()
-                m.baseColor = .init(tint: .white)
-                m.roughness = 0.4
-                m.emissiveColor = .init(color: .white)
-                m.emissiveIntensity = 0.4
-                model.materials = [m]
-            } else if let original = holder.originalMaterials[fdi] {
-                model.materials = original
-            }
-            entity.components.set(model)
         }
+        updateSelectionHighlight(loaded)
+    }
+
+    /// Show the selected tooth by parenting a translucent glowing shell to it —
+    /// added on select, removed on deselect. Exactly one shell ever exists, and
+    /// the tooth's own material is untouched, so deselecting always leaves it in
+    /// its normal colour.
+    private func updateSelectionHighlight(_ loaded: LoadedTeeth) {
+        holder.highlight?.removeFromParent()
+        holder.highlight = nil
+
+        guard let fdi = selectedFDI,
+              let entity = loaded.toothEntity[fdi], entity.isEnabled,
+              let mesh = entity.components[ModelComponent.self]?.mesh else { return }
+
+        let accent = UIColor(red: 0.16, green: 0.38, blue: 0.86, alpha: 1)
+        var mat = PhysicallyBasedMaterial()
+        mat.baseColor = .init(tint: accent)
+        mat.emissiveColor = .init(color: accent)
+        mat.emissiveIntensity = 0.9
+        mat.blending = .transparent(opacity: .init(floatLiteral: 0.30))
+        mat.faceCulling = .none
+
+        let shell = ModelEntity(mesh: mesh, materials: [mat])
+        // Grow ~4% about the tooth's own centre so the glow reads as a rim around
+        // the crown rather than z-fighting the surface. Uniform scale about the
+        // centroid `c` is `s·p + (1−s)·c`, so offset the shell by `(1−s)·c`.
+        let c = entity.visualBounds(relativeTo: entity).center
+        let s: Float = 1.04
+        shell.scale = SIMD3(repeating: s)
+        shell.position = c * (1 - s)
+        entity.addChild(shell)
+        holder.highlight = shell
     }
 
     // MARK: - Camera / orbit
@@ -266,7 +288,9 @@ struct PeriodontalSceneView: View {
                 while let n = node {
                     if let id = n.components[ToothID.self] {
                         let newSelection = selectedFDI == id.fdi ? nil : id.fdi
-                        selectedFDI = newSelection
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            selectedFDI = newSelection
+                        }
                         holder.selectedFDI = newSelection
                         return
                     }
@@ -295,7 +319,7 @@ struct PeriodontalSceneView: View {
             .padding()
         case .ready:
             VStack {
-                HStack {
+                HStack(alignment: .top) {
                     Spacer()
                     archControl
                     Spacer()
@@ -303,8 +327,9 @@ struct PeriodontalSceneView: View {
                 .padding(.top, 10)
                 Spacer()
                 HStack(alignment: .bottom) {
-                    Label(selectedFDI.map { "Tooth \($0) selected" }
-                            ?? "Drag to orbit · pinch to zoom · tap a tooth",
+                    Label(selectedFDI == nil
+                            ? "Drag to orbit · pinch to zoom · tap a tooth"
+                            : "Tap the tooth again to deselect",
                           systemImage: "hand.draw")
                         .font(.caption).fontWeight(.medium)
                         .foregroundStyle(.primary)
@@ -315,11 +340,22 @@ struct PeriodontalSceneView: View {
                 }
                 .padding(10)
             }
+            .overlay(alignment: .topTrailing) { selectedToothPanel }
         }
     }
 
-    /// A legible accent for control selection against the dark scene.
-    fileprivate static let controlAccent = Color(red: 0.30, green: 0.74, blue: 0.86)
+    /// The tapped tooth's chart status, drawn from the same cells as the 2-D chart.
+    @ViewBuilder private var selectedToothPanel: some View {
+        if let fdi = selectedFDI, let tooth = mouth[fdi] {
+            ToothStatusPanel(tooth: tooth)
+                .padding(.top, 60)   // clear the arch picker
+                .padding(.trailing, 10)
+                .transition(.move(edge: .trailing).combined(with: .opacity))
+        }
+    }
+
+    /// The app's brand navy (matches the chart's buttons and segmented tints).
+    fileprivate static let controlAccent = Color(red: 0.05, green: 0.2, blue: 0.5)
 
     private var archControl: some View {
         Picker("Arch", selection: $archFilter) {
