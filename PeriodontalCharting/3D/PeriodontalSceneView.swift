@@ -1,0 +1,355 @@
+//
+//  PeriodontalSceneView.swift
+//  PeriodontalCharting
+//
+//  The 3-D counterpart to the 2-D chart: the static dentition plus procedural
+//  gum + alveolar bone, generated from whatever `[Int: ToothObject]` mouth the
+//  caller hands it — the exact dictionary `ChartDashboard` edits and
+//  `PatientChart.mouth` persists, so the model always matches the chart on
+//  screen. Ported and trimmed from the 3DTeeth prototype's PerioSceneView
+//  (drops the prototype's mock-data markers/heat-map modes, which have no
+//  equivalent in this app's chart model).
+//
+
+import SwiftUI
+import RealityKit
+import simd
+
+/// Holds the long-lived RealityKit entities so gestures and the update closure
+/// can reach them across SwiftUI view updates.
+@MainActor
+final class PeriodontalSceneHolder {
+    let root = Entity()
+    let pivot = Entity()
+    let camera = PerspectiveCamera()
+
+    var loaded: LoadedTeeth?
+    var anatomy: GingivalAnatomyGenerator.Anatomy?
+    var originalMaterials: [Int: [any RealityKit.Material]] = [:]
+    var selectedFDI: Int?
+
+    var cameraBase: Float = 0.45
+
+    // Cached "applied" state so we only rebuild visuals when something changed.
+    var appliedMouth: [Int: ToothObject]?
+    var appliedSelection: Int??
+    var appliedGumOpacity: Float?
+}
+
+struct PeriodontalSceneView: View {
+    /// The chart being visualised — same shape as `PatientChart.mouth`.
+    var mouth: [Int: ToothObject]
+
+    @State private var holder = PeriodontalSceneHolder()
+
+    // Orbit / zoom state.
+    @State private var yaw: Float = 0.5
+    @State private var pitch: Float = -0.3
+    @State private var zoom: Float = 1.0
+    @GestureState private var dragDelta: CGSize = .zero
+    @GestureState private var pinch: CGFloat = 1.0
+
+    @State private var status: LoadStatus = .loading
+    @State private var selectedFDI: Int?
+    /// 0 = fully see-through, 1 = opaque. Purely a material property, so
+    /// dragging this never regenerates the gum/bone mesh.
+    @State private var gumOpacity: Double = Double(GingivalAnatomyGenerator.defaultGumOpacity)
+
+    enum LoadStatus: Equatable { case loading, ready, failed(String) }
+
+    var body: some View {
+        ZStack {
+            RealityView { content in
+                buildStaticScene(into: content)
+                await loadDentition()
+            } update: { _ in
+                applyOrbit()
+                applyVisualization()
+            }
+            .gesture(orbitGesture)
+            .simultaneousGesture(zoomGesture)
+            .simultaneousGesture(selectGesture)
+
+            overlay
+        }
+        .background(sceneBackground)
+    }
+
+    // MARK: - Scene construction
+
+    private func buildStaticScene(into content: some RealityViewContentProtocol) {
+        holder.root.addChild(holder.pivot)
+
+        positionCamera()
+        holder.root.addChild(holder.camera)
+
+        // Three-point-ish directional lighting (no environment asset needed).
+        addLight(direction: [-0.4, -0.7, -0.6], intensity: 9_000)
+        addLight(direction: [0.6, -0.2, -0.5], intensity: 5_000)
+        addLight(direction: [0.1, 0.6, 0.8], intensity: 3_500)
+
+        content.add(holder.root)
+    }
+
+    private func addLight(direction: SIMD3<Float>, intensity: Float) {
+        let light = DirectionalLight()
+        light.light.intensity = intensity
+        light.look(at: .zero, from: -normalize(direction), relativeTo: nil)
+        holder.root.addChild(light)
+    }
+
+    private func loadDentition() async {
+        do {
+            let loaded = try await ToothMeshLoader.load()
+            holder.loaded = loaded
+            holder.pivot.addChild(loaded.modelRoot)
+            holder.cameraBase = max(0.3, loaded.boundingRadius * 2.6)
+            cacheOriginalMaterials(loaded)
+            rebuildAnatomy(loaded)
+            positionCamera()
+            holder.appliedMouth = nil
+            holder.appliedSelection = nil
+            applyVisualization()
+            status = .ready
+        } catch {
+            status = .failed(String(describing: error))
+        }
+    }
+
+    /// (Re)generate the gum + bone layer from the current chart data.
+    private func rebuildAnatomy(_ loaded: LoadedTeeth) {
+        holder.anatomy.map { [$0.gum, $0.bone].forEach { $0.removeFromParent() } }
+        let anatomy = GingivalAnatomyGenerator.build(from: loaded, mouth: mouth)
+        loaded.modelRoot.addChild(anatomy.gum)
+        loaded.modelRoot.addChild(anatomy.bone)
+        holder.anatomy = anatomy
+    }
+
+    private func cacheOriginalMaterials(_ loaded: LoadedTeeth) {
+        for (fdi, entity) in loaded.toothEntity {
+            if let model = entity.components[ModelComponent.self] {
+                holder.originalMaterials[fdi] = model.materials
+            }
+            // Make teeth tappable via a cheap bounding-box collider.
+            let bounds = entity.visualBounds(relativeTo: entity)
+            entity.components.set(InputTargetComponent())
+            entity.components.set(CollisionComponent(shapes: [
+                .generateBox(size: bounds.extents).offsetBy(translation: bounds.center)
+            ]))
+        }
+    }
+
+    // MARK: - Data-driven visuals
+
+    private func applyVisualization() {
+        guard let loaded = holder.loaded else { return }
+
+        // Skip entirely if nothing that affects the visuals changed.
+        if holder.appliedMouth == mouth,
+           holder.appliedSelection == .some(selectedFDI),
+           holder.appliedGumOpacity == Float(gumOpacity) { return }
+
+        // Geometry-affecting: only the chart data changing warrants a rebuild.
+        // A missing-tooth flag flip also needs the presence loop below to rerun,
+        // even though it touches no geometry itself.
+        let mouthChanged = holder.appliedMouth != mouth
+        if mouthChanged {
+            rebuildAnatomy(loaded)
+            holder.appliedMouth = mouth
+            holder.appliedGumOpacity = nil   // freshly-built gum needs the tint reapplied
+        }
+        holder.anatomy?.gum.isEnabled = true
+
+        // Material-only: cheap enough to run every slider tick without touching geometry.
+        if holder.appliedGumOpacity != Float(gumOpacity), let gum = holder.anatomy?.gum {
+            GingivalAnatomyGenerator.setGumOpacity(Float(gumOpacity), on: gum)
+            holder.appliedGumOpacity = Float(gumOpacity)
+        }
+
+        let selectionChanged = holder.appliedSelection != .some(selectedFDI)
+        guard mouthChanged || selectionChanged else { return }
+        holder.appliedSelection = .some(selectedFDI)
+
+        // Teeth the chart records as missing are not shown at all; the
+        // selected tooth gets a light emissive highlight.
+        for (fdi, entity) in loaded.toothEntity {
+            entity.isEnabled = mouth[fdi]?.missing != true
+            guard var model = entity.components[ModelComponent.self] else { continue }
+            if fdi == selectedFDI {
+                var m = PhysicallyBasedMaterial()
+                m.baseColor = .init(tint: .white)
+                m.roughness = 0.4
+                m.emissiveColor = .init(color: .white)
+                m.emissiveIntensity = 0.4
+                model.materials = [m]
+            } else if let original = holder.originalMaterials[fdi] {
+                model.materials = original
+            }
+            entity.components.set(model)
+        }
+    }
+
+    // MARK: - Camera / orbit
+
+    private func positionCamera() {
+        let distance = holder.cameraBase / max(0.4, zoom * Float(pinch))
+        let dir = normalize(SIMD3<Float>(0, 0.35, 1))
+        holder.camera.look(at: .zero, from: dir * distance, relativeTo: nil)
+    }
+
+    private func applyOrbit() {
+        let liveYaw = yaw + Float(dragDelta.width) * 0.01
+        let livePitch = max(-1.2, min(1.2, pitch + Float(dragDelta.height) * 0.01))
+        holder.pivot.orientation =
+            simd_quatf(angle: liveYaw, axis: [0, 1, 0]) *
+            simd_quatf(angle: livePitch, axis: [1, 0, 0])
+        positionCamera()
+    }
+
+    // MARK: - Gestures
+
+    private var orbitGesture: some Gesture {
+        DragGesture()
+            .updating($dragDelta) { value, state, _ in state = value.translation }
+            .onEnded { value in
+                yaw += Float(value.translation.width) * 0.01
+                pitch = max(-1.2, min(1.2, pitch + Float(value.translation.height) * 0.01))
+            }
+    }
+
+    private var zoomGesture: some Gesture {
+        MagnifyGesture()
+            .updating($pinch) { value, state, _ in state = value.magnification }
+            .onEnded { value in
+                zoom = max(0.4, min(4, zoom * Float(value.magnification)))
+            }
+    }
+
+    private var selectGesture: some Gesture {
+        SpatialTapGesture()
+            .targetedToAnyEntity()
+            .onEnded { value in
+                var node: Entity? = value.entity
+                while let n = node {
+                    if let id = n.components[ToothID.self] {
+                        let newSelection = selectedFDI == id.fdi ? nil : id.fdi
+                        selectedFDI = newSelection
+                        holder.selectedFDI = newSelection
+                        return
+                    }
+                    node = n.parent
+                }
+            }
+    }
+
+    // MARK: - Overlay chrome
+
+    @ViewBuilder private var overlay: some View {
+        switch status {
+        case .loading:
+            ProgressView("Loading dentition…")
+                .padding(14)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+        case .failed(let message):
+            VStack(spacing: 6) {
+                Image(systemName: "exclamationmark.triangle.fill").font(.title)
+                Text("Couldn't load the model").font(.headline)
+                Text(message).font(.caption).foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .padding()
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+            .padding()
+        case .ready:
+            VStack {
+                Spacer()
+                HStack(alignment: .bottom) {
+                    Label(selectedFDI.map { "Tooth \($0) selected" }
+                            ?? "Drag to orbit · pinch to zoom · tap a tooth",
+                          systemImage: "hand.draw")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 10).padding(.vertical, 6)
+                        .background(.ultraThinMaterial, in: Capsule())
+                    Spacer()
+                    gumOpacityControl
+                }
+                .padding(10)
+            }
+        }
+    }
+
+    private var gumOpacityControl: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "eye.slash")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Slider(value: $gumOpacity, in: 0.1...1.0)
+                .frame(width: 140)
+            Image(systemName: "eye.fill")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(.ultraThinMaterial, in: Capsule())
+    }
+
+    private var sceneBackground: some View {
+        LinearGradient(colors: [Color(white: 0.16), Color(white: 0.05)],
+                       startPoint: .top, endPoint: .bottom)
+        .ignoresSafeArea()
+    }
+}
+
+// MARK: - Presentation chrome
+
+/// Full-screen wrapper: the 3-D view plus a "this patient / healthy control"
+/// toggle and bone visibility switch, presented from `ChartDashboard`.
+struct PeriodontalAnatomyPresenter: View {
+    var mouth: [Int: ToothObject]
+    @Environment(\.dismiss) private var dismiss
+    @State private var showHealthyControl = false
+
+    private var displayedMouth: [Int: ToothObject] {
+        showHealthyControl ? mouth.healthyControl() : mouth
+    }
+
+    var body: some View {
+        NavigationStack {
+            PeriodontalSceneView(mouth: displayedMouth)
+                .navigationTitle("3D Anatomy")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("Done") { dismiss() }
+                    }
+                    ToolbarItem(placement: .principal) {
+                        Picker("Tissue", selection: $showHealthyControl) {
+                            Text("This patient").tag(false)
+                            Text("Healthy control").tag(true)
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(width: 260)
+                    }
+                }
+        }
+    }
+}
+
+extension Dictionary where Key == Int, Value == ToothObject {
+    /// An idealised, disease-free version of this mouth — same present teeth,
+    /// but every site healthy (shallow sulcus, margin at the CEJ, no
+    /// bleeding/mobility). Used as a side-by-side control in the 3-D view.
+    func healthyControl() -> [Int: ToothObject] {
+        mapValues { tooth in
+            guard !tooth.missing else { return tooth }
+            var t = tooth
+            t.probingDepth = AspectData(outer: [2, 2, 2], inner: [2, 2, 2])
+            t.gingivalMargin = AspectData(outer: [1, 1, 1], inner: [1, 1, 1])
+            t.bleeding = AspectData(outer: [false, false, false], inner: [false, false, false])
+            t.mobility = .zero
+            return t
+        }
+    }
+}

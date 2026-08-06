@@ -60,6 +60,7 @@ struct ChartDashboard: View {
     @State private var showAIMode = false
     @State private var showSettings = false
     @State private var showZoomSlider = false
+    @State private var show3DView = false
     @State private var highlightTask: Task<Void, Never>?
     @Binding var columnVisibility: NavigationSplitViewVisibility
 
@@ -110,6 +111,12 @@ struct ChartDashboard: View {
                         isSingleColumn ? "2 Columns" : "1 Column",
                         systemImage: isSingleColumn ? "rectangle.split.2x2" : "rectangle.split.1x2"
                     )
+                }
+
+                Button {
+                    show3DView = true
+                } label: {
+                    Label("", systemImage: "view.3d")
                 }
                 
                 Button {
@@ -227,6 +234,9 @@ struct ChartDashboard: View {
         }
         .sheet(isPresented: $showSettings) {
             OnboardingView(hasCompletedOnboarding: .constant(true), isSettingsMode: true)
+        }
+        .fullScreenCover(isPresented: $show3DView) {
+            PeriodontalAnatomyPresenter(mouth: mouth)
         }
         .onChange(of: aiViewModel.commandHistory) { _, _ in recomputeChart() }
         .onChange(of: aiViewModel.committedCommands) { _, _ in recomputeChart() }
