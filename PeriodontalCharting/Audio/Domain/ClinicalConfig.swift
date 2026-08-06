@@ -217,9 +217,7 @@ enum ClinicalConfig {
         (#"\bgak?\s?a?d+a+\b"#, "gak ada"),
         // "disto" corruptions, only when a site word / number follows
         (#"\b(?:di\s*situ|disitu|justru|di\s*stok|di\s*stop|stok|situl|di\s*situl|di\s*setiap|di\s*semua|di\s*1)\b(?=\s+(?:bukal|lingual|\d))"#, "disto"),
-        (#"\bdi\s*situ\b"#, "disto"),
-        (#"\bdisitu\b"#, "disto"),
-        (#"\bjustru\b"#, "disto"),
+        (#"\b(?:di\s*situ|disitu|justru)\b"#, "disto"),
         // "disto bukal" acoustically compressed by STT into "di bop" — dangerous
         // because "bop" is the BLEEDING metric, so the site would mark bleeding
         // instead. Safe to rewrite: legit "di" is always followed by a site word
@@ -238,6 +236,9 @@ enum ClinicalConfig {
         // stray "lingual"
         (#"\b(?:limual|limoal|lungwal|lingwal|linguah|linguard|bistur)\b"#, "lingual"),
         (#"\b(?:4 cation|furukasih|forcation|furukashi)\b"#, "furcation"),
+        // "gingival" (gingival-margin metric) mis-hears. STUB — extend with observed
+        // variants. Maps clear non-corpus mishears only; leaves correct "gingival" as-is.
+        (#"\b(?:jinji[fv]al|jinji|jingjival|ginggival|gingifal|jinji\s[fv]all|fall)\b"#, "gingival"),
         // "minus satu" (recession value -1) gets merged/garbled by STT into one
         // non-corpus word ("minosato" / "minusatu"), so the value is lost entirely.
         // Split it back so "satu" -> 1 survives (the sign still comes from the
