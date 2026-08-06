@@ -97,11 +97,6 @@ struct ToothGraphicSideView: View, Equatable {
 
     private var tooth: ToothObject { teeth[index] }
 
-    // Solid anatomical fills drawn behind the tooth so roots sit in bone
-    // and the neck sits in gum tissue (instead of floating on the background).
-    private static let gumColor  = Color(red: 0.89, green: 0.60, blue: 0.63)
-    private static let boneColor = Color(red: 0.93, green: 0.88, blue: 0.79)
-
     var body: some View {
         let name = imageName(for: tooth, isOuter: isOuter)
         let uiImage = UIImage(named: name)
@@ -153,7 +148,7 @@ struct ToothGraphicSideView: View, Equatable {
                         if !isMirrored {
                             // Upper jaw: Root points UP. CEJ is at the bottom of the root region.
                             ZStack(alignment: .bottom) {
-                                Rectangle().fill(Self.boneColor)
+                                Rectangle().fill(Color(.systemBackground))
                                     .frame(width: targetWidth, height: rootHeight)
                                 
                                 VStack(spacing: -1) {
@@ -177,7 +172,7 @@ struct ToothGraphicSideView: View, Equatable {
                             // Lower jaw: Root points DOWN. CEJ is at the top of the root region.
                             Spacer(minLength: 0)
                             ZStack(alignment: .top) {
-                                Rectangle().fill(Self.boneColor)
+                                Rectangle().fill(Color(.systemBackground))
                                     .frame(width: targetWidth, height: rootHeight)
                                 
                                 VStack(spacing: -1) {
