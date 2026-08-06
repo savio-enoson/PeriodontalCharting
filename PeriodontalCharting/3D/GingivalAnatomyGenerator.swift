@@ -65,7 +65,12 @@ enum GingivalAnatomyGenerator {
             }
             // Floor joining the buccal and lingual bone walls into a closed trough,
             // so roots read as buried rather than showing through from below/behind.
-            floor(columns, into: &bone)
+            floor(columns, level: .base, onBone: true, into: &bone)
+            // Same seal one level up, at the crest — where the gum's own two
+            // walls meet the bone housing exactly (both use the wide `onBone`
+            // offset there, see `fence`). Without this the gum is just two
+            // open sheets; this closes it into one solid collar around the root.
+            floor(columns, level: .boneCrest, onBone: true, into: &gum)
 
             // Interproximal papillae, from the original (un-subdivided) knots.
             for knot in knots where knot.isInterproximal {
@@ -103,6 +108,10 @@ enum GingivalAnatomyGenerator {
         var outward: SIMD2<Float>
         var cejY: Float
         var apexY: Float
+        /// Flat, arch-wide floor level — the same value on every knot (see
+        /// `knots(for:...)`) so the bone's underside is one solid, closed plate
+        /// instead of a ragged edge that tracks each tooth's own root depth.
+        var baseY: Float
         var marginB, marginL: Float     // mm, + coronal
         var boneB, boneL: Float         // mm of bone loss
         var surfB, surfL: Float         // cervical surface offset (gum hugs here)
@@ -114,7 +123,7 @@ enum GingivalAnatomyGenerator {
     private struct Column {
         var centre2: SIMD2<Float>
         var outward: SIMD2<Float>
-        var cejY, apexY: Float
+        var cejY, apexY, baseY: Float
         var marginB, marginL: Float
         var boneB, boneL: Float
         var surfB, surfL: Float
@@ -123,14 +132,14 @@ enum GingivalAnatomyGenerator {
 
         init(knot k: Knot, coronalDir: Float, modelPerMM: Float) {
             centre2 = k.centre2; outward = k.outward
-            cejY = k.cejY; apexY = k.apexY
+            cejY = k.cejY; apexY = k.apexY; baseY = k.baseY
             marginB = k.marginB; marginL = k.marginL
             boneB = k.boneB; boneL = k.boneL
             surfB = k.surfB; surfL = k.surfL
             surfBoneB = k.surfBoneB; surfBoneL = k.surfBoneL
             self.coronalDir = coronalDir; self.modelPerMM = modelPerMM
         }
-        init() { centre2 = .zero; outward = SIMD2(0, 1); cejY = 0; apexY = 0
+        init() { centre2 = .zero; outward = SIMD2(0, 1); cejY = 0; apexY = 0; baseY = 0
                  marginB = 0; marginL = 0; boneB = 0; boneL = 0; surfB = 0; surfL = 0
                  surfBoneB = 0; surfBoneL = 0; coronalDir = 1; modelPerMM = 1 }
 
@@ -140,7 +149,7 @@ enum GingivalAnatomyGenerator {
             switch level {
             case .marginTop: return cejY + coronalDir * margin * modelPerMM
             case .boneCrest: return cejY - coronalDir * (2 + bone) * modelPerMM
-            case .base:      return apexY - coronalDir * 2.5 * modelPerMM
+            case .base:      return baseY
             }
         }
         /// A ribbon point. `onBone` places it on the bone housing (widest-root
@@ -180,35 +189,80 @@ enum GingivalAnatomyGenerator {
             }
         }
 
-        // Extend the ribbon well distal of each terminal molar so the bone and gum
-        // wrap behind the last root instead of ending on the tooth. Two steps give
-        // a smooth taper around the back of the molar.
-        if knots.count >= 2 {
-            let f1 = extended(knots[0], from: knots[1], by: 1.2)
-            let f2 = extended(knots[0], from: knots[1], by: 2.4)
-            let b1 = extended(knots[knots.count - 1], from: knots[knots.count - 2], by: 1.2)
-            let b2 = extended(knots[knots.count - 1], from: knots[knots.count - 2], by: 2.4)
-            knots.insert(contentsOf: [f2, f1], at: 0)
-            knots.append(contentsOf: [b1, b2])
-        }
-
         // Dilate the bone housing: a molar's root splays wider than any single
         // radial measurement captures, so let each column inherit the widest
         // housing of its neighbours. This keeps the bone plate outside the roots.
+        // Done *before* the distal extension below, over the real teeth only —
+        // otherwise a tapered extension tip inherits its neighbour's pre-taper
+        // width right back again and never actually closes to a point.
         let raw = knots
         for i in knots.indices {
             let lo = max(0, i - 1), hi = min(raw.count - 1, i + 1)
             knots[i].surfBoneB = (lo...hi).map { raw[$0].surfBoneB }.max() ?? knots[i].surfBoneB
             knots[i].surfBoneL = (lo...hi).map { raw[$0].surfBoneL }.max() ?? knots[i].surfBoneL
         }
+
+        // Extend the ribbon well distal of each terminal molar so the bone and gum
+        // wrap behind the last root instead of ending on the tooth. Two steps,
+        // tapering to a point, give a smooth pinch around the back of the molar.
+        if knots.count >= 2 {
+            let f1 = extended(knots[0], from: knots[1], by: 1.2, archCentre: centre2)
+            let f2 = extended(knots[0], from: knots[1], by: 2.4, archCentre: centre2)
+            let b1 = extended(knots[knots.count - 1], from: knots[knots.count - 2], by: 1.2, archCentre: centre2)
+            let b2 = extended(knots[knots.count - 1], from: knots[knots.count - 2], by: 2.4, archCentre: centre2)
+            knots.insert(contentsOf: [f2, f1], at: 0)
+            knots.append(contentsOf: [b1, b2])
+        }
+
+        // Flatten the floor: without this, each column's base sits 2.5mm past
+        // its *own* tooth's apex, and since canines/molars root far deeper than
+        // incisors, the underside comes out as a ragged, tooth-by-tooth sawtooth
+        // instead of a closed base. Push every column down to the single deepest
+        // apex in the arch (plus the same margin) so `floor(...)` seals a flat,
+        // solid plate — like a model mounted on a base, not an open root trench.
+        if let mostApicalY = coronalDir > 0 ? knots.map(\.apexY).min() : knots.map(\.apexY).max() {
+            let flatBaseY = mostApicalY - coronalDir * 2.5 * modelPerMM
+            for i in knots.indices { knots[i].baseY = flatBaseY }
+        }
         return knots
     }
 
-    /// A copy of `base` pushed distally beyond the terminal tooth by `by` tooth spacings.
-    private static func extended(_ base: Knot, from other: Knot, by: Float) -> Knot {
+    /// A copy of `base` pushed distally beyond the terminal tooth by `by` tooth spacings,
+    /// continuing the arch's curve rather than running off in a straight line. A
+    /// straight extrapolation from just the last two knots visibly kinks away from
+    /// the arch as soon as it leaves the last real tooth — the wall behind the
+    /// terminal molar reads as a separate flat slab bolted onto the curve instead
+    /// of a smooth taper. Rotating around the arch centre by the same angular step
+    /// observed between `other` and `base` keeps position *and* the outward-facing
+    /// direction following that same curvature, so the extension — and the cap
+    /// that closes it — blends into the rest of the arch instead of seaming.
+    private static func extended(_ base: Knot, from other: Knot, by: Float, archCentre: SIMD2<Float>) -> Knot {
         var e = base
-        e.centre2 = base.centre2 + (base.centre2 - other.centre2) * by
+        let baseVec = base.centre2 - archCentre
+        let otherVec = other.centre2 - archCentre
+        let radius = simd_length(baseVec)
+        guard radius > 1e-5 else { return e }
+
+        var delta = atan2(baseVec.y, baseVec.x) - atan2(otherVec.y, otherVec.x)
+        if delta > .pi { delta -= 2 * .pi }
+        if delta < -.pi { delta += 2 * .pi }
+        let angle = delta * by
+        let c = cos(angle), s = sin(angle)
+        let rotate: (SIMD2<Float>) -> SIMD2<Float> = { v in SIMD2(v.x * c - v.y * s, v.x * s + v.y * c) }
+
+        e.centre2 = archCentre + rotate(baseVec)
+        e.outward = rotate(base.outward)
         e.isInterproximal = false
+
+        // Taper the ribbon's width to nothing over the extension, so the tube
+        // pinches to a smooth point instead of ending in an abrupt full-width
+        // wall. Even with the curve-following rotation above, a constant-width
+        // cap reads as a seam the moment the real, tooth-shaped surface offsets
+        // stop and a flat extrapolated width takes over; closing to a point
+        // sidesteps that mismatch entirely rather than trying to match it exactly.
+        let taper = max(0, 1 - by / 2.4)
+        e.surfB *= taper; e.surfL *= taper
+        e.surfBoneB *= taper; e.surfBoneL *= taper
         return e
     }
 
@@ -224,7 +278,10 @@ enum GingivalAnatomyGenerator {
                                      minimum: surf, fallback: g.radialHalf)
         // Mid-facial site (index 1 of 3) represents the tooth's own knot; the
         // interproximal (index 0/2) sites feed the papilla knots instead.
+        // `baseY` starts as this tooth's own apex-relative depth; `knots(for:...)`
+        // overwrites it arch-wide once every knot is known, flattening the floor.
         return Knot(centre2: g.centre2, outward: g.outward, cejY: g.cejY, apexY: g.apexY,
+                    baseY: g.apexY - coronalDir * 2.5 * modelPerMM,
                     marginB: margin(mouth, fdi, outer: true, site: 1),
                     marginL: margin(mouth, fdi, outer: false, site: 1),
                     boneB: boneLoss(mouth, fdi, outer: true, site: 1),
@@ -262,7 +319,9 @@ enum GingivalAnatomyGenerator {
             (boneLoss(mouth, a, outer: outer, site: 2) + boneLoss(mouth, b, outer: outer, site: 0)) / 2
         }
 
-        return Knot(centre2: c2, outward: outward, cejY: cejY, apexY: (ga.apexY + gb.apexY) / 2,
+        let apexY = (ga.apexY + gb.apexY) / 2
+        return Knot(centre2: c2, outward: outward, cejY: cejY, apexY: apexY,
+                    baseY: apexY - coronalDir * 2.5 * modelPerMM,
                     marginB: ipMargin(outer: true), marginL: ipMargin(outer: false),
                     boneB: ipBone(outer: true), boneL: ipBone(outer: false),
                     surfB: surf.buccal, surfL: surf.lingual,
@@ -339,6 +398,7 @@ enum GingivalAnatomyGenerator {
         col.outward = simd_length(o) > 1e-5 ? normalize(o) : k1.outward
         col.cejY = cr(k0.cejY, k1.cejY, k2.cejY, k3.cejY)
         col.apexY = cr(k0.apexY, k1.apexY, k2.apexY, k3.apexY)
+        col.baseY = cr(k0.baseY, k1.baseY, k2.baseY, k3.baseY)
         col.marginB = cr(k0.marginB, k1.marginB, k2.marginB, k3.marginB)
         col.marginL = cr(k0.marginL, k1.marginL, k2.marginL, k3.marginL)
         col.boneB = cr(k0.boneB, k1.boneB, k2.boneB, k3.boneB)
@@ -462,16 +522,20 @@ enum GingivalAnatomyGenerator {
                                c.point(.buccal, .base, onBone: true))
     }
 
-    /// Seal the bottom of the bone trough: bridge the buccal and lingual base
-    /// edges so the alveolar housing is a closed, solid mass with the roots buried
-    /// inside it, rather than two thin walls with the roots floating between them.
-    private static func floor(_ columns: [Column], into builder: inout MeshBuilder) {
+    /// Seal the buccal and lingual walls together at one level, bridging them
+    /// into a closed, solid cross-section instead of two open sheets with
+    /// nothing between them. Used for the bone's base (the alveolar housing
+    /// becomes a solid mass with the roots buried inside) and for the gum's
+    /// crest (so the gum band itself is a solid collar around the root, not
+    /// just two thin translucent walls with an empty gap between them).
+    private static func floor(_ columns: [Column], level: Level, onBone: Bool,
+                              into builder: inout MeshBuilder) {
         for i in 0..<(columns.count - 1) {
             let c0 = columns[i], c1 = columns[i + 1]
-            builder.addQuadAutoNormal(c0.point(.buccal, .base, onBone: true),
-                                      c1.point(.buccal, .base, onBone: true),
-                                      c1.point(.lingual, .base, onBone: true),
-                                      c0.point(.lingual, .base, onBone: true))
+            builder.addQuadAutoNormal(c0.point(.buccal, level, onBone: onBone),
+                                      c1.point(.buccal, level, onBone: onBone),
+                                      c1.point(.lingual, level, onBone: onBone),
+                                      c0.point(.lingual, level, onBone: onBone))
         }
     }
 
