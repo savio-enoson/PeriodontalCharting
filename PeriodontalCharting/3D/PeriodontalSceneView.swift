@@ -34,6 +34,31 @@ final class PeriodontalSceneHolder {
     var appliedMouth: [Int: ToothObject]?
     var appliedSelection: Int??
     var appliedGumOpacity: Float?
+    var appliedArches: Set<DentalArch>?
+}
+
+/// Which arch(es) the 3-D view shows: the whole dentition, or one arch in
+/// isolation so the occlusal surfaces and palatal/lingual sites aren't hidden
+/// behind the opposing teeth.
+enum ArchFilter: String, CaseIterable, Identifiable {
+    case both, upper, lower
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .both:  return "Both"
+        case .upper: return "Upper"
+        case .lower: return "Lower"
+        }
+    }
+
+    var arches: Set<DentalArch> {
+        switch self {
+        case .both:  return [.maxilla, .mandible]
+        case .upper: return [.maxilla]
+        case .lower: return [.mandible]
+        }
+    }
 }
 
 struct PeriodontalSceneView: View {
@@ -51,6 +76,8 @@ struct PeriodontalSceneView: View {
 
     @State private var status: LoadStatus = .loading
     @State private var selectedFDI: Int?
+    /// Whole dentition, or a single arch shown in isolation.
+    @State private var archFilter: ArchFilter = .both
     /// 0 = fully see-through, 1 = opaque. Purely a material property, so
     /// dragging this never regenerates the gum/bone mesh.
     @State private var gumOpacity: Double = Double(GingivalAnatomyGenerator.defaultGumOpacity)
@@ -119,7 +146,8 @@ struct PeriodontalSceneView: View {
     /// (Re)generate the gum + bone layer from the current chart data.
     private func rebuildAnatomy(_ loaded: LoadedTeeth) {
         holder.anatomy.map { [$0.gum, $0.bone].forEach { $0.removeFromParent() } }
-        let anatomy = GingivalAnatomyGenerator.build(from: loaded, mouth: mouth)
+        let anatomy = GingivalAnatomyGenerator.build(from: loaded, mouth: mouth,
+                                                     arches: archFilter.arches)
         loaded.modelRoot.addChild(anatomy.gum)
         loaded.modelRoot.addChild(anatomy.bone)
         holder.anatomy = anatomy
@@ -147,15 +175,18 @@ struct PeriodontalSceneView: View {
         // Skip entirely if nothing that affects the visuals changed.
         if holder.appliedMouth == mouth,
            holder.appliedSelection == .some(selectedFDI),
-           holder.appliedGumOpacity == Float(gumOpacity) { return }
+           holder.appliedGumOpacity == Float(gumOpacity),
+           holder.appliedArches == archFilter.arches { return }
 
-        // Geometry-affecting: only the chart data changing warrants a rebuild.
-        // A missing-tooth flag flip also needs the presence loop below to rerun,
-        // even though it touches no geometry itself.
+        // Geometry-affecting: the chart data changing, or the shown arch(es)
+        // changing, warrants a rebuild. A missing-tooth flag flip also needs the
+        // presence loop below to rerun, even though it touches no geometry itself.
         let mouthChanged = holder.appliedMouth != mouth
-        if mouthChanged {
+        let archesChanged = holder.appliedArches != archFilter.arches
+        if mouthChanged || archesChanged {
             rebuildAnatomy(loaded)
             holder.appliedMouth = mouth
+            holder.appliedArches = archFilter.arches
             holder.appliedGumOpacity = nil   // freshly-built gum needs the tint reapplied
         }
         holder.anatomy?.gum.isEnabled = true
@@ -167,13 +198,15 @@ struct PeriodontalSceneView: View {
         }
 
         let selectionChanged = holder.appliedSelection != .some(selectedFDI)
-        guard mouthChanged || selectionChanged else { return }
+        guard mouthChanged || archesChanged || selectionChanged else { return }
         holder.appliedSelection = .some(selectedFDI)
 
-        // Teeth the chart records as missing are not shown at all; the
-        // selected tooth gets a light emissive highlight.
+        // A tooth is shown only when its arch is visible and the chart doesn't
+        // record it as missing; the selected tooth gets a light emissive highlight.
+        let visibleArches = archFilter.arches
         for (fdi, entity) in loaded.toothEntity {
-            entity.isEnabled = mouth[fdi]?.missing != true
+            let inVisibleArch = visibleArches.contains(DentalArch.arch(ofFDI: fdi))
+            entity.isEnabled = inVisibleArch && mouth[fdi]?.missing != true
             guard var model = entity.components[ModelComponent.self] else { continue }
             if fdi == selectedFDI {
                 var m = PhysicallyBasedMaterial()
@@ -262,15 +295,21 @@ struct PeriodontalSceneView: View {
             .padding()
         case .ready:
             VStack {
+                HStack {
+                    Spacer()
+                    archControl
+                    Spacer()
+                }
+                .padding(.top, 10)
                 Spacer()
                 HStack(alignment: .bottom) {
                     Label(selectedFDI.map { "Tooth \($0) selected" }
                             ?? "Drag to orbit · pinch to zoom · tap a tooth",
                           systemImage: "hand.draw")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 10).padding(.vertical, 6)
-                        .background(.ultraThinMaterial, in: Capsule())
+                        .font(.caption).fontWeight(.medium)
+                        .foregroundStyle(.primary)
+                        .padding(.horizontal, 12).padding(.vertical, 8)
+                        .background(.regularMaterial, in: Capsule())
                     Spacer()
                     gumOpacityControl
                 }
@@ -279,20 +318,37 @@ struct PeriodontalSceneView: View {
         }
     }
 
+    /// A legible accent for control selection against the dark scene.
+    fileprivate static let controlAccent = Color(red: 0.30, green: 0.74, blue: 0.86)
+
+    private var archControl: some View {
+        Picker("Arch", selection: $archFilter) {
+            ForEach(ArchFilter.allCases) { filter in
+                Text(filter.label).tag(filter)
+            }
+        }
+        .pickerStyle(.segmented)
+        .frame(width: 220)
+        .padding(5)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .tint(Self.controlAccent)
+    }
+
     private var gumOpacityControl: some View {
         HStack(spacing: 8) {
             Image(systemName: "eye.slash")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+                .font(.caption)
+                .foregroundStyle(.primary)
             Slider(value: $gumOpacity, in: 0.1...1.0)
                 .frame(width: 140)
+                .tint(Self.controlAccent)
             Image(systemName: "eye.fill")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+                .font(.caption)
+                .foregroundStyle(.primary)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(.ultraThinMaterial, in: Capsule())
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(.regularMaterial, in: Capsule())
     }
 
     private var sceneBackground: some View {
@@ -331,6 +387,7 @@ struct PeriodontalAnatomyPresenter: View {
                         }
                         .pickerStyle(.segmented)
                         .frame(width: 260)
+                        .tint(PeriodontalSceneView.controlAccent)
                     }
                 }
         }

@@ -82,19 +82,17 @@ enum ToothMeshLoader {
         var archCentre: [DentalArch: SIMD3<Float>] = [:]
 
         for (arch, group) in [(DentalArch.maxilla, maxilla), (DentalArch.mandible, mandible)] {
-            let ordered = orderAroundArch(group, in: modelRoot)
-            let fdis = arch.fdiOrder
+            let assigned = identifyTeeth(group, arch: arch, in: modelRoot)
             var sum = SIMD3<Float>.zero
-            for (i, entity) in ordered.prefix(fdis.count).enumerated() {
-                let fdi = fdis[i]
+            for (fdi, entity) in assigned {
                 let c = entity.visualBounds(relativeTo: modelRoot).center
                 entity.components.set(ToothID(fdi: fdi))
                 toothEntity[fdi] = entity
                 centroid[fdi] = c
                 sum += c
             }
-            if !ordered.isEmpty {
-                archCentre[arch] = sum / Float(min(ordered.count, fdis.count))
+            if !assigned.isEmpty {
+                archCentre[arch] = sum / Float(assigned.count)
             }
         }
 
@@ -189,6 +187,103 @@ enum ToothMeshLoader {
             node = n.parent
         }
         return false
+    }
+
+    // MARK: - Tooth identification
+
+    /// Assign an FDI number to every mesh in one arch. Prefers the asset's baked
+    /// names (each tooth type is encoded in a `UL#`/`LL#` xform or a per-type
+    /// material, reliably even though left/right is not), and only falls back to
+    /// the fragile geometric arch-walk when those names don't yield a clean set.
+    /// The name path fixes the mislabelling the pure walk produced at some
+    /// positions — which showed up as a tooth flagged "missing" in the chart
+    /// staying visible in 3-D because the wrong mesh was being hidden.
+    private static func identifyTeeth(_ meshes: [Entity], arch: DentalArch, in root: Entity) -> [Int: Entity] {
+        if let byName = assignByName(meshes, arch: arch, in: root) {
+            #if DEBUG
+            print("[ToothMeshLoader] \(arch) identified by name: \(byName.keys.sorted())")
+            #endif
+            return byName
+        }
+        #if DEBUG
+        print("[ToothMeshLoader] \(arch) name identification failed — falling back to geometry")
+        #endif
+        let ordered = orderAroundArch(meshes, in: root)
+        let fdis = arch.fdiOrder
+        var out: [Int: Entity] = [:]
+        for (i, entity) in ordered.prefix(fdis.count).enumerated() { out[fdis[i]] = entity }
+        return out
+    }
+
+    /// Name-anchored assignment: group meshes by tooth *type* (1 = central incisor
+    /// … 8 = 2nd/3rd molar), then split each type's two mirrored copies by their X
+    /// position into the arch's two quadrants. The lower-X copy takes the quadrant
+    /// that leads `DentalArch.fdiOrder` (18/48 side), matching the 2-D chart's
+    /// handedness. Returns `nil` — so the caller falls back to geometry — unless
+    /// every type resolves to exactly two meshes.
+    private static func assignByName(_ meshes: [Entity], arch: DentalArch, in root: Entity) -> [Int: Entity]? {
+        var byType: [Int: [Entity]] = [:]
+        for m in meshes {
+            guard let type = toothType(m, arch: arch) else { return nil }
+            byType[type, default: []].append(m)
+        }
+        guard byType.count == 8, byType.values.allSatisfy({ $0.count == 2 }) else { return nil }
+
+        // Leading quadrant in fdiOrder sits on the −X side: 1 (maxilla) / 4 (mandible).
+        let (startQuadrant, endQuadrant) = arch == .maxilla ? (1, 2) : (4, 3)
+        var out: [Int: Entity] = [:]
+        for (type, pair) in byType {
+            let sorted = pair.sorted {
+                $0.visualBounds(relativeTo: root).center.x < $1.visualBounds(relativeTo: root).center.x
+            }
+            out[startQuadrant * 10 + type] = sorted[0]   // −X copy
+            out[endQuadrant * 10 + type] = sorted[1]     // +X copy
+        }
+        return out
+    }
+
+    /// The tooth type (1…8, incisor→molar) baked into a mesh's name/ancestors.
+    /// Maxilla: a `UL#` seam-xform ancestor, or the per-type `blinn##` material
+    /// (`blinn14`→2 … `blinn20`→8, with `UL1`→1). Mandible: an `LL#`/`ll#` tag,
+    /// with the untagged 1st molar carrying `blinn10`.
+    private static func toothType(_ entity: Entity, arch: DentalArch) -> Int? {
+        var names = ""
+        var node: Entity? = entity
+        while let n = node { names += "/" + n.name; node = n.parent }
+        let lower = names.lowercased()
+
+        if arch == .maxilla {
+            if let d = digit(after: "ul", in: lower) { return d }
+            if let b = number(after: "blinn", in: lower) { return b - 12 }  // 14…20 → 2…8
+            return nil
+        } else {
+            if let d = digit(after: "ll", in: lower) { return d }
+            if let d = digit(after: "_l", in: lower) { return d }   // e.g. `_l2_` incisor
+            if lower.contains("blinn10") { return 6 }
+            return nil
+        }
+    }
+
+    /// First single digit immediately following `tag` in `haystack` (1…8), if any.
+    private static func digit(after tag: String, in haystack: String) -> Int? {
+        var search = haystack.startIndex
+        while let r = haystack.range(of: tag, range: search..<haystack.endIndex) {
+            if r.upperBound < haystack.endIndex,
+               let d = haystack[r.upperBound].wholeNumberValue, (1...8).contains(d) {
+                return d
+            }
+            search = r.upperBound
+        }
+        return nil
+    }
+
+    /// The integer immediately following `tag` in `haystack` (e.g. "blinn14" → 14).
+    private static func number(after tag: String, in haystack: String) -> Int? {
+        guard let r = haystack.range(of: tag) else { return nil }
+        var i = r.upperBound
+        var digits = ""
+        while i < haystack.endIndex, haystack[i].isNumber { digits.append(haystack[i]); i = haystack.index(after: i) }
+        return Int(digits)
     }
 
     /// Walk the horseshoe: sort teeth by angle about the arch centre, then break

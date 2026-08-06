@@ -45,13 +45,14 @@ enum GingivalAnatomyGenerator {
     nonisolated static let defaultGumOpacity: Float = 0.64
 
     static func build(from loaded: LoadedTeeth, mouth: [Int: ToothObject],
+                      arches: Set<DentalArch> = Set(DentalArch.allCases),
                       gumOpacity: Float = defaultGumOpacity) -> Anatomy {
         let modelPerMM = calibrate(loaded)
 
         var gum = MeshBuilder()
         var bone = MeshBuilder()
 
-        for arch in DentalArch.allCases {
+        for arch in DentalArch.allCases where arches.contains(arch) {
             guard let archCentre = loaded.archCentre[arch] else { continue }
             let coronalDir = coronalDirection(for: arch, in: loaded)
             let knots = knots(for: arch, coronalDir: coronalDir, archCentre: archCentre,
@@ -73,7 +74,8 @@ enum GingivalAnatomyGenerator {
             floor(columns, level: .boneCrest, onBone: true, into: &gum)
 
             // Interproximal papillae, from the original (un-subdivided) knots.
-            for knot in knots where knot.isInterproximal {
+            // Skip sites beside an extraction — there is no papilla into a gap.
+            for knot in knots where knot.isInterproximal && !knot.adjacentToMissing {
                 let col = Column(knot: knot, coronalDir: coronalDir, modelPerMM: modelPerMM)
                 let b = col.point(.buccal, .marginTop, onBone: false)
                 let l = col.point(.lingual, .marginTop, onBone: false)
@@ -117,6 +119,10 @@ enum GingivalAnatomyGenerator {
         var surfB, surfL: Float         // cervical surface offset (gum hugs here)
         var surfBoneB, surfBoneL: Float // widest root offset (+margin) — bone housing
         var isInterproximal: Bool
+        /// This is an interproximal knot next to an extracted tooth — the papilla
+        /// peak is suppressed so the gum heals across the gap instead of spiking
+        /// up into empty space.
+        var adjacentToMissing: Bool = false
     }
 
     /// A resampled cross-section ready to emit geometry.
@@ -266,6 +272,13 @@ enum GingivalAnatomyGenerator {
         return e
     }
 
+    /// A missing tooth heals to an edentulous ridge: the gum crest drops ~1.5 mm
+    /// below the CEJ (so it dips into a saddle between the neighbours instead of
+    /// standing at crown height) and the ridge necks in to a rounded ~0.6× width
+    /// rather than tracing the extracted crown's full bulge.
+    private static let healedRidgeMarginMM: Float = -1.5
+    private static let healedRidgeWidthScale: Float = 0.6
+
     private static func toothKnot(_ fdi: Int, coronalDir: Float, centre2: SIMD2<Float>,
                                   loaded: LoadedTeeth, mouth: [Int: ToothObject], band: Float,
                                   modelPerMM: Float) -> Knot {
@@ -276,17 +289,20 @@ enum GingivalAnatomyGenerator {
         let bone = rootSurfaceOffset(verts, centre2: g.centre2, outward: g.outward, cejY: g.cejY,
                                      coronalDir: coronalDir, modelPerMM: modelPerMM,
                                      minimum: surf, fallback: g.radialHalf)
+        let isMissing = mouth[fdi]?.missing == true
         // Mid-facial site (index 1 of 3) represents the tooth's own knot; the
         // interproximal (index 0/2) sites feed the papilla knots instead.
         // `baseY` starts as this tooth's own apex-relative depth; `knots(for:...)`
         // overwrites it arch-wide once every knot is known, flattening the floor.
+        let marginB = isMissing ? healedRidgeMarginMM : margin(mouth, fdi, outer: true, site: 1)
+        let marginL = isMissing ? healedRidgeMarginMM : margin(mouth, fdi, outer: false, site: 1)
+        let widthScale: Float = isMissing ? healedRidgeWidthScale : 1
         return Knot(centre2: g.centre2, outward: g.outward, cejY: g.cejY, apexY: g.apexY,
                     baseY: g.apexY - coronalDir * 2.5 * modelPerMM,
-                    marginB: margin(mouth, fdi, outer: true, site: 1),
-                    marginL: margin(mouth, fdi, outer: false, site: 1),
+                    marginB: marginB, marginL: marginL,
                     boneB: boneLoss(mouth, fdi, outer: true, site: 1),
                     boneL: boneLoss(mouth, fdi, outer: false, site: 1),
-                    surfB: surf.buccal, surfL: surf.lingual,
+                    surfB: surf.buccal * widthScale, surfL: surf.lingual * widthScale,
                     surfBoneB: bone.buccal, surfBoneL: bone.lingual, isInterproximal: false)
     }
 
@@ -307,25 +323,33 @@ enum GingivalAnatomyGenerator {
                                      coronalDir: coronalDir, modelPerMM: modelPerMM,
                                      minimum: surf, fallback: fallback)
 
+        // Next to an extraction there is no papilla — the ridge heals flat across
+        // the gap. Drop the +1 mm papilla lift and neck the ridge in so the gum
+        // dips toward the empty socket instead of bridging it at crown height.
+        let adjacentToMissing = mouth[a]?.missing == true || mouth[b]?.missing == true
+
         // The surface shared by two arch-adjacent teeth is A's "toward next
         // neighbour" site (index 2) and B's "toward previous neighbour" site
         // (index 0) — see the file-level note on the AspectData index
         // convention. Papilla margin reads more coronal than either mid-facial
         // margin, the way a healthy interdental papilla actually sits higher.
         func ipMargin(outer: Bool) -> Float {
-            max(margin(mouth, a, outer: outer, site: 2), margin(mouth, b, outer: outer, site: 0)) + 1.0
+            if adjacentToMissing { return healedRidgeMarginMM }
+            return max(margin(mouth, a, outer: outer, site: 2), margin(mouth, b, outer: outer, site: 0)) + 1.0
         }
         func ipBone(outer: Bool) -> Float {
             (boneLoss(mouth, a, outer: outer, site: 2) + boneLoss(mouth, b, outer: outer, site: 0)) / 2
         }
+        let widthScale: Float = adjacentToMissing ? healedRidgeWidthScale : 1
 
         let apexY = (ga.apexY + gb.apexY) / 2
         return Knot(centre2: c2, outward: outward, cejY: cejY, apexY: apexY,
                     baseY: apexY - coronalDir * 2.5 * modelPerMM,
                     marginB: ipMargin(outer: true), marginL: ipMargin(outer: false),
                     boneB: ipBone(outer: true), boneL: ipBone(outer: false),
-                    surfB: surf.buccal, surfL: surf.lingual,
-                    surfBoneB: bone.buccal, surfBoneL: bone.lingual, isInterproximal: true)
+                    surfB: surf.buccal * widthScale, surfL: surf.lingual * widthScale,
+                    surfBoneB: bone.buccal, surfBoneL: bone.lingual, isInterproximal: true,
+                    adjacentToMissing: adjacentToMissing)
     }
 
     /// Measure the tooth surface offset (buccal & lingual) in the cervical band by
