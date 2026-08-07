@@ -2,7 +2,7 @@ import Foundation
 
 extension VoiceCommandParser {
     func parse(text: String, isFinal: Bool = false) -> [AnnotationCommand] {
-        self.tokens = VoiceTokenizer.tokenize(text: text, isFinal: isFinal)
+        self.tokens = TokenizerManager.shared.tokenize(text: text, isFinal: isFinal)
         self.commands = []
         self.tokenIndex = 0
         
@@ -448,8 +448,10 @@ extension VoiceCommandParser {
                         break
                     }
                     if peek < tokens.count, case .anatomy(let anat) = tokens[peek] {
-                        endAnatomy = anat
-                        peek += 1
+                        if anat != .upperJaw && anat != .lowerJaw {
+                            endAnatomy = anat
+                            peek += 1
+                        }
                     }
                     while peek < tokens.count {
                         if case .word(let w) = tokens[peek], w != "_sep_" { peek += 1; continue }
@@ -557,11 +559,15 @@ extension VoiceCommandParser {
                     flushNumbers(force: true)
                     self.activeSelection = nil
                     _ = self.cursor.jumpTo(jaw: .lower)
+                    self.cursor.setMetric(.probingDepth)
+                    self.currentMetricMultiplier = 1
                 } else if a == .upperJaw {
                     /* print("BEFORE EMIT METRIC..."); */ emitBoolIfPending()
                     flushNumbers(force: true)
                     self.activeSelection = nil
                     _ = self.cursor.jumpTo(jaw: .upper)
+                    self.cursor.setMetric(.probingDepth)
+                    self.currentMetricMultiplier = 1
                 } else {
                     if hasUpcomingToothIdentifier(from: tokenIndex, in: tokens) {
                         // Defer selection until the following tooth identifier is processed
@@ -596,6 +602,10 @@ extension VoiceCommandParser {
                                     let sSite = min(existingSel.startSite ?? resolved.site!, resolved.site!)
                                     let eSite = max(existingSel.endSite ?? resolved.site!, resolved.site!)
                                     self.activeSelection = TeethSelection(startTooth: existingSel.startTooth, startAspect: existingSel.startAspect, startSite: sSite, endTooth: existingSel.endTooth, endAspect: existingSel.endAspect, endSite: eSite)
+                                } else if let existingSel = self.activeSelection,
+                                          existingSel.startTooth.toothNumber != existingSel.endTooth.toothNumber,
+                                          self.currentNumbers.isEmpty {
+                                    // Ignore unexpected standalone anatomy tokens if a range was just formed and is awaiting numbers.
                                 } else {
                                     self.activeSelection = TeethSelection(startTooth: ToothObject.create(number: refTooth), startAspect: resolved.aspect, startSite: resolved.site, endTooth: ToothObject.create(number: refTooth), endAspect: resolved.aspect, endSite: resolved.site)
                                 }

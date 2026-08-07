@@ -159,6 +159,7 @@ resesi 18, 17, 16, -1 -1
         Task { [weak self] in
             guard let self else { return }
             await self.transcriber.loadModel()
+            TokenizerManager.shared.loadModel()
             guard self.isDictating else { return }  // stopped during model load
             self.transcriber.startLive()
         }

@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SwiftData
 
 @main
 struct PeriodontalChartingApp: App {
@@ -19,9 +20,17 @@ struct PeriodontalChartingApp: App {
             // and now waits for setup to finish, where the splash already exists
             // to cover it.
             ContentView()
-                // Speaker identity stays at launch: it restores the centroid from
-                // cached embeddings (no audio read, no ECAPA pass) and the gate is
-                // inert without it.
+                // Persist patient charts with SwiftData. The container is created
+                // once and injected into the environment for @Query / modelContext.
+                .modelContainer(for: PatientChart.self)
+                // Warm the shared WhisperKit model at launch so live/AI-Mode
+                // transcription is ready the moment the user reaches for it,
+                // instead of paying the ~1 GB load on first use.
+                .task { await TranscriptionEngine.shared.load() }
+                
+                // Speaker identity, in its own task so it does NOT queue behind
+                // the ~600 MB model. Both stages read voice_sample.wav and need
+                // only the small Core ML packages.
                 //
                 // ORDER MATTERS: templates are in memory only, so without
                 // restoreEnrollment() a cold start has no centroid — and with no
