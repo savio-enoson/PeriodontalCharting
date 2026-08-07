@@ -132,9 +132,12 @@ Before splitting into words, the tokenizer applies regex/string substitutions to
 
 | Input pattern | Normalized to | Reason |
 |---|---|---|
+| `(?<=\d)\.(?=\d)` (regex) | `" "` (space) | Decimal point between digits — `"1.5"` → `"1 5"` (two values). Applied before the sentence-period rule so `"2.3.4"` does not scatter across sentence boundaries. |
 | `.` / `\n` | `" _sep_ "` | Hard sentence boundary — prevents lookahead from accidentally bridging across separate dictation sentences |
 | `,` | `" "` (space) | Commas in dictation are non-breaking; they separate list items but do not end a sentence |
+| `\r` | `" "` | Carriage returns stripped to a space |
 | `{` / `}` / `-` | `" "` | Strips curly-brace correction markers and hyphenated tooth numbers (e.g. `Gigi 1-6` → `Gigi 16`) |
+| ` -` (space+hyphen) | `" minus "` | Inline negative sign — preserves recession dictation before the bare-hyphen rule strips remaining hyphens |
 | `mesiobukal` / `distobukal` | `"mesio bukal"` / `"disto bukal"` | No-space compound anatomy — normalizes before multi-word matching |
 | `mesiolingual` / `distolingual` | `"mesio lingual"` / `"disto lingual"` | Same |
 | `mesiopalatal` / `distopalatal` | `"mesio palatal"` / `"disto palatal"` | Same |
@@ -199,7 +202,8 @@ After normalization, the text is split on whitespace into a word array.
 
 | Case | Indonesian keyword | Meaning |
 |---|---|---|
-| `.commit` | `"lanjut"`, `"selesai"`, `"kemudian"`, `"selanjutnya"`, `"berikutnya"` | Advance cursor / flush current selection |
+| `.next` | `"lanjut"`, `"kemudian"`, `"selanjutnya"`, `"berikutnya"` | Advance cursor / flush current selection |
+| `.commit` | `"selesai"` | Advance cursor / flush current selection (synonym for `.next`) |
 | `.missing` | `"gak"` (+ `"ada"`), `"missing"` | Tooth is missing / edentulous |
 | `.missing2` | `"tidak"` (+ `"ada"`) | Alternative missing form |
 | `.from` | `"dari"` | Start of a range |
@@ -209,7 +213,7 @@ After normalization, the text is split on whitespace into a word array.
 | `.at2` | `"di"` | Shorter "at / on" form |
 | `.all` | `"semua"`, `"semuanya"`, `"seluruh"`, `"seluruhnya"` | "all" — instantly assigns to all 64 surfaces |
 
-> **Note:** The `.next` enum case has been removed. All advance/flush actions now use the unified `.commit` case. The tokenizer maps `lanjut` and four synonyms to `.commit`.
+> **Note on `.next` and `.commit`:** Both cases exist in `ActionType` as distinct enum values (`case next = "lanjut"`, `case commit = "selesai"`). They produce identical behavior in the parser — both flush all pending state and call `restoreToMainSequence()`. All other commit-style synonyms (`kemudian`, `selanjutnya`, `berikutnya`) are mapped to `.next` by the tokenizer.
 
 ### 3.3 Multi-word Alias Matching
 
@@ -761,4 +765,4 @@ These are the non-obvious rules that prevent subtle bugs. They are worth knowing
 | **`lastAutoAdvancedFromTooth` is cleared on every new tooth identifier.** | Prevents the snap-back from triggering when a genuine new tooth was explicitly named. |
 | **`restoreToMainSequence` short-circuits for boolean metrics.** It returns early before entering the numeric flush path when the current metric is `.bleeding`, `.plaque`, or `.implant`. | Prevents a spurious number-flush command from being emitted when restoring context after a boolean range (e.g., `"BOP dari bukal 16 hingga bukal 15"`). |
 | **`ChartProcessor` rebuilds from full `commandHistory` on every change.** | Guarantees idempotency. Mid-stream partial parses cannot corrupt the chart state because the history is always replayed from scratch. |
-| **`VoiceCommandParser` is re-instantiated on every word.** | Guarantees that no parser instance state leaks between words. The full accumulated text, not the parser, is the session state. |
+| **`VoiceCommandParser` is re-instantiated on every `parse(text:isFinal:)` call.** | Guarantees that no parser instance state leaks between calls. The full accumulated text, not the parser, is the session state. |
