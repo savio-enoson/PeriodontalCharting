@@ -65,7 +65,8 @@ PeriodontalCharting/
     │
     ├── Configuration/
     │   ├── ChartingConfiguration.swift            <- Config enums + ChartingConfiguration struct
-    │   └── ChartingCursor.swift                   <- Traversal state machine
+    │   ├── ChartingCursor.swift                   <- Traversal state machine
+    │   └── ToothFramePreferenceKey.swift          <- PreferenceKey for tooth frame coordinate tracking (AI Mode camera)
     │
     ├── Audio/
     │   ├── AudioManager.swift                     <- AVFoundation recording/playback (calibration)
@@ -90,6 +91,7 @@ PeriodontalCharting/
     ├── Views/
     │   ├── Chart/
     │   │   ├── ChartDashboard.swift               <- Root interactive viewport + state owner
+    │   │   ├── ZoomableScrollView.swift           <- UIViewRepresentable UIKit scroll view (zoom + pan)
     │   │   ├── QuadrantView.swift                 <- One dental quadrant + SideLabelsView
     │   │   ├── ToothColumnView.swift              <- Single tooth column layout
     │   │   ├── ToothRowViews.swift                <- Cell types: ImplantCheckCell,
@@ -109,7 +111,8 @@ PeriodontalCharting/
     │
     ├── Debug/
     │   ├── SelectionDebugMenu.swift               <- Developer debug sheet
-    │   └── ChartTestingUtilities.swift            <- Save / load / compare chart JSON
+    │   ├── ChartTestingUtilities.swift            <- Save / load / compare chart JSON
+    │   └── SpeakerGateDebugView.swift             <- Speaker gate enrollment + verification test harness
     │
     ├── Testing/
     │   ├── TestTranscripts.swift                  <- Static struct with embedded test transcripts
@@ -267,7 +270,7 @@ A custom `HStack` overlaid at `.topTrailing` on a dark navy pill (`RoundedRectan
 
 **`ZoomableScrollView` and zoom implementation:**
 
-The zoom and pan logic lives in `ZoomableScrollView<Content: View>`, a `UIViewRepresentable` wrapper around UIKit's `UIScrollView`. The native `UIScrollView` provides superior high-performance zooming and free-panning without SwiftUI layout thrashing. It manually sizes the `UIHostingController.view` to its intrinsic content size and completely bypasses Auto Layout constraints to prevent bounds-resizing glitches during scale transforms. The inner `RootWrapperView` also applies `.ignoresSafeArea()` to prevent coordinate drift.
+The zoom and pan logic lives in `ZoomableScrollView<Content: View>` (defined in its own file `Views/Chart/ZoomableScrollView.swift`), a `UIViewRepresentable` wrapper around UIKit's `UIScrollView`. The native `UIScrollView` provides superior high-performance zooming and free-panning without SwiftUI layout thrashing. It manually sizes the `UIHostingController.view` to its intrinsic content size and completely bypasses Auto Layout constraints to prevent bounds-resizing glitches during scale transforms. The inner `RootWrapperView` also applies `.ignoresSafeArea()` to prevent coordinate drift.
 
 When AI Mode is active, massive content insets (`contentInset`) equal to the screen bounds are applied, and the camera automatically centers on the bounding rect emitted by `HighlightFramePreferenceKey` at the 30% mark from the left edge without any edge clamping.
 
@@ -481,13 +484,20 @@ An `@MainActor` `ObservableObject` that orchestrates the voice pipeline — both
 **Key methods:**
 
 - **`toggleSimulation(from:)`** — If already listening, stops the simulation. Otherwise starts it. Stops live dictation first (mutually exclusive).
+- **`toggleLiveDictation()`** — Primary public method called by `AIListeningView`. Calls `startLiveDictation()` or `stopLiveDictation()` based on `isDictating`.
 - **`startSimulation(from:)`** *(private)* — Splits the transcript into words (expanding `\n`, `.`, `,` as discrete tokens). Resets state, then spawns an `@MainActor` bound `Task` that appends one word per loop iteration. Parsing is offloaded to a detached thread via `Task.detached` calling a `nonisolated` helper (`parseOffline`) to prevent UI hitching during dense token streams. Sets `committedCommands = nil` (no ghosting in simulation mode).
-- **`parseInstant(text:)`** — Stops any running simulation/dictation, sets `liveTranscription = text`, runs a fresh `VoiceCommandParser` with `isFinal: true`. Sets `committedCommands = nil` (no ghosting). Used by the Debug menu's **Fill Chart** button.
+- **`parseInstant(text:)`** — Stops any running simulation/dictation, sets `liveTranscription = text`, runs a fresh `VoiceCommandParser` with `isFinal: true`. Sets `committedCommands = nil` (no ghosting). Used by the Debug menu’s **Fill Chart** and **Test Debug Transcript** buttons.
 - **`startLiveDictation()`** — Hooks `TranscriptionViewModel.onLiveTranscript` → `ingestPreview` (full transcript → chart preview) and `onConfirmedTranscript` → `ingestCommitted` (confirmed-only → committed set). Calls `TokenizerManager.shared.loadModel()` if not yet loaded, then starts the live stream.
 - **`stopLiveDictation()`** — Stops the stream, performs a final `isFinal: true` parse over the full accumulated transcript, and sets `committedCommands = commandHistory` so no cells remain ghosted.
 - **`ingestPreview(_:isFinal:)`** *(private)* — Parses the full running transcript (skips if text unchanged). Updates `commandHistory`, `currentCommand`, `currentCursor`, `activeSelection`, `pendingValues`.
 - **`ingestCommitted(_:)`** *(private)* — Parses confirmed-only text. Updates `committedCommands`. The chart uses this to determine ghosting.
 - **`initializeCursorIfNeeded()`** — Creates an initial `ChartingCursor` when AI Mode is first opened.
+
+**Static properties:**
+
+| Property | Type | Role |
+|---|---|---|
+| `debugTranscript` | `static let String` | A hardcoded short transcript used by the **Test Debug Transcript** debug button for quick iteration without the transcript picker. |
 
 ---
 
@@ -525,7 +535,16 @@ An `@MainActor @Observable` class that owns the WhisperKit live streaming logic 
 
 #### `Debug/SelectionDebugMenu.swift`
 
-A developer `.sheet` presented as a `NavigationStack` with `List` sections. Receives both `ChartSelectionModel` and `AIVoiceViewModel` as `@EnvironmentObject` injections.
+A developer `.sheet` presented as a `NavigationStack` with `List` sections. Receives `mouth: [Int: ToothObject]` as a `@Binding` and both `ChartSelectionModel` and `AIVoiceViewModel` as `@EnvironmentObject` injections.
+
+**Section: Chart Overrides**
+- **All Implants** toggle — sets `implant = true/false` on every tooth in `mouth` directly via the binding. No parser involvement.
+
+**Section: Speaker Gate (TSE)**
+- `NavigationLink` to `SpeakerGateDebugView`, which is the enrollment + verification test harness for the ECAPA-TDNN speaker gate.
+
+**Section: NLP Phase 1 Tokenizer**
+- `Toggle` bound to `@AppStorage("useMLTokenizer")`. Switches the active Phase 1 tokenizer at runtime between `MLVoiceTokenizer` (IndoBERT CoreML) and the rule-based `VoiceTokenizer` without restarting the app.
 
 **Section: AI Simulation**
 - `Slider` for `aiViewModel.wpm` in the range 20–300, step 10.
@@ -533,6 +552,7 @@ A developer `.sheet` presented as a `NavigationStack` with `List` sections. Rece
 **Section: Instant Fill (Testing)**
 - `Picker` bound to `aiViewModel.selectedTestTranscriptName` listing all entries in `TestTranscripts.all`.
 - **Fill Chart** button — calls `aiViewModel.parseInstant(text:)` with the selected transcript and immediately dismisses the sheet.
+- **Test Debug Transcript** button — calls `aiViewModel.parseInstant(text: AIVoiceViewModel.debugTranscript)` with the static hardcoded debug transcript string for quick iteration without the picker.
 - **Clear Chart** (destructive) — calls `parseInstant(text: "")` and removes all `selectionModel.selectedCells`.
 
 **Section: Regression Testing**
@@ -540,12 +560,16 @@ A developer `.sheet` presented as a `NavigationStack` with `List` sections. Rece
 - **Test vs Ground Truth** — loads the ground truth JSON, re-parses the selected transcript, and calls `ChartTestingUtilities.compareCharts(expected:actual:)`. Results are displayed in an alert: `✅ Regression Test PASSED` or `❌ Regression Test FAILED` with per-tooth difference strings.
 
 > [!NOTE]
-> On a **physical iOS device**, ground truth files are written to the app's `Documents/` sandbox folder. On the **Simulator** or macOS, `#if targetEnvironment(simulator)` directs the save path directly to the project's `Testing/Ground/` folder so files are checked into source control immediately.
+> On a **physical iOS device**, ground truth files are written to the app’s `Documents/` sandbox folder. On the **Simulator** or macOS, `#if targetEnvironment(simulator)` directs the save path directly to the project’s `Testing/Ground/` folder so files are checked into source control immediately.
 
 **Section: Single Cell Highlights**
-- Pre-built scenarios for individual cell, row, and region highlights (e.g. "Tooth 16 Probing Depth (Outer)", "Q1 Gingival Margin (Outer)", "All Implants (Shared Grid)") for UI verification without invoking the voice pipeline.
+- Pre-built scenarios for individual cell and mid-site highlights (e.g. “Tooth 16 Probing Depth (Outer)”, “Tooth 21 Bleeding (Inner, Mid)”) for UI verification without invoking the voice pipeline.
 
----
+**Section: Row / Region Highlights**
+- Pre-built multi-cell scenarios (e.g. “Q1 Gingival Margin (Outer)”, “All Implants (Shared Grid)”).
+
+**Section: Clear**
+- **Clear All Selections** (destructive) — empties `selectionModel.selectedCells` without clearing the chart.
 
 #### `Debug/ChartTestingUtilities.swift`
 
@@ -736,6 +760,12 @@ struct ChartingCursor: Equatable {
 
 ---
 
+#### `Configuration/ToothFramePreferenceKey.swift`
+
+Defines a SwiftUI `PreferenceKey` used by `ToothColumnView` to report each tooth column’s absolute frame coordinates upward to `ChartDashboard`. The dashboard collects these via `.onPreferenceChange` and uses them to drive the `ZoomableScrollView` camera, centering the viewport on the active cursor tooth during AI Mode without any hard-coded layout constants.
+
+---
+
 ### 3.9 `Audio/`
 
 The `Audio/` directory owns all real-time audio processing: voice recording, on-device speech-to-text, and speaker isolation. The speaker isolation components (`SpeakerGate`, `SpeakerGateService`, `TSE/`) are handled by a separate peer module; they are present in the codebase and integrated into the pipeline but their deep specification is out of scope here.
@@ -915,9 +945,10 @@ The `AI/` directory contains all CoreML model packages and the BERT vocabulary f
 | `TSEFrontend_BSRNN.mlpackage` | — | `TSEExtractor` — BSRNN frontend |
 | `TSEMasker_BSRNN.mlpackage` | — | `TSEExtractor` — BSRNN masker |
 | `TargetSeparator_BSRNN.mlpackage` | — | `TSEExtractor` — final separator |
+| `VoiceTokenizerModel.mlmodel` | ~124 MB | `MLVoiceTokenizer` — unquantized training artifact (development only) |
 | `openai_whisper-large-v3_turbo_632MB/` | ~632 MB | `TranscriptionEngine` — STT model (downloaded on first launch) |
 
-`MLVoiceTokenizer` loads `VoiceTokenizerModel_int8.mlmodelc` from `Bundle.main`. In `#if DEBUG` builds, if the bundle resource is absent, it falls back to a hardcoded absolute path at the project root: `/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/VoiceTokenizerModel_int8.mlmodelc`.
+`MLVoiceTokenizer` loads `VoiceTokenizerModel.mlmodelc` (the compiled CoreML bundle) from `Bundle.main`. In `#if DEBUG` builds, if the bundle resource is absent, it falls back to a hardcoded absolute path at the project root.
 
 ---
 

@@ -1,6 +1,6 @@
 # Periodontal Charting — ML Tokenizer Guide
 
-This guide covers the Swift-native ML tokenizer: `TokenizerManager`, `MLVoiceTokenizer`, `MLTokenizerState`, and `BertTokenizer`. These components form the default Phase 1 path in the voice pipeline, replacing the rule-based `VoiceTokenizer` when the CoreML model is available.
+This guide covers the Swift-native ML tokenizer: `TokenizerManager`, `MLVoiceTokenizer`, `MLTokenizerState`, and `BertTokenizer`. These components form the default Phase 1 path in the voice pipeline, replacing the rule-based `VoiceTokenizer` when the CoreML model (`VoiceTokenizerModel.mlmodelc`) is available.
 
 For the project brief and roadmap, see [project_guide.md](project_guide.md).
 For the full pipeline architecture and rule-based fallback path, see [system_guide.md](system_guide.md).
@@ -43,7 +43,15 @@ The critical constraint is that clinical tokenization is a **small, closed-vocab
 > [!IMPORTANT]
 > The ML tokenizer replaces only **Phase 1** (word classification). Phase 2 (`VoiceCommandParser`) is unchanged — it receives the same `[VoiceToken]` array regardless of which Phase 1 path produced it. The two phases are architecturally independent.
 
-The ML path is gated by `UserDefaults.standard.bool(forKey: "useMLTokenizer")`, which defaults to `true`. Setting it to `false` (e.g., via a debug toggle) falls back to `VoiceTokenizer` directly.
+The ML path is gated by `UserDefaults.standard.bool(forKey: "useMLTokenizer")`, which defaults to `true`. Setting it to `false` (e.g., via the **Debug → NLP Phase 1 Tokenizer** toggle in the app) falls back to `VoiceTokenizer` directly.
+
+> [!NOTE]
+> **Rule-based fallback robustness heuristics.** The rule-based `VoiceTokenizer` (fallback path) contains several additional STT-robustness heuristics that are *not* replicated in the ML path:
+> - **Fused directional-compound splitter** — peels a fuzzy trailing site suffix (`bukal`, `lingual`, `palatal` and variants) off any `m`/`d`-initial fused token (e.g. `"mesiyobukal"` → `"mesio bukal"`).
+> - **Positional stem recovery** — any unrecognised word sitting immediately before a site word is resolved directionally (`m`-initial → `mesio`, otherwise → `disto`), catching novel Whisper mis-transcriptions of the directional stem without code changes.
+> - **Adjacency rule for `di`+`bop`** — a `di`-family fragment immediately followed by a `bop`-family fragment is remapped to `.anatomy(.distoBuccal)` before either resolves to its normal token, preventing STT compression of `"disto bukal"` from triggering a spurious BOP command.
+>
+> These heuristics exist because the ML model is trained to handle most variant spellings natively. If a new spelling variant is observed that the model misclassifies, the fix is typically a training-data addition, not a code change. The rule-based path's heuristics serve as a safety net when the model is unavailable.
 
 ---
 
@@ -190,7 +198,7 @@ If `useMLTokenizer` is `false`, or `mlTokenizer` is `nil` (model file not found 
 `init()` loads the model in two steps:
 
 1. **`vocab.txt`** — `Bundle.main.url(forResource: "vocab", withExtension: "txt")`. In `#if DEBUG`, if the bundle resource is absent, falls back to the hardcoded absolute path `…/AI/vocab.txt` in the project directory.
-2. **`VoiceTokenizerModel_int8.mlmodelc`** — `Bundle.main.url(forResource: "VoiceTokenizerModel_int8", withExtension: "mlmodelc")`. In `#if DEBUG`, falls back to `…/VoiceTokenizerModel_int8.mlmodelc` at the project root.
+2. **`VoiceTokenizerModel.mlmodelc`** — `Bundle.main.url(forResource: "VoiceTokenizerModel", withExtension: "mlmodelc")`. In `#if DEBUG`, falls back to a hardcoded absolute path at the project root.
 
 If either resource fails to load, `self.model = nil` and all subsequent `predict()` calls return `nil` (the post-processing pass in `TokenizerManager` handles nil returns gracefully).
 
@@ -464,10 +472,10 @@ The post-processing pass in `TokenizerManager.tokenize()` runs over the raw ML o
 | Component | Status |
 |---|---|
 | `TokenizerManager.shared` singleton | ✅ Complete — loaded by `AIVoiceViewModel.startLiveDictation()` |
-| `MLVoiceTokenizer` CoreML inference | ✅ Complete — `VoiceTokenizerModel_int8.mlmodelc` |
+| `MLVoiceTokenizer` CoreML inference | ✅ Complete — `VoiceTokenizerModel.mlmodelc` |
 | `BertTokenizer` WordPiece encoding | ✅ Complete — backed by `AI/vocab.txt` |
 | `MLTokenizerState` per-sentence state | ✅ Complete |
 | Post-processing pass | ✅ Complete |
-| `useMLTokenizer` UserDefaults toggle | ✅ Complete — `true` by default; can be toggled off at runtime |
-| Rule-based `VoiceTokenizer` fallback | ✅ Complete — activated when model is absent or toggle is off |
+| `useMLTokenizer` UserDefaults toggle | ✅ Complete — `true` by default; toggled via **Debug → NLP Phase 1 Tokenizer** at runtime |
+| Rule-based `VoiceTokenizer` fallback | ✅ Complete — activated when model is absent or toggle is off; includes additional STT robustness heuristics (see §1 Overview) |
 | Wiring to live dictation pipeline | ✅ Complete — `AIVoiceViewModel` calls `TokenizerManager.shared.tokenize()` via `VoiceCommandParser.parse()` |

@@ -51,7 +51,7 @@ This project modernises the workflow across three layers:
 
 - **Deterministic replay:** The chart is rebuilt from scratch by replaying the full command history on every change. There is no mutable chart state — only an append-only log of `AnnotationCommand` values. This guarantees that re-parsing the same transcript always produces the same chart, regardless of mid-stream partial parses during live streaming.
 
-- **Stateless parser:** The `VoiceCommandParser` is re-instantiated fresh on every new word. The accumulated text — not the parser instance — is the session state. This prevents any stale internal state from carrying between words.
+- **Stateless per call:** The `VoiceCommandParser` is re-instantiated fresh on every `parse(text:isFinal:)` call from `AIVoiceViewModel`. The accumulated text — not the parser instance — is the session state. This prevents any stale internal state from carrying between parse calls.
 
 - **Ghosted preview:** During live dictation, the chart renders a two-tier display: *preview commands* (derived from the full running transcript including unconfirmed Whisper hypotheses) shown in full color, and *committed commands* (derived from Whisper-confirmed chunks only) marked as finalised. This keeps the chart maximally responsive while clearly communicating certainty.
 
@@ -72,7 +72,7 @@ This project modernises the workflow across three layers:
 3. Build and run (`Cmd + R`).
 4. **First launch:** The onboarding screen appears. Record a voice calibration sample and configure your preferred annotation traversal order, then tap **Complete Setup**.
 5. The chart opens with all teeth empty (`fullMouthEmpty()`). Use the **Debug** (ladybug) toolbar button to apply test highlights, adjust simulation WPM, or instantly fill the chart from a test transcript.
-6. Tap **AI Mode** to open the voice panel. Tap **▶** to run the simulation with the selected test transcript, or tap **Mic** to begin live on-device dictation (requires the Whisper model to be ready — a spinner shows until then).
+6. Tap **AI Mode** to open the voice panel. Tap **▶** to run the simulation with the selected test transcript, or tap **Mic** to begin live on-device dictation (requires the Whisper model to be ready — a spinner shows until then). Use the **Debug → NLP Phase 1 Tokenizer** toggle to switch between `MLVoiceTokenizer` and the rule-based `VoiceTokenizer` at runtime.
 7. Toggle layout mode via the toolbar (1-col / 2-col).
 8. Pinch-to-zoom to inspect fine detail; use the zoom slider (bottom-right) to return to 1×.
 9. Tap **Settings** (gear icon) to reconfigure traversal order or re-record the voice calibration sample.
@@ -128,11 +128,12 @@ All colors are system-adaptive — no manual Dark Mode handling is required. The
 - [x] **Manual editing** — tap any numeric cell to open a `NumberPadPopoverView` (full-screen cover); tap furcation cells to cycle value directly; tap implant cell to toggle.
 - [x] **Expanded test suite** — per-feature unit transcripts (`C-`, `F-`, `I-`, `M-`, `N-` prefixed) with paired ground truth JSONs in `Testing/Raw/` and `Testing/Ground/`.
 - [x] **Live speech-to-text integration** — `TranscriptionEngine` (WhisperKit large-v3-turbo + Silero VAD) fully integrated. `AIVoiceViewModel` wires confirmed and live-preview chunks to the annotation parser. Chart renders a ghosted-preview + committed-solid two-tier display during live dictation.
-- [x] **ML Tokenizer** — `MLVoiceTokenizer` (CoreML word classifier) integrated as the primary Phase 1 tokenizer, with `TokenizerManager` providing a UserDefaults-gated fallback to the rule-based `VoiceTokenizer`.
+- [x] **ML Tokenizer** — `MLVoiceTokenizer` (CoreML word classifier, `VoiceTokenizerModel.mlmodelc`) integrated as the primary Phase 1 tokenizer, with `TokenizerManager` providing a `UserDefaults`-gated fallback to the rule-based `VoiceTokenizer`. Toggle visible in **Debug → NLP Phase 1 Tokenizer**.
 - [x] **Speaker isolation pipeline** — ECAPA-TDNN speaker verification and BSRNN target source enhancement integrated in `Audio/` (handled by a separate peer module; components present in the codebase).
 
 ### Pending
 
+- [ ] **Speaker isolation validation** — `SpeakerGateDebugView` test harness is present in the debug menu; end-to-end device validation of TSE-gated charting sessions (enrollment → live rejection → chart accuracy) is pending.
 - [ ] **Patient persistence** — CoreData or SwiftData layer for saving and loading charting sessions per patient.
 - [ ] **PDF export** — generate a PDF clinical report from the live chart state (toolbar button present, action not yet implemented).
 - [ ] **iPhone / compact layout** — responsive layout fallback for smaller screens.
