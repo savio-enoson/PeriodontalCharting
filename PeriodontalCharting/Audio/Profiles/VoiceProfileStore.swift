@@ -14,9 +14,14 @@
 //  takes at the Documents root; those are MOVED into a first profile on launch.
 //  Nobody re-calibrates.
 //
+//  EVERYTHING UNDER `VoiceProfiles/` IS BIOMETRIC DATA — GDPR special category,
+//  HIPAA identifier — so it carries an explicit protection class and is kept out
+//  of iCloud. See "Data protection" below for which class goes where and why.
+//
 
 import Foundation
 import Observation
+import OSLog
 
 @MainActor
 @Observable
@@ -29,6 +34,14 @@ final class VoiceProfileStore {
     /// Set when the last enrollment produced a spread wide enough that the
     /// clinician's own dictation is likely to be withheld. Cleared on re-enroll.
     private(set) var spreadWarning: String?
+
+    /// Set when `profiles.json` EXISTS but could not be read — corrupt, or
+    /// protected and the device was locked when we tried.
+    ///
+    /// While this is set the store REFUSES TO WRITE. The only thing it could
+    /// write is an empty index over the top of a real one, which is exactly how
+    /// every calibration in a clinic used to disappear without a message.
+    private(set) var loadError: String?
 
     private static let indexFilename = "profiles.json"
 
@@ -46,9 +59,14 @@ final class VoiceProfileStore {
     var active: VoiceProfile? { profiles.first { $0.id == activeID } }
 
     /// Directory for a profile, created on demand.
+    ///
+    /// Secured on every call, not only on creation: a directory that predates
+    /// this code, or one restored from a backup taken before it, would otherwise
+    /// keep the Documents default forever.
     func directory(for id: String) -> URL {
         let url = Self.root.appendingPathComponent(id, isDirectory: true)
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        Self.secure(url)
         return url
     }
 
@@ -77,7 +95,7 @@ final class VoiceProfileStore {
         _ = directory(for: profile.id)
         if activeID == nil { activeID = profile.id }
         save()
-        print("[Profiles] created '\(name)' (\(profile.id))")
+        AppLog.profiles.info("created '\(name, privacy: .private)'")
         return profile
     }
 
@@ -107,7 +125,9 @@ final class VoiceProfileStore {
         guard profiles.contains(where: { $0.id == id }) else { return }
         activeID = id
         save()
-        print("[Profiles] active -> '\(active?.name ?? id)'")
+        // Logger interpolations are AUTOCLOSURES — every capture of a property
+        // has to name `self` explicitly, here and below.
+        AppLog.profiles.info("active -> '\(self.active?.name ?? id, privacy: .private)'")
     }
 
     /// Store the embeddings and the measured spread after an enrollment.
@@ -129,9 +149,7 @@ final class VoiceProfileStore {
             profiles[i].selfDistanceMax = worst
 
             let accept = profiles[i].acceptThreshold ?? SpeakerGate.defaultAcceptThreshold
-            print(String(format: "[Profiles] '%@' self-spread: median %.3f, max %.3f "
-                         + "(accept line %.3f)",
-                         profiles[i].name, median, worst, accept))
+            AppLog.profiles.info("'\(self.profiles[i].name, privacy: .private)' self-spread: median \(median, format: .fixed(precision: 3)), max \(worst, format: .fixed(precision: 3)) (accept line \(accept, format: .fixed(precision: 3)))")
 
             // WARN, never auto-raise. handoff.md: a false accept is unrecoverable,
             // a false reject costs one repeat — so the threshold moves DOWN if it
@@ -146,16 +164,90 @@ final class VoiceProfileStore {
         save()
     }
 
+    // MARK: - Data protection
+    //
+    // V1/V2. Voiceprints are biometric identifiers. Until this, `VoiceProfiles/`
+    // sat at the Documents default — `completeUntilFirstUserAuthentication`,
+    // decryptable at any point after one unlock since boot, so a clinic iPad
+    // that stays awake between patients held them in the clear all day — and
+    // nothing excluded them from iCloud, while the 632 MB RE-DOWNLOADABLE
+    // Whisper model WAS excluded. Exactly backwards.
+    //
+    // `.completeUnlessOpen` rather than `.complete`, and the difference is
+    // operational, not a weakening: `.complete` kills an already-open file
+    // handle the instant the screen locks, and calibration is a multi-second
+    // AVAudioRecorder write that the idle timer can interrupt. Closed-and-locked
+    // is equally unreadable under both, which is the property V1 asks for.
+    //
+    // NOTE the interaction with `load()`: adding a protection class creates a
+    // NEW way for the index to be unreadable (locked device), and the old
+    // load-failure path destroyed the file. Do not ship this without the
+    // `load()`/`save()` guards below.
+
+    private static let protection: FileProtectionType = .completeUnlessOpen
+
+    /// Apply the protection class and keep the item out of iCloud/iTunes
+    /// backups. Both are idempotent — safe to call on every access.
+    private static func secure(_ url: URL) {
+        try? FileManager.default.setAttributes(
+            [.protectionKey: protection], ofItemAtPath: url.path)
+
+        var url = url
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try? url.setResourceValues(values)
+    }
+
+    /// Retrofit every profile directory, every recording and the index.
+    ///
+    /// Setting the class on a DIRECTORY only governs files created after that
+    /// point, so without this sweep an already-calibrated iPad keeps its
+    /// cleartext voiceprints for the life of the install.
+    private static func secureExisting() {
+        let fm = FileManager.default
+        secure(root)
+        if fm.fileExists(atPath: indexURL.path) { secure(indexURL) }
+
+        guard let entries = try? fm.contentsOfDirectory(
+            at: root, includingPropertiesForKeys: nil) else { return }
+        for entry in entries {
+            secure(entry)
+            guard let files = try? fm.contentsOfDirectory(
+                at: entry, includingPropertiesForKeys: nil) else { continue }
+            for file in files { secure(file) }
+        }
+    }
+
     // MARK: - Persistence
 
     func load() {
         let fm = FileManager.default
         try? fm.createDirectory(at: Self.root, withIntermediateDirectories: true)
+        Self.secure(Self.root)
 
-        if let data = try? Data(contentsOf: Self.indexURL),
-           let index = try? JSONDecoder().decode(VoiceProfileIndex.self, from: data) {
-            profiles = index.profiles
-            activeID = index.activeID ?? index.profiles.first?.id
+        loadError = nil
+
+        // ABSENT and UNREADABLE are not the same thing. Conflating them is what
+        // destroyed calibrations: a decode failure fell into the fresh-install
+        // branch, created "Dentist 1", and `save()` then wrote an empty index
+        // over the damaged one — no message, original gone. An index that
+        // exists but will not read now STOPS the store instead.
+        if fm.fileExists(atPath: Self.indexURL.path) {
+            do {
+                let data = try Data(contentsOf: Self.indexURL)
+                let index = try JSONDecoder().decode(VoiceProfileIndex.self, from: data)
+                profiles = index.profiles
+                activeID = index.activeID ?? index.profiles.first?.id
+            } catch {
+                profiles = []
+                activeID = nil
+                loadError = "The voice profile index could not be read, so no profile is "
+                          + "loaded and the speaker filter is OFF. The file has been left "
+                          + "untouched — do not re-record over it."
+                AppLog.profiles.fault(
+                    "REFUSING TO OVERWRITE unreadable index: \(error.localizedDescription, privacy: .public)")
+                return
+            }
         } else {
             profiles = []
             activeID = nil
@@ -170,13 +262,37 @@ final class VoiceProfileStore {
             activeID = profiles.first?.id
             save()
         }
+
+        Self.secureExisting()
     }
 
     private func save() {
+        // Never write over an index we could not read. See `load()`.
+        guard loadError == nil else {
+            AppLog.profiles.error("save suppressed — the on-disk index is unreadable")
+            return
+        }
+
         let index = VoiceProfileIndex(profiles: profiles, activeID: activeID)
-        guard let data = try? JSONEncoder().encode(index) else { return }
+        guard let data = try? JSONEncoder().encode(index) else {
+            AppLog.profiles.error("FAILED to encode index — changes not saved")
+            return
+        }
         try? FileManager.default.createDirectory(at: Self.root, withIntermediateDirectories: true)
-        try? data.write(to: Self.indexURL, options: .atomic)
+        Self.secure(Self.root)
+
+        // V5: `try?` here meant a full disk lost profile changes silently while
+        // the app carried on as though they had persisted.
+        do {
+            try data.write(to: Self.indexURL, options: .atomic)
+            // An atomic write REPLACES the file, so the class must be reapplied
+            // to the new inode every time. Dropping this line is a silent
+            // regression of V1 that nothing would catch.
+            Self.secure(Self.indexURL)
+        } catch {
+            AppLog.profiles.error(
+                "FAILED to save index: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     /// Adopt calibration takes from before profiles existed.
@@ -210,8 +326,11 @@ final class VoiceProfileStore {
                 // and leave the original where it is.
                 try? fm.copyItem(at: item.url, to: destination)
             }
+            // The legacy file carried the Documents default; a move preserves
+            // the old class, so the new location has to be secured explicitly.
+            Self.secure(destination)
         }
         save()
-        print("[Profiles] migrated \(legacy.count) legacy take(s) into 'Dentist 1'")
+        AppLog.profiles.info("migrated \(legacy.count) legacy take(s) into 'Dentist 1'")
     }
 }

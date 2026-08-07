@@ -5,12 +5,12 @@ struct OnboardingView: View {
     @Environment(\.dismiss) var dismiss
     @Binding var hasCompletedOnboarding: Bool
     var isSettingsMode: Bool = false
-    
+
     @StateObject private var audioManager = AudioManager.shared
     /// @Observable singleton — reading its properties in `body` registers this
     /// view for updates, so the take list and the spread warning stay live.
     private let profileStore = VoiceProfileStore.shared
-    
+
     @State private var config = ChartingConfiguration()
     /// Which takes exist on disk FOR THE ACTIVE PROFILE. Per-take rather than one
     /// `hasRecorded` flag, because calibration is several recordings in different
@@ -29,19 +29,34 @@ struct OnboardingView: View {
 
     /// There is no centroid at all without take 1.
     private var hasRecorded: Bool { recordedTakes.contains(.normal) }
+
+    /// The gate arms on TEMPLATES, not on a file existing. A take that recorded
+    /// fine but failed enrollment leaves `speakerVerdict` returning `.matched`
+    /// for every voice in the room — the one thing this app exists to prevent —
+    /// so completion waits for the templates, not for the WAV.
+    private var isEnrolled: Bool { !(profileStore.active?.templates.isEmpty ?? true) }
+
+    /// Enforced on FIRST RUN only. The button previously read
+    /// `.disabled(!hasRecorded && false)`, which is unconditionally enabled.
+    ///
+    /// Not enforced in settings: the app is already armed there, and this same
+    /// button commits the annotation order, so blocking it would trap an
+    /// unrelated edit behind a re-calibration.
+    private var canComplete: Bool { isSettingsMode || isEnrolled }
+
     private var activeProfileID: String? { profileStore.activeID }
     private var profileDirectory: URL? { profileStore.activeDirectory }
-    
+
     init(hasCompletedOnboarding: Binding<Bool>, isSettingsMode: Bool = false) {
         self._hasCompletedOnboarding = hasCompletedOnboarding
         self.isSettingsMode = isSettingsMode
-        
+
         let appearance = UISegmentedControl.appearance()
         let darkBlue = UIColor(red: 0.05, green: 0.2, blue: 0.5, alpha: 1.0)
         appearance.selectedSegmentTintColor = darkBlue
         appearance.setTitleTextAttributes([.foregroundColor: UIColor.white], for: .selected)
     }
-    
+
     var body: some View {
         ScrollView {
             VStack(spacing: 40) {
@@ -49,6 +64,20 @@ struct OnboardingView: View {
                     .font(.largeTitle)
                     .fontWeight(.bold)
                     .padding(.top, 40)
+
+                // The store could not read its own index and has stopped writing
+                // to avoid destroying it. Nothing else in the app would show
+                // this, and the gate is OFF while it is true.
+                if let loadError = profileStore.loadError {
+                    Label(loadError, systemImage: "exclamationmark.octagon.fill")
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                        .background(Color.red.opacity(0.08),
+                                    in: RoundedRectangle(cornerRadius: 12))
+                }
 
                 // --- Section 1: Voice Profile ---
                 //
@@ -141,7 +170,7 @@ struct OnboardingView: View {
                         .font(.title2)
                         .fontWeight(.semibold)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    
+
                     Text("Read the passage below once for each condition. Recording more "
                          + "than one is what lets the app still recognise you when you "
                          + "change how you speak — measured, a single take made the app "
@@ -210,16 +239,16 @@ struct OnboardingView: View {
                     }
                 }
                 .padding()
-                
+
                 // --- Section 3: Annotation Order Configuration ---
                 VStack(spacing: 20) {
                     Text("3. Annotation Order")
                         .font(.title2)
                         .fontWeight(.semibold)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    
+
                     AnnotationVisualizerView(config: config)
-                    
+
                     Picker("Primary Order", selection: $config.primaryOrder) {
                         ForEach(PrimaryOrderType.allCases) { type in
                             Text(type.rawValue).tag(type)
@@ -227,7 +256,7 @@ struct OnboardingView: View {
                     }
                     .pickerStyle(.segmented)
                     .padding(.bottom, 16)
-                    
+
                     // Display the configuration hierarchy
                     if config.primaryOrder == .jawFirst {
                         jawFirstHierarchyView
@@ -236,7 +265,22 @@ struct OnboardingView: View {
                     }
                 }
                 .padding()
-                
+
+                // V6. The gate is the control this app exists to provide, and it
+                // was skippable by a literal `&& false`. Finishing setup without
+                // enrolling leaves `speakerVerdict` returning `.matched` for
+                // everything — every voice in the room reaches the chart.
+                if !canComplete {
+                    Label("Record the normal take and register your voice first. Until "
+                          + "then the app cannot tell you from anyone else in the room, "
+                          + "and every voice would reach the chart.",
+                          systemImage: "exclamationmark.shield.fill")
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
                 Button(action: {
                     commitProfileName()
                     saveConfiguration()
@@ -248,13 +292,15 @@ struct OnboardingView: View {
                         .fontWeight(.bold)
                         .padding()
                         .frame(maxWidth: .infinity)
-                        .background(Color(red: 0.05, green: 0.2, blue: 0.5))
+                        .background(canComplete
+                                    ? Color(red: 0.05, green: 0.2, blue: 0.5)
+                                    : Color(.systemGray3))
                         .foregroundStyle(.white)
                         .cornerRadius(16)
                 }
-                .disabled(!hasRecorded && false) // Usually we'd enforce it, maybe optional for debug
+                .disabled(!canComplete)
                 .padding(.bottom, 40)
-                
+
             }
             .padding(.horizontal, 40)
         }
@@ -270,15 +316,13 @@ struct OnboardingView: View {
             }
         }
         .onAppear {
+            audioManager.prepareForCalibration()
             audioManager.requestPermission { granted in
                 recordingPermissionGranted = granted
             }
             profileName = profileStore.active?.name ?? ""
             refreshRecordedTakes()
-            if let data = UserDefaults.standard.data(forKey: "ChartingConfiguration"),
-               let savedConfig = try? JSONDecoder().decode(ChartingConfiguration.self, from: data) {
-                config = savedConfig
-            }
+            config = ChartingConfiguration.loadSaved()
         }
         .onChange(of: profileStore.activeID) { _, _ in
             profileName = profileStore.active?.name ?? ""
@@ -490,13 +534,11 @@ struct OnboardingView: View {
             }
         }
     }
-    
+
     private func saveConfiguration() {
-        if let encoded = try? JSONEncoder().encode(config) {
-            UserDefaults.standard.set(encoded, forKey: "ChartingConfiguration")
-        }
+        config.saveAsDefault()
     }
-    
+
     private var dragHandle: some View {
         VStack(spacing: 3) {
             Circle().frame(width: 4, height: 4)
@@ -508,7 +550,7 @@ struct OnboardingView: View {
         .padding(.vertical, 12)
         .contentShape(Rectangle()) // makes the entire area draggable
     }
-    
+
     private var largeDragHandle: some View {
         VStack(spacing: 4) {
             Circle().frame(width: 6, height: 6)
@@ -520,22 +562,22 @@ struct OnboardingView: View {
         .padding(.vertical, 24)
         .contentShape(Rectangle())
     }
-    
+
     // MARK: - Jaw First Hierarchy
     private var jawFirstHierarchyView: some View {
         TwoItemReorderable(items: $config.jawOrder, spacing: 24) { jaw, parentGesture in
             HStack(spacing: 0) {
                 largeDragHandle
                     .gesture(parentGesture)
-                
+
                 VStack(alignment: .leading, spacing: 12) {
                     Text(jaw.rawValue)
                         .font(.headline)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.bottom, 4)
-                    
+
                     let aspectBinding = jaw == .upper ? $config.upperAspectOrder : $config.lowerAspectOrder
-                    
+
                     TwoItemReorderable(items: aspectBinding, spacing: 12) { aspect, childGesture in
                         HStack(spacing: 0) {
                             dragHandle
@@ -564,22 +606,22 @@ struct OnboardingView: View {
             )
         }
     }
-    
+
     // MARK: - Aspect First Hierarchy
     private var aspectFirstHierarchyView: some View {
         TwoItemReorderable(items: $config.aspectOrder, spacing: 24) { aspect, parentGesture in
             HStack(spacing: 0) {
                 largeDragHandle
                     .gesture(parentGesture)
-                
+
                 VStack(alignment: .leading, spacing: 12) {
                     Text(aspect.displayName(for: nil))
                         .font(.headline)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.bottom, 4)
-                    
+
                     let jawBinding = aspect == .buccal ? $config.buccalJawOrder : $config.palatalJawOrder
-                    
+
                     TwoItemReorderable(items: jawBinding, spacing: 12) { jaw, childGesture in
                         HStack(spacing: 0) {
                             dragHandle
@@ -608,7 +650,7 @@ struct OnboardingView: View {
             )
         }
     }
-    
+
     private func directionBinding(jaw: JawType, aspect: AspectType) -> Binding<AnnotationDirection> {
         Binding(
             get: { config.direction(for: jaw, aspect: aspect) },

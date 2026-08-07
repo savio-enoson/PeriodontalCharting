@@ -67,7 +67,7 @@ enum TSEConfig {
     /// the gate's observe mode: Silero peaked at 0.41 on this mic, and there is
     /// no data on how often the rescue path fires in a real clinic.
     enum Mode: String { case off, observe, enforce }
-    static var mode: Mode = .observe
+    static var mode: Mode = .off
 
     /// CPU_ONLY beat CPU_AND_NE by 20% on the A16 (12.40 vs 14.95 ms/block) with
     /// a clean gap. The ANE does not help this architecture — `band_comm`
