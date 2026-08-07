@@ -20,6 +20,10 @@ class AudioManager: NSObject, ObservableObject {
     @Published var isRecording: Bool = false
     @Published var isPlaying: Bool = false
     @Published var hasRecording: Bool = false
+    /// Which file is currently playing, by filename. `isPlaying` alone is a single
+    /// global flag, so multi-take calibration showed EVERY row as "Stop" the
+    /// moment any one of them started.
+    @Published private(set) var playingFilename: String?
     @Published var recordingURL: URL?
     
     private var audioRecorder: AVAudioRecorder?
@@ -115,6 +119,9 @@ class AudioManager: NSObject, ObservableObject {
             
             DispatchQueue.main.async {
                 self.isPlaying = true
+                // From the URL, not the parameter, so the legacy nil-filename path
+                // (replay whatever recordingURL points at) is covered too.
+                self.playingFilename = url.lastPathComponent
             }
         } catch {
             print("Failed to play audio: \(error.localizedDescription)")
@@ -127,6 +134,7 @@ class AudioManager: NSObject, ObservableObject {
 
         DispatchQueue.main.async {
             self.isPlaying = false
+            self.playingFilename = nil
         }
     }
 

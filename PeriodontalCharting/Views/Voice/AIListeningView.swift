@@ -28,7 +28,22 @@ struct AIListeningView: View {
                     // then the mic becomes tappable. This is the model-ready indicator.
                     let modelReady = TranscriptionEngine.shared.isReady
                     Button(action: { viewModel.toggleLiveDictation() }) {
-                        if modelReady || viewModel.isDictating {
+                        if viewModel.isFinishing {
+                            // The mic is already off, but the last decode and the
+                            // final speaker-gate pass are still landing — the chart
+                            // is not final yet, so the button must not look ready.
+                            //
+                            // Deliberately NOT a bare ProgressView: inside a
+                            // DISABLED button it renders dimmed and small next to a
+                            // title2 icon, which reads as "nothing happened". Same
+                            // footprint as the mic, unmistakably busy, and it says
+                            // "still working on your audio" rather than the generic
+                            // "loading" a spinner implies.
+                            Image(systemName: "waveform")
+                                .font(.title2)
+                                .foregroundStyle(.orange)
+                                .symbolEffect(.variableColor.iterative, isActive: true)
+                        } else if modelReady || viewModel.isDictating {
                             Image(systemName: viewModel.isDictating ? "mic.fill" : "mic")
                                 .font(.title2)
                                 .foregroundStyle(viewModel.isDictating ? .red : .blue)
@@ -37,7 +52,7 @@ struct AIListeningView: View {
                             ProgressView().controlSize(.small)
                         }
                     }
-                    .disabled(!modelReady && !viewModel.isDictating)
+                    .disabled(viewModel.isFinishing || (!modelReady && !viewModel.isDictating))
 
                     // DEBUG: Start Simulation
                     Button(action: {
@@ -47,12 +62,19 @@ struct AIListeningView: View {
                             .font(.title2)
                             .foregroundStyle(viewModel.isListening ? .red : .blue)
                     }
+                    // The two feeds are mutually exclusive, and starting a
+                    // simulation mid-finish would race the final commit for the
+                    // chart. AIVoiceViewModel guards against it, but greying the
+                    // control is clearer than silently discarding one of them.
+                    .disabled(viewModel.isFinishing)
                 }
                 .padding(.bottom, 8)
                 
-                // Speaker filter — visible whenever real dictation is running, so a
-                // withheld line is never mistaken for Whisper missing words.
-                if viewModel.isDictating {
+                // Speaker filter — visible whenever real dictation is running, and
+                // through the finish, so a withheld line is never mistaken for
+                // Whisper missing words. The final tail pass can still change these
+                // counts after the mic goes off.
+                if viewModel.isDictating || viewModel.isFinishing {
                     let status = viewModel.gateStatus
                     HStack(spacing: 6) {
                         Image(systemName: status.active ? "person.wave.2.fill" : "person.slash")
