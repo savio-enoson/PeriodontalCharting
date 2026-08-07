@@ -61,6 +61,8 @@ struct ChartDashboard: View {
     @State private var showZoomSlider = false
     @State private var show3DView = false
     @State private var exportURL: URL?
+    @State private var showExportOptions = false
+    @State private var isExporting = false
     @State private var highlightTask: Task<Void, Never>?
     @Binding var columnVisibility: NavigationSplitViewVisibility
 
@@ -139,10 +141,11 @@ struct ChartDashboard: View {
                 .disabled(chart == nil)
 
                 Button {
-                    exportURL = exportPDF()
+                    showExportOptions = true
                 } label: {
                     Label("Export", systemImage: "square.and.arrow.up")
                 }
+                .disabled(isExporting)
 
                 Button {
                     showSettings = true
@@ -237,6 +240,21 @@ struct ChartDashboard: View {
         }
         .sheet(item: $exportURL) { url in
             ShareSheet(items: [url])   // UIActivityViewController wrapper
+        }
+        .confirmationDialog("Export", isPresented: $showExportOptions, titleVisibility: .visible) {
+            Button("Chart (PDF)") { exportURL = exportPDF() }
+            Button("3D Model (OBJ)") { exportModel(.obj) }
+            Button("3D Model (STL)") { exportModel(.stl) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Choose what to export")
+        }
+        .overlay {
+            if isExporting {
+                ProgressView("Preparing 3D model…")
+                    .padding(20)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+            }
         }
         .fullScreenCover(isPresented: $show3DView) {
             PeriodontalAnatomyPresenter(mouth: mouth)
@@ -345,6 +363,18 @@ struct ChartDashboard: View {
             pdfURL = url
         }
         return pdfURL
+    }
+
+    /// Rebuild the 3-D anatomy from the current chart and export it as OBJ/STL.
+    /// The asset load is async, so this runs off the button tap and flips
+    /// `isExporting` to show a spinner until the share sheet is ready.
+    private func exportModel(_ format: Model3DFormat) {
+        isExporting = true
+        Task { @MainActor in
+            let url = await Model3DExporter.export(mouth: mouth, format: format)
+            isExporting = false
+            exportURL = url
+        }
     }
 }
 
