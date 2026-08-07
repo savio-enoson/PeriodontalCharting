@@ -20,16 +20,16 @@
 //  WeSpeaker ResNet34 picked the same speaker with no measurable difference, while
 //  moving from one enrollment clip to a centroid of several improved EER ~8x.
 //  min() over templates is WORSE than the centroid because it lowers imposter
-//  distances just as much as target ones (shifts the operating point rather than
-//  improving separation).
+//  distances just as much as target ones.
 //
 //  OPERATING POINT (centroid enrollment, ECAPA embeddings):
 //      d <  0.675  ACCEPT   FAR 0.0%,  captures 86.4% of target speech
 //      d <  0.775  CONFIRM  FAR 1.0%,  captures a further 9.1%
 //      d >= 0.775  REJECT   4.5% of target speech lost (clinician repeats)
 //
-//  Thresholds are PER-MODEL: cosine distances are not comparable across
-//  embedders. Re-derive with tse.py `evaluate()` before swapping the .mlpackage.
+//  THRESHOLDS ARE PER-INSTANCE AND MUTABLE, because a VoiceProfile may carry its
+//  own. They are still PER-MODEL: cosine distances are not comparable across
+//  embedders, so re-derive with tse.py `evaluate()` before swapping the .mlpackage.
 //
 //  The model is a fixed-shape graph:
 //      waveform  [1, 48000] f32  (16 kHz mono, exactly 3.0 s)
@@ -50,9 +50,9 @@ struct GateResult {
     let distance: Double?
 }
 
-/// `@unchecked Sendable`: after init the config fields are read-only, MLModel
-/// prediction is thread-safe, and all mutable enrollment state is behind `lock` —
-/// so this can be handed to a background classification task.
+/// `@unchecked Sendable`: after init the model is read-only, MLModel prediction is
+/// thread-safe, and all mutable state — enrollment AND thresholds — is behind
+/// `lock`, so this can be handed to a background classification task.
 final class SpeakerGate: @unchecked Sendable {
 
     enum GateError: Error {
@@ -65,14 +65,22 @@ final class SpeakerGate: @unchecked Sendable {
     /// Must match `input_seconds` used at export time (tse.py `export_coreml`).
     static let inputSamples = 48_000
 
+    /// Re-validated by re-measurement rather than assumed. A profile override that
+    /// is nil falls back to these.
+    static let defaultAcceptThreshold = 0.675
+    static let defaultRejectThreshold = 0.775
+
     // Operating point — see the header block for the measured FAR/FRR sweep.
-    let acceptThreshold: Double
-    let rejectThreshold: Double
-    private let adaptThreshold: Double
+    // Guarded by `lock`: `classify` runs on the gate queue while a profile switch
+    // comes from the main actor.
+    private(set) var acceptThreshold: Double
+    private(set) var rejectThreshold: Double
+    private var adaptThreshold: Double
+    private let adaptMargin: Double
 
     /// Below this, embeddings are dominated by duration artefact rather than
     /// speaker identity (measured: a 1 s window sits ~0.46 from the 6 s embedding
-    /// of the *same* audio).
+    /// of the *same* audio). `classify` refuses below it.
     static let minDurationSeconds = 1.0
     /// Enrollment capacity. Past this, `recomputeCentroidLocked` evicts FIFO.
     /// Exposed so multi-condition calibration can budget templates per take and
@@ -84,7 +92,7 @@ final class SpeakerGate: @unchecked Sendable {
     private var outputName = "embedding"
 
     // Guarded by `lock`: adaptive enrollment mutates these from the classification
-    // queue while the UI may enroll from the main actor.
+    // queue while the UI may enroll or switch profile from the main actor.
     private let lock = NSLock()
     private var templates: [[Double]] = []
     private var centroid: [Double]?
@@ -99,8 +107,8 @@ final class SpeakerGate: @unchecked Sendable {
         return templates.count
     }
 
-    init(acceptThreshold: Double = 0.675,
-         rejectThreshold: Double = 0.775,
+    init(acceptThreshold: Double = SpeakerGate.defaultAcceptThreshold,
+         rejectThreshold: Double = SpeakerGate.defaultRejectThreshold,
          adaptMargin: Double = 0.9) throws {
         guard let url = Self.locateModel() else { throw GateError.modelNotFound }
         let cfg = MLModelConfiguration()
@@ -108,6 +116,7 @@ final class SpeakerGate: @unchecked Sendable {
         self.model = try MLModel(contentsOf: url, configuration: cfg)
         self.acceptThreshold = acceptThreshold
         self.rejectThreshold = rejectThreshold
+        self.adaptMargin = adaptMargin
         self.adaptThreshold = acceptThreshold * adaptMargin
         resolveIONames()
     }
@@ -135,6 +144,23 @@ final class SpeakerGate: @unchecked Sendable {
            let match = outputs.first(where: { $0.value.multiArrayConstraint != nil }) {
             outputName = match.key
         }
+    }
+
+    // MARK: - Operating point
+
+    /// Apply a profile's operating point. `nil` restores the measured defaults.
+    ///
+    /// handoff.md: the margin is asymmetric in the WRONG direction for the cost
+    /// model — a false accept puts a wrong number on a chart and nobody notices,
+    /// a false reject costs one repeat — so any adjustment goes DOWN. Nothing in
+    /// the app raises these automatically; a speaker whose own clips scatter
+    /// widely gets told to re-record instead (VoiceProfileStore.spreadWarning).
+    func applyThresholds(accept: Double?, reject: Double?) {
+        lock.lock()
+        acceptThreshold = accept ?? Self.defaultAcceptThreshold
+        rejectThreshold = reject ?? Self.defaultRejectThreshold
+        adaptThreshold = acceptThreshold * adaptMargin
+        lock.unlock()
     }
 
     // MARK: - Embedding
@@ -169,7 +195,9 @@ final class SpeakerGate: @unchecked Sendable {
         return Self.unit(vec)
     }
 
-    private static func unit(_ v: [Double]) -> [Double] {
+    /// Internal rather than private: `leaveOneOutDistances` needs it from a static
+    /// context outside any instance.
+    static func unit(_ v: [Double]) -> [Double] {
         let norm = (v.reduce(0) { $0 + $1 * $1 }).squareRoot()
         guard norm > 1e-12 else { return v }
         return v.map { $0 / norm }
@@ -178,8 +206,9 @@ final class SpeakerGate: @unchecked Sendable {
     // MARK: - Enrollment
 
     /// Add enrollment utterances. Pass SEVERAL spanning different conditions
-    /// (mask on/off, near/far, early/late in the session) — that difference was
-    /// worth ~8x EER. One clip is the weak case.
+    /// (mask on/off, near/far, normal/quiet) — that difference was worth ~8x EER.
+    /// One clip is the weak case, and one VOLUME is the case that measured as
+    /// withholding the clinician's own soft dictation.
     @discardableResult
     func enroll(_ utterances: [[Float]]) throws -> Int {
         let minSamples = Int(Self.minDurationSeconds * Double(Self.sampleRate))
@@ -203,6 +232,54 @@ final class SpeakerGate: @unchecked Sendable {
         lock.unlock()
     }
 
+    /// The current templates, for caching on a profile.
+    var currentTemplates: [[Double]] {
+        lock.lock(); defer { lock.unlock() }
+        return templates
+    }
+
+    /// Load cached embeddings instead of recomputing them from audio.
+    ///
+    /// This is what makes switching dentist instant. Rebuilding a centroid means
+    /// an ECAPA pass over every take of the profile; a clinic with a rotation
+    /// would pay that at every handover.
+    func restore(templates newTemplates: [[Double]]) {
+        lock.lock()
+        templates = newTemplates
+        recomputeCentroidLocked()
+        lock.unlock()
+    }
+
+    /// Leave-one-out distances: each template against the centroid of the others.
+    ///
+    /// THE ONLY THRESHOLD EVIDENCE CALIBRATION CAN PRODUCE. A reject threshold
+    /// separates this person from SOMEBODY ELSE, and calibration contains no
+    /// somebody else. What this does show is whether the accept line has room for
+    /// a particular voice: clips clustering at 0.30–0.45 are comfortable against
+    /// 0.675, clips reaching 0.60+ mean the speaker will be withheld while talking
+    /// normally — and it is far better to learn that at setup than mid-patient.
+    ///
+    /// Returns empty below three templates, where leaving one out leaves too
+    /// little to average meaningfully.
+    static func leaveOneOutDistances(_ templates: [[Double]]) -> [Double] {
+        guard templates.count >= 3, let dim = templates.first?.count else { return [] }
+        var out: [Double] = []
+        out.reserveCapacity(templates.count)
+
+        for i in templates.indices {
+            var mean = [Double](repeating: 0, count: dim)
+            for (j, t) in templates.enumerated() where j != i {
+                for d in 0..<dim { mean[d] += t[d] }
+            }
+            let n = Double(templates.count - 1)
+            for d in 0..<dim { mean[d] /= n }
+            let centre = unit(mean)
+            let dot = zip(centre, templates[i]).reduce(0) { $0 + $1.0 * $1.1 }
+            out.append(1.0 - dot)
+        }
+        return out
+    }
+
     /// Caller must hold `lock`.
     private func recomputeCentroidLocked() {
         if templates.count > Self.maxTemplates {
@@ -223,8 +300,15 @@ final class SpeakerGate: @unchecked Sendable {
     // MARK: - Classification
 
     func classify(_ samples: [Float], adapt: Bool = false) throws -> GateResult {
+        // Thresholds are read under the lock alongside the centroid: a profile
+        // switch can change them from the main actor while this runs on the gate
+        // queue, and reading a half-applied pair would judge against a mixture of
+        // two operating points.
         lock.lock()
         let snapshot = centroid
+        let accept = acceptThreshold
+        let reject = rejectThreshold
+        let adaptLine = adaptThreshold
         lock.unlock()
         guard let snapshot else { throw GateError.notEnrolled }
 
@@ -238,9 +322,9 @@ final class SpeakerGate: @unchecked Sendable {
         let distance = 1.0 - dot
 
         let verdict: Verdict
-        if distance < acceptThreshold {
+        if distance < accept {
             verdict = .accept
-        } else if distance < rejectThreshold {
+        } else if distance < reject {
             verdict = .confirm
         } else {
             verdict = .reject
@@ -248,7 +332,7 @@ final class SpeakerGate: @unchecked Sendable {
 
         // Only fold in comfortably-accepted segments, so the centroid cannot drift
         // toward whatever it has been mistakenly accepting.
-        if adapt && distance < adaptThreshold {
+        if adapt && distance < adaptLine {
             lock.lock()
             templates.append(emb)
             recomputeCentroidLocked()
@@ -312,6 +396,13 @@ extension SpeakerGate {
         var peak: Float = 0
         for s in mono { peak = max(peak, abs(s)) }
         if peak > 1e-8 { for i in mono.indices { mono[i] /= peak } }
+        
+        // Matches the offline pipeline, which applies an 80 Hz high-pass before
+        // cutting segments. Previously omitted because its effect on DISTANCES
+        // measured at +0.003 — but the energy segmenter, which did not exist then,
+        // cares about the noise floor rather than the distance.
+        HighPassFilter.filterFile(&mono)
+        AutoGain.normalise(&mono)
         return mono
     }
 }

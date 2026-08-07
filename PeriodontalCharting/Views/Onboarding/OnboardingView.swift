@@ -7,14 +7,30 @@ struct OnboardingView: View {
     var isSettingsMode: Bool = false
     
     @StateObject private var audioManager = AudioManager.shared
+    /// @Observable singleton — reading its properties in `body` registers this
+    /// view for updates, so the take list and the spread warning stay live.
+    private let profileStore = VoiceProfileStore.shared
     
     @State private var config = ChartingConfiguration()
-    @State private var hasRecorded = false
+    /// Which takes exist on disk FOR THE ACTIVE PROFILE. Per-take rather than one
+    /// `hasRecorded` flag, because calibration is several recordings in different
+    /// conditions — see CalibrationTake for why one was not enough.
+    @State private var recordedTakes: Set<CalibrationTake> = []
+    /// The take currently being recorded. There is ONE AVAudioRecorder, so only
+    /// one row can be live at a time and every other Record button is disabled.
+    @State private var recordingTake: CalibrationTake?
+    /// Local edit buffer for the profile name, committed on submit / on save.
+    @State private var profileName: String = ""
     @State private var recordingPermissionGranted = false
     @State private var enrollmentStatus = ""
     @State private var enrollmentDetail = ""
     @State private var enrollmentSucceeded = false
     @State private var isEnrolling = false
+
+    /// There is no centroid at all without take 1.
+    private var hasRecorded: Bool { recordedTakes.contains(.normal) }
+    private var activeProfileID: String? { profileStore.activeID }
+    private var profileDirectory: URL? { profileStore.activeDirectory }
     
     init(hasCompletedOnboarding: Binding<Bool>, isSettingsMode: Bool = false) {
         self._hasCompletedOnboarding = hasCompletedOnboarding
@@ -33,28 +49,115 @@ struct OnboardingView: View {
                     .font(.largeTitle)
                     .fontWeight(.bold)
                     .padding(.top, 40)
-                
-                // --- Section 1: Voice Sample ---
+
+                // --- Section 1: Voice Profile ---
+                //
+                // Each dentist gets their own profile: their own takes, their own
+                // centroid, their own operating point. A clinic with a rotation
+                // switches between them rather than re-calibrating, which used to
+                // be the only option because templates lived in memory only.
+                VStack(spacing: 16) {
+                    Text("1. Voice Profile")
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    if isSettingsMode {
+                        HStack {
+                            Text("Dentist")
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            // Menu rather than segmented: names are variable-length
+                            // and a rotation can be more than three or four people,
+                            // which a segmented control cannot lay out.
+                            Picker("Dentist", selection: Binding(
+                                get: { profileStore.activeID ?? "" },
+                                set: { switchProfile(to: $0) }
+                            )) {
+                                ForEach(profileStore.profiles) { profile in
+                                    Text(profile.name).tag(profile.id)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .disabled(audioManager.isRecording || isEnrolling)
+                        }
+                        .padding(.vertical, 4)
+                        .padding(.horizontal, 12)
+                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                    }
+
+                    HStack {
+                        TextField("Dentist name", text: $profileName)
+                            .textFieldStyle(.roundedBorder)
+                            .onSubmit { commitProfileName() }
+
+                        if isSettingsMode {
+                            Button {
+                                addProfile()
+                            } label: {
+                                Label("Add", systemImage: "plus.circle.fill")
+                                    .padding(.vertical, 8)
+                                    .padding(.horizontal, 14)
+                                    .background(Color(.systemGray5), in: Capsule())
+                            }
+                            .disabled(audioManager.isRecording || isEnrolling)
+                        }
+                    }
+
+                    // Step 7's payload. Leave-one-out spread of this speaker's own
+                    // calibration clips: the only threshold evidence calibration
+                    // can produce, because a reject threshold needs somebody else
+                    // to reject and there isn't one in here.
+                    if let profile = profileStore.active,
+                       let median = profile.selfDistanceMedian,
+                       let worst = profile.selfDistanceMax {
+                        HStack(spacing: 6) {
+                            Image(systemName: profile.spreadIsRisky
+                                  ? "exclamationmark.triangle.fill" : "checkmark.seal.fill")
+                                .foregroundStyle(profile.spreadIsRisky ? .orange : .green)
+                            Text(String(format: "Voice consistency: typical %.2f, worst %.2f "
+                                        + "(the app stops recognising you past %.2f)",
+                                        median, worst,
+                                        profile.acceptThreshold ?? SpeakerGate.defaultAcceptThreshold))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                        }
+                    }
+
+                    if let warning = profileStore.spreadWarning {
+                        Label(warning, systemImage: "exclamationmark.triangle.fill")
+                            .font(.footnote)
+                            .foregroundStyle(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                .padding()
+
+                // --- Section 2: Voice Sample ---
                 VStack(spacing: 20) {
-                    Text("1. Voice Sample Calibration")
+                    Text("2. Voice Sample Calibration")
                         .font(.title2)
                         .fontWeight(.semibold)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     
-                    Text("Please read the whole passage aloud at a normal pace. The length is what lets the app tell "
-                         + "your voice apart from an assistant's.")
+                    Text("Read the passage below once for each condition. Recording more "
+                         + "than one is what lets the app still recognise you when you "
+                         + "change how you speak — measured, a single take made the app "
+                         + "silence its own dentist whenever he lowered his voice.")
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
 
                     // ~80 words. Two separate mechanisms depend on the length:
-                    // the GATE builds its centroid from 3 s windows (several beat
+                    // the GATE builds its centroid from spans of this (several beat
                     // one — worth ~8x EER), and the EXTRACTOR needs 10.24 s of
-                    // speech to fill its 1024 conditioning keys, below which it
-                    // refuses to enroll at all.
+                    // speech across all takes to fill its 1024 conditioning keys,
+                    // below which it refuses to enroll at all.
                     //
                     // The digit run at the end is deliberate: it is the speech
                     // style the clinician actually dictates in, and it is the
-                    // dominant ASR failure mode, so the enrollment should cover it
+                    // dominant ASR failure mode, so enrollment should cover it
                     // rather than being all prose.
                     Text("""
                     "Dokter gigi menyarankan untuk menggosok gigi sebanyak dua kali \
@@ -68,69 +171,20 @@ struct OnboardingView: View {
                         .padding()
                         .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    
-                    HStack {
-                        Button(action: {
-                            if audioManager.isRecording {
-                                audioManager.stopRecording()
-                                hasRecorded = true
-                                enrollCalibration()
-                            } else {
-                                if !recordingPermissionGranted {
-                                    audioManager.requestPermission { granted in
-                                        recordingPermissionGranted = granted
-                                        if granted {
-                                            audioManager.startRecording()
-                                        }
-                                    }
-                                } else {
-                                    audioManager.startRecording()
-                                }
-                            }
-                        }) {
-                            HStack {
-                                Image(systemName: audioManager.isRecording ? "stop.circle.fill" : "mic.circle.fill")
-                                    .font(.title2)
-                                Text(audioManager.isRecording ? "Stop Recording" : "Record Voice Sample")
-                                    .fontWeight(.bold)
-                            }
-                            .padding()
-                            .frame(maxWidth: 300)
-                            .background(audioManager.isRecording ? Color.red : Color.blue)
-                            .foregroundStyle(.white)
-                            .cornerRadius(12)
-                        }
-                        
-                        if audioManager.hasRecording {
-                            Button(action: {
-                                if audioManager.isPlaying {
-                                    audioManager.stopPlaying()
-                                } else {
-                                    audioManager.playRecording()
-                                }
-                            }) {
-                                HStack {
-                                    Image(systemName: audioManager.isPlaying ? "stop.circle.fill" : "play.circle.fill")
-                                        .font(.title2)
-                                    Text(audioManager.isPlaying ? "Stop" : "Play")
-                                        .fontWeight(.bold)
-                                }
-                                .padding()
-                                .frame(maxWidth: 120)
-                                .background(Color(.systemGray5))
-                                .foregroundStyle(.primary)
-                                .cornerRadius(12)
-                            }
-                            
-                            HStack {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(.green)
-                                Text("Recorded")
-                                    .foregroundStyle(.secondary)
-                                    .font(.subheadline)
-                            }
-                        }
-                        Spacer()
+
+                    ForEach(CalibrationTake.allCases) { take in
+                        takeRow(take)
+                    }
+
+                    // The quiet take is the one that fixes the measured failure, so
+                    // skipping it is called out rather than silently allowed.
+                    if recordedTakes.contains(.normal) && !recordedTakes.contains(.soft) {
+                        Label("Record the quiet take too. Without it the app will withhold "
+                              + "your dictation whenever you speak softly.",
+                              systemImage: "exclamationmark.triangle.fill")
+                            .font(.footnote)
+                            .foregroundStyle(.orange)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
                     if isEnrolling || !enrollmentStatus.isEmpty {
@@ -157,9 +211,9 @@ struct OnboardingView: View {
                 }
                 .padding()
                 
-                // --- Section 2: Annotation Order Configuration ---
+                // --- Section 3: Annotation Order Configuration ---
                 VStack(spacing: 20) {
-                    Text("2. Annotation Order")
+                    Text("3. Annotation Order")
                         .font(.title2)
                         .fontWeight(.semibold)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -184,6 +238,7 @@ struct OnboardingView: View {
                 .padding()
                 
                 Button(action: {
+                    commitProfileName()
                     saveConfiguration()
                     hasCompletedOnboarding = true
                     dismiss()
@@ -206,7 +261,7 @@ struct OnboardingView: View {
         .background(Color(.systemGroupedBackground))
         .overlay(alignment: .topTrailing) {
             if isSettingsMode {
-                Button(action: { dismiss() }) {
+                Button(action: { commitProfileName(); dismiss() }) {
                     Image(systemName: "xmark.circle.fill")
                         .font(.largeTitle)
                         .foregroundStyle(Color(UIColor.tertiaryLabel))
@@ -218,29 +273,181 @@ struct OnboardingView: View {
             audioManager.requestPermission { granted in
                 recordingPermissionGranted = granted
             }
+            profileName = profileStore.active?.name ?? ""
+            refreshRecordedTakes()
             if let data = UserDefaults.standard.data(forKey: "ChartingConfiguration"),
                let savedConfig = try? JSONDecoder().decode(ChartingConfiguration.self, from: data) {
                 config = savedConfig
             }
         }
+        .onChange(of: profileStore.activeID) { _, _ in
+            profileName = profileStore.active?.name ?? ""
+            refreshRecordedTakes()
+            enrollmentStatus = ""
+            enrollmentDetail = ""
+        }
+        .onDisappear { commitProfileName() }
+    }
+
+    // MARK: - Profile
+
+    private func refreshRecordedTakes() {
+        guard let dir = profileDirectory else { recordedTakes = []; return }
+        recordedTakes = Set(CalibrationTake.recorded(in: dir))
+    }
+
+    /// Save the edited name. Called on submit, on save, and on dismiss, because a
+    /// TextField that is never submitted would otherwise lose what was typed.
+    private func commitProfileName() {
+        guard let id = activeProfileID else { return }
+        let trimmed = profileName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != profileStore.active?.name else { return }
+        profileStore.rename(id, to: trimmed)
+    }
+
+    private func addProfile() {
+        commitProfileName()
+        let new = profileStore.createProfile(named: "Dentist \(profileStore.profiles.count + 1)")
+        switchProfile(to: new.id)
+    }
+
+    /// Switching restores cached embeddings — no audio is read and no ECAPA pass
+    /// runs — then re-conditions the extractor, which uses a different encoder and
+    /// cannot be restored from the gate's embeddings.
+    private func switchProfile(to id: String) {
+        guard id != profileStore.activeID else { return }
+        commitProfileName()
+        Task { await TranscriptionEngine.shared.activateProfile(id) }
+    }
+
+    // MARK: - Calibration takes
+
+    /// One take: what it is, why it exists, record and play.
+    ///
+    /// Files live inside the ACTIVE profile's directory. `AudioManager` appends
+    /// whatever filename it is given to the Documents root, so a relative path
+    /// with slashes routes correctly and AudioManager needs no change.
+    ///
+    /// Play is bound to THIS take via `audioManager.playingFilename` (which holds
+    /// the last path component) rather than the global `isPlaying` flag. There is
+    /// a single player, so a shared flag turned EVERY row's button into "Stop" the
+    /// moment any one of them started.
+    @ViewBuilder
+    private func takeRow(_ take: CalibrationTake) -> some View {
+        let isThisRecording = audioManager.isRecording && recordingTake == take
+        let isThisPlaying = audioManager.playingFilename == take.filename
+        let isDone = recordedTakes.contains(take)
+
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text(take.title).font(.headline)
+                if isDone {
+                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                } else if take.isRequired {
+                    Text("required").font(.caption2).foregroundStyle(.secondary)
+                }
+            }
+
+            Text(take.instruction)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack {
+                Button {
+                    guard let id = activeProfileID else { return }
+                    if isThisRecording {
+                        audioManager.stopRecording()
+                        recordingTake = nil
+                        recordedTakes.insert(take)
+                        // Re-enroll from EVERY take of this profile, not just the
+                        // one just recorded — the centroid is the average across
+                        // all conditions, so adding one means rebuilding the whole.
+                        enrollCalibration()
+                    } else {
+                        let path = profileStore.relativePath(take, for: id)
+                        let begin = {
+                            recordingTake = take
+                            audioManager.startRecording(filename: path)
+                        }
+                        if recordingPermissionGranted {
+                            begin()
+                        } else {
+                            audioManager.requestPermission { granted in
+                                recordingPermissionGranted = granted
+                                if granted { begin() }
+                            }
+                        }
+                    }
+                } label: {
+                    HStack {
+                        Image(systemName: isThisRecording ? "stop.circle.fill" : "mic.circle.fill")
+                            .font(.title3)
+                        Text(isThisRecording ? "Stop" : (isDone ? "Re-record" : "Record"))
+                            .fontWeight(.bold)
+                    }
+                    .padding(.vertical, 10)
+                    .frame(maxWidth: 200)
+                    .background(isThisRecording ? Color.red : Color.blue)
+                    .foregroundStyle(.white)
+                    .cornerRadius(12)
+                }
+                // One recorder, one file at a time.
+                .disabled(audioManager.isRecording && !isThisRecording)
+
+                if isDone {
+                    Button {
+                        guard let id = activeProfileID else { return }
+                        if isThisPlaying {
+                            audioManager.stopPlaying()
+                        } else {
+                            // One player — stop whatever else is going first.
+                            if audioManager.isPlaying { audioManager.stopPlaying() }
+                            audioManager.playRecording(
+                                filename: profileStore.relativePath(take, for: id))
+                        }
+                    } label: {
+                        HStack {
+                            Image(systemName: isThisPlaying ? "stop.circle.fill" : "play.circle.fill")
+                                .font(.title3)
+                            Text(isThisPlaying ? "Stop" : "Play")
+                        }
+                        .padding(.vertical, 10)
+                        .frame(maxWidth: 110)
+                        .background(Color(.systemGray5))
+                        .foregroundStyle(.primary)
+                        .cornerRadius(12)
+                    }
+                    .disabled(audioManager.isRecording)
+                }
+
+                Spacer()
+            }
+        }
+        .padding(12)
+        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
     }
 
     // MARK: - Enrollment
 
-    /// Build the speaker centroid from the calibration recording.
+    /// Build the speaker centroid from EVERY calibration take of the ACTIVE profile.
     ///
     /// The work lives on TranscriptionEngine so onboarding and launch-time restore
-    /// share ONE implementation; this is purely state assignment and message
-    /// mapping. Reports every stage, because "no usable speech" on its own cannot
+    /// share ONE implementation; this is state assignment and message mapping.
+    /// Reports every stage, because "no usable speech" on its own cannot
     /// distinguish a half-written file from a dead mic from spans that were merely
-    /// too short.
+    /// too thin on voice.
     ///
-    /// The EXTRACTOR is re-enrolled from the same recording afterwards, and it is
+    /// `reset: true` ALWAYS. Every take is re-read from disk on each call, so
+    /// stacking without a reset would double-count the takes that have not
+    /// changed — and `SpeakerGate` evicts FIFO past 16 templates, so the oldest
+    /// condition would then be the one silently dropped.
+    ///
+    /// The EXTRACTOR is re-enrolled from the same recordings afterwards, and it is
     /// a genuinely different mechanism: the gate wants a centroid over a few clean
-    /// 3 s windows (WeSpeaker vs SpeechBrain ECAPA — different weights, different
-    /// embedding space), the extractor wants 1024 frame-level keys, which needs
-    /// >= 10.3 s of speech. A recording can succeed for one and fail for the
-    /// other, so both results are reported.
+    /// spans spanning several conditions (SpeechBrain ECAPA), the extractor wants
+    /// 1024 frame-level keys and needs >= 10.3 s of speech in total (WeSpeaker
+    /// ECAPA — different weights, unrelated embedding space).
     private func enrollCalibration() {
         isEnrolling = true
         enrollmentStatus = ""
@@ -252,15 +459,18 @@ struct OnboardingView: View {
 
             isEnrolling = false
             enrollmentSucceeded = result.templates > 0
+            refreshRecordedTakes()
 
-            let base = String(format: "%.1f s audio · %d speech segment(s) · %d at least 3 s",
-                              result.seconds, result.totalSpans, result.eligibleSpans)
+            let base = String(format: "%d take(s) · %.1f s audio · %d speech segment(s) · %d usable",
+                              result.takes, result.seconds, result.totalSpans, result.eligibleSpans)
 
             if result.templates > 0 {
-                enrollmentStatus = "Voice registered — \(result.templates) template(s)."
+                enrollmentStatus = result.takes >= 2
+                    ? "Voice registered — \(result.templates) template(s) across \(result.takes) conditions."
+                    : "Voice registered — \(result.templates) template(s) from one condition."
                 enrollmentDetail = base
 
-                // Rebuild enroll_kv from the NEW recording. Skipping this leaves
+                // Rebuild enroll_kv from the NEW recordings. Skipping this leaves
                 // the extractor conditioned on the previous clinician's voice —
                 // which would still "work", on the wrong person.
                 await TSEEngine.shared.reprepare()

@@ -3,32 +3,59 @@ import Combine
 
 @MainActor
 class AIVoiceViewModel: ObservableObject {
+    /// What the clinician READS. May contain segments the gate has not judged yet.
     @Published var liveTranscription: String = ""
     @Published var isListening: Bool = false
     /// True while real Whisper dictation is feeding the parser (vs. the debug
     /// simulation, which sets `isListening`). Kept separate so both controls can
     /// show independent state; the two are mutually exclusive at runtime.
     @Published var isDictating: Bool = false
+    /// True between the clinician tapping stop and the last decode + final gate
+    /// pass actually landing. The microphone is already off; the chart is not
+    /// final yet. Drives the busy state on the mic button.
+    @Published private(set) var isFinishing: Bool = false
 
-    /// Real on-device transcription. AI Mode drives it and consumes its confirmed
-    /// chunks; the standalone LiveTranscriptionView uses its own instance.
+    /// Real on-device transcription. AI Mode drives it and consumes its verified
+    /// chunks; the standalone LiveTranscriptionView (debug only) uses its own.
     private let transcriber = TranscriptionViewModel()
+
+    /// The in-flight stop, held so nothing else stamps the chart underneath it.
+    private var finishTask: Task<Void, Never>?
+
+    /// Last VERIFIED transcript. The final flush parses this, never
+    /// `liveTranscription` — which may contain segments the gate never reached,
+    /// and nothing ever re-filters a committed command.
+    private var lastVerifiedText: String = ""
+
+    /// Keep the finishing indicator on screen for at least this long.
+    ///
+    /// A stop during a pause completes in ~100 ms — the decode loop is sitting in
+    /// its 100 ms sleep and the gate tail pass returns immediately — which is
+    /// faster than SwiftUI renders a frame. Worse, `TranscriptionViewModel.stopLive()`
+    /// is itself @MainActor, so when none of its awaits genuinely suspend the whole
+    /// finish runs in ONE main-actor turn and `isFinishing` goes true and false
+    /// inside a single render pass. The indicator then never appears at all.
+    ///
+    /// The cost is a short delay before the mic is tappable again. That is the
+    /// right trade: the chart is already committed by then — the wait happens
+    /// AFTER the commit — and feedback that only shows up on slow stops is worse
+    /// than none, because the clinician cannot tell "finished instantly" from
+    /// "the button didn't register".
+    private static let minFinishDisplaySeconds = 0.45
     
     /// Speaker-filter state for the AI Mode header. The transcriber is private, so
     /// this is the only way the view can see it. Reading it inside a SwiftUI body
-    /// tracks the @Observable transcriber directly — no @Published mirror needed,
-    /// and it cannot go stale.
+    /// tracks the @Observable transcriber directly — no @Published mirror needed.
     var gateStatus: TranscriptionViewModel.GateStatus { transcriber.gateStatus }
     
-    // Stubs for future parsing architecture
     @Published var currentCommand: AnnotationCommand? = nil
-    /// The commands driving the chart. In live dictation this is the *preview*
-    /// (parsed from the full confirmed+unconfirmed transcript) so the chart is as
-    /// accurate as the Transcribe sheet.
+    /// The commands driving the chart, parsed from VERIFIED text only. Text the
+    /// gate has not judged yet shows in `liveTranscription` but cannot reach a
+    /// tooth — that gap is the buffer.
     @Published var commandHistory: [AnnotationCommand] = []
-    /// Commands parsed from *confirmed-only* text during live dictation. The chart
-    /// ghosts cells present in `commandHistory` (preview) but not yet here. `nil`
-    /// outside live dictation → nothing ghosted (simulation/instant show all solid).
+    /// Commands parsed from verified-AND-confirmed text. The chart ghosts cells
+    /// present in `commandHistory` but not yet here. `nil` outside live dictation
+    /// → nothing ghosted (simulation/instant show all solid).
     @Published var committedCommands: [AnnotationCommand]? = nil
     @Published var currentCursor: ChartingCursor? = nil
     @Published var activeSelection: TeethSelection? = nil
@@ -98,16 +125,18 @@ resesi 18, 17, 16, -1 -1
         if isDictating { stopLiveDictation() } else { startLiveDictation() }
     }
 
-    /// Begin real on-device dictation. Tier 3 "optimistic preview + confirmed
-    /// commit": the chart is driven by the FULL running transcript (preview) so it
-    /// tracks the voice as accurately as the Transcribe sheet, while a separate
-    /// confirmed-only pass (`committedCommands`) marks which cells are finalized —
-    /// the rest render ghosted. The parser re-derives the whole chart from the full
-    /// text each call, so a revised hypothesis self-corrects; nothing sticks wrong.
+    /// Begin real on-device dictation.
+    ///
+    /// THREE STREAMS, and the difference between them is the buffer. The clinician
+    /// reads everything the gate has not actively rejected, so the panel never
+    /// looks dead. The CHART is driven only by text the gate has confirmed came
+    /// from him — unjudged text waits. The parser re-derives the whole chart from
+    /// the full verified text each call, so a revised hypothesis self-corrects.
     func startLiveDictation() {
         stopSimulation()          // the two feeds are mutually exclusive
         isDictating = true
         liveTranscription = ""
+        lastVerifiedText = ""
         commandHistory = []
         committedCommands = []
         lastPreviewText = ""
@@ -115,11 +144,16 @@ resesi 18, 17, 16, -1 -1
         initializeCursorIfNeeded()
 
         transcriber.onLiveTranscript = { [weak self] text in
+            // DISPLAY ONLY. May contain text the gate has not judged yet.
             self?.liveTranscription = text
-            self?.ingestPreview(text)         // full text → chart values + cursor
+        }
+        transcriber.onVerifiedTranscript = { [weak self] verified in
+            // CHART. Verified text only — this is the buffer.
+            self?.lastVerifiedText = verified
+            self?.ingestPreview(verified)
         }
         transcriber.onConfirmedTranscript = { [weak self] confirmed in
-            self?.ingestCommitted(confirmed)  // confirmed text → committed set (ghosting)
+            self?.ingestCommitted(confirmed)  // verified + confirmed → ghosting
         }
 
         Task { [weak self] in
@@ -130,20 +164,61 @@ resesi 18, 17, 16, -1 -1
         }
     }
 
+    /// Stop the microphone, then WAIT for the work already in flight before
+    /// finalizing the chart.
+    ///
+    /// This used to call `transcriber.stopLive()` and immediately nil the
+    /// callbacks. `stopLive()` starts asynchronous work — the last decode and the
+    /// final speaker-gate pass — so the callbacks were gone before that work
+    /// landed, its result fired into nothing, and the final parse ran on text one
+    /// decode out of date. The clinician's last sentence was captured,
+    /// transcribed, and then discarded.
+    ///
+    /// That final gate pass matters even more under the buffer: without it the
+    /// last spans stay `pending` forever and never reach the chart at all.
     func stopLiveDictation() {
         guard isDictating else { return }
         isDictating = false
-        transcriber.stopLive()
-        transcriber.onLiveTranscript = nil
-        transcriber.onConfirmedTranscript = nil
-        // Final flush over everything captured, then mark it all committed so no
-        // cells remain ghosted once dictation ends.
-        lastPreviewText = ""
-        ingestPreview(liveTranscription, isFinal: true)
-        committedCommands = commandHistory
+        isFinishing = true
+
+        finishTask = Task { [weak self] in
+            guard let self else { return }
+            let began = Date()
+
+            // Awaits the final decode AND the final gate pass. The callbacks are
+            // still connected throughout, so the last words are judged and reach
+            // the chart before anything is torn down.
+            await self.transcriber.stopLive()
+
+            self.transcriber.onLiveTranscript = nil
+            self.transcriber.onVerifiedTranscript = nil
+            self.transcriber.onConfirmedTranscript = nil
+
+            // A simulation or a fresh dictation may have taken over while we were
+            // finishing. Either owns the chart now; do not stamp over it.
+            if !self.isListening && !self.isDictating {
+                self.lastPreviewText = ""
+                // From the VERIFIED text. Flushing `liveTranscription` here would
+                // make every unjudged segment permanent.
+                self.ingestPreview(self.lastVerifiedText, isFinal: true)
+                self.committedCommands = self.commandHistory
+            }
+
+            // Chart is final at this point — only the indicator lingers. Grep
+            // `[AI] finish` for how long the real work took: a stop during a pause
+            // is ~100 ms, mid-sentence is 1–2 s.
+            let elapsed = Date().timeIntervalSince(began)
+            print(String(format: "[AI] finish took %.0f ms", elapsed * 1000))
+            if elapsed < Self.minFinishDisplaySeconds {
+                try? await Task.sleep(
+                    nanoseconds: UInt64((Self.minFinishDisplaySeconds - elapsed) * 1_000_000_000))
+            }
+
+            self.isFinishing = false
+        }
     }
 
-    /// Parse the FULL live transcript and publish the chart-driving state (values,
+    /// Parse the VERIFIED transcript and publish the chart-driving state (values,
     /// cursor, selection). Skipped when the text hasn't changed since the last pass.
     private func ingestPreview(_ text: String, isFinal: Bool = false) {
         if !isFinal && text == lastPreviewText { return }
@@ -151,6 +226,12 @@ resesi 18, 17, 16, -1 -1
         guard !text.isEmpty else {
             commandHistory = []
             currentCommand = nil
+            // Reset these too. Leaving them meant a withheld speaker could move the
+            // cursor and leave it moved — the one piece of chart state that did NOT
+            // recompute from scratch.
+            currentCursor = VoiceCommandParser(configuration: getConfiguration()).cursor
+            activeSelection = nil
+            pendingValues = []
             return
         }
         let parser = VoiceCommandParser(configuration: getConfiguration())
@@ -167,8 +248,8 @@ resesi 18, 17, 16, -1 -1
         self.pendingValues = parser.pendingValues
     }
 
-    /// Parse the confirmed-only text into the committed command set. The chart
-    /// ghosts any preview cell not backed by these.
+    /// Parse the verified-and-confirmed text into the committed command set. The
+    /// chart ghosts any preview cell not backed by these.
     private func ingestCommitted(_ text: String) {
         guard !text.isEmpty else { committedCommands = []; return }
         let parser = VoiceCommandParser(configuration: getConfiguration())
@@ -190,6 +271,8 @@ resesi 18, 17, 16, -1 -1
             self.currentCommand = nil
         }
         
+        // Set BEFORE any suspension point, so a still-finishing stopLiveDictation
+        // sees it and skips its final commit rather than racing us for the chart.
         isListening = true
         simulationTask?.cancel()
         
@@ -270,4 +353,3 @@ extension ChartingConfiguration: @unchecked Sendable {}
 extension AnnotationCommand: @unchecked Sendable {}
 extension ChartingCursor: @unchecked Sendable {}
 extension TeethSelection: @unchecked Sendable {}
-

@@ -4,25 +4,30 @@
 //
 //  Created by Hans Joachim Wiryonoptutro on 27/07/26.
 //
-//  Orchestrates speaker gating over an audio buffer: reuses the existing
-//  SileroVADEngine to find speech, merges spans into decision-sized windows, and
-//  classifies each with SpeakerGate.
+//  Orchestrates speaker gating over an audio buffer: finds speech, merges spans
+//  into decision-sized windows, and classifies each with SpeakerGate.
 //
 //  Deliberately knows nothing about WhisperKit or AVAudioEngine — it takes
 //  [Float] at 16 kHz. That keeps it usable from the file-based debug harness (no
-//  mic, no session ownership conflict) and from the live path once the audio
-//  source is wired in.
+//  mic, no session ownership conflict) and from the live path.
 //
 
 import Foundation
 
-/// A VAD span with a speaker verdict attached. Bounds are in SAMPLES at 16 kHz,
-/// matching SpeechSegment.
+/// A speech span with a speaker verdict attached. Bounds are in SAMPLES at
+/// 16 kHz, matching SpeechSegment.
 struct GatedSpan {
     let start: Int
     let end: Int
     let verdict: Verdict
     let distance: Double?
+    /// True when this span came from the blind fixed-window fallback instead of
+    /// energy segmentation. journal.md §12: those distances are NOT measurements
+    /// — the window may be pure silence — so `SpeakerVerdict` maps them to
+    /// `pending` rather than letting them release text to the chart.
+    ///
+    /// Defaulted so existing call sites compile unchanged.
+    var fromFallback: Bool = false
 
     var startSeconds: Double { Double(start) / Double(SpeakerGate.sampleRate) }
     var endSeconds: Double { Double(end) / Double(SpeakerGate.sampleRate) }
@@ -37,8 +42,8 @@ final class SpeakerGateService: @unchecked Sendable {
     let gate: SpeakerGate
     let vad: SileroVADEngine
 
-    /// Most recent evaluation, used by `isTargetSpeaking(atSeconds:)` to gate
-    /// Whisper segments by timestamp.
+    /// Most recent evaluation, used by `nearestSpan(toSeconds:)` to gate Whisper
+    /// segments by timestamp.
     private let lock = NSLock()
     private var timeline: [GatedSpan] = []
 
@@ -52,10 +57,12 @@ final class SpeakerGateService: @unchecked Sendable {
 
     // MARK: - Enrollment
 
-    /// Enroll from a recording. Splits on VAD so a single calibration file yields
-    /// several templates — but note they are all ONE acoustic condition. Real
-    /// multi-condition enrollment needs audio captured across conditions
-    /// (see `enroll(utterances:)`).
+    /// Enroll from a recording, one template per merged VAD span.
+    ///
+    /// LEGACY PATH, kept for the file-based debug harness. Prefer
+    /// `enrollmentSelection(fromFile:)`, which uses the same segmenter as the live
+    /// gate — templates and the spans measured against them must be built to the
+    /// same recipe or the embedder's duration artefact shows up as distance.
     @discardableResult
     func enroll(fromFile url: URL) throws -> Int {
         let audio = try SpeakerGate.loadSamples(from: url)
@@ -69,21 +76,31 @@ final class SpeakerGateService: @unchecked Sendable {
     func enroll(utterances: [[Float]]) throws -> Int {
         try gate.enroll(utterances)
     }
-    
+
     /// Select enrollment templates from one take, budgeted per file.
     ///
-    /// Stricter than `enroll(fromFile:)`, which enrolls EVERY span, for two reasons:
+    /// USES THE LIVE SEGMENTER. `rescueSpans` is the same code that cuts live
+    /// audio — same energy threshold, same joining, same speech-content filter —
+    /// so a template and a live span are built to the same recipe and their
+    /// embeddings are comparable.
     ///
-    /// * **>= 3 s spans preferred.** `SpeakerGate.inputSamples` is 48_000 — the
-    ///   Core ML embedder has a FIXED 3 s input, centre-cropping longer audio and
-    ///   ZERO-PADDING shorter. A 1.5 s span is half padding.
+    /// This replaced Silero-plus-fixed-windows, which on this device always fell
+    /// through to 3.0 s blocks of continuous reading (~2.8 s of speech each) while
+    /// live dictation produced 1.7–2.4 s. Measured 2026-08-06, one speaker
+    /// throughout, distance tracked speech seconds monotonically:
     ///
-    /// * **Capped per file.** SpeakerGate evicts FIFO past `maxTemplates`, so
-    ///   enrolling every span of four takes would silently DELETE take 1 — losing
-    ///   exactly the acoustic diversity multi-condition calibration buys.
+    ///     2.4 s speech -> d 0.388        1.8 s speech -> d 0.659, 0.678
+    ///     1.9 s speech -> d 0.516        1.7 s speech -> d 0.717, 0.726
+    ///
+    /// The centroid sat in a region no live span could reach, and the shortfall in
+    /// speech content read as distance rather than as identity.
+    ///
+    /// Capped per file because SpeakerGate evicts FIFO past `maxTemplates`, so
+    /// enrolling every span of three takes would silently DELETE take 1 — losing
+    /// exactly the acoustic diversity multi-condition calibration buys.
     func enrollmentSelection(
         fromFile url: URL,
-        minSeconds: Double = 3.0,
+        minSeconds: Double = 3.0,          // retained for call-site compatibility
         maxPerFile: Int = 4
     ) throws -> (utterances: [[Float]], audioSeconds: Double,
                  totalSpans: Int, eligibleSpans: Int) {
@@ -92,47 +109,29 @@ final class SpeakerGateService: @unchecked Sendable {
         let seconds = Double(audio.count) / Double(SpeakerGate.sampleRate)
         guard !audio.isEmpty else { return ([], 0, 0, 0) }
 
-        // Permissive threshold, deliberately. Silero's 0.5 default is tuned for
-        // STREAMING, where a false positive costs decode time. Enrollment is the
-        // opposite problem: the file is known to be the target reading a script, so
-        // the cost of missing speech is a failed calibration. Measured on a healthy
-        // recording (rms 0.128): max prob 0.409 — under 0.5 everywhere, so the
-        // default found nothing at all.
-        let raw = vad.speechTimestamps(audio, threshold: 0.3)
-        var spans = Self.mergeSpans(raw, totalSamples: audio.count)
-        var usedFallback = false
-
-        // Last resort: fixed windows. A VAD that finds nothing must not block
-        // enrollment on a file we know contains the speaker. Windows match
-        // SpeakerGate.inputSamples so each one fills the embedder's fixed 3 s
-        // input exactly — no centre-crop, no zero-padding.
-        if spans.isEmpty {
-            let win = SpeakerGate.inputSamples
-            let trim = SpeakerGate.sampleRate / 4      // drop 0.25 s each end (button taps)
-            var start = trim
-            while start + win <= audio.count - trim {
-                spans.append(SpeechSegment(start: start, end: start + win))
-                start += win
-            }
-            usedFallback = true
+        let (spans, fromFallback) = rescueSpans(in: audio, allowBlindWindows: true)
+        guard !spans.isEmpty else {
+            print(String(format: "[Enroll] %@: no usable spans in %.1fs",
+                         url.lastPathComponent, seconds))
+            return ([], seconds, 0, 0)
+        }
+        if fromFallback {
+            print("[Enroll] \(url.lastPathComponent): energy segmentation found nothing — "
+                  + "blind windows. Templates built from these are as untrustworthy as "
+                  + "the verdicts journal.md §12 warns about. Re-record this take.")
         }
 
-        if usedFallback || spans.isEmpty {
-            print(String(format: "[Enroll] VAD found nothing at 0.3 — %.1fs, fallback windows: %d",
-                         seconds, spans.count))
-        }
-
-        let minSamples = Int(minSeconds * Double(SpeakerGate.sampleRate))
-        let eligible = spans.filter { $0.end - $0.start >= minSamples }
-
-        // Fall back rather than enrolling nothing — a short span beats no centroid.
-        let usable = eligible.isEmpty ? spans : eligible
-        let picked = usable
+        // Longest first is a proxy for most speech, and `rescueSpans` has already
+        // guaranteed every survivor clears `minSpeechSeconds`.
+        let picked = spans
             .sorted { ($0.end - $0.start) > ($1.end - $1.start) }
             .prefix(maxPerFile)
             .map { Array(audio[$0.start..<$0.end]) }
 
-        return (picked, seconds, spans.count, eligible.count)
+        let pickedSeconds = picked.reduce(0.0) {
+            $0 + Double($1.count) / Double(SpeakerGate.sampleRate)
+        }
+        return (picked, pickedSeconds, spans.count, spans.count)
     }
 
     /// Convenience wrapper — kept so any caller that only wants the audio is
@@ -174,14 +173,9 @@ final class SpeakerGateService: @unchecked Sendable {
 
     /// Was the calibrated clinician speaking at this point in the evaluated audio?
     ///
-    /// Used to gate Whisper segments by timestamp: a confirmed segment whose time
-    /// range falls in a rejected span is somebody else's speech and must not be
-    /// parsed into the chart.
-    ///
-    /// Defaults to `true` when no span covers the time — absence of a gate decision
-    /// should not silently discard the clinician's dictation. Failing open means an
-    /// occasional imposter word gets through; failing closed would drop real
-    /// measurements, which is worse given the clinician is watching the chart.
+    /// Defaults to `true` when no span covers the time. The LIVE path no longer
+    /// uses this — see `SpeakerVerdict`, where absence of a verdict means `pending`
+    /// and the chart waits rather than failing open.
     func isTargetSpeaking(atSeconds t: Double) -> Bool {
         lock.lock(); let spans = timeline; lock.unlock()
         guard let hit = spans.first(where: { t >= $0.startSeconds && t < $0.endSeconds }) else {
@@ -195,9 +189,9 @@ final class SpeakerGateService: @unchecked Sendable {
         return timeline
     }
     
-    /// Replace the timeline from the rescue path (TSERescuePath.swift). Separate
-    /// from `evaluate` so post-extraction verdicts can be installed without
-    /// re-running VAD and ECAPA over the same audio.
+    /// Replace the timeline from the rescue path (TSERescue.swift). Separate from
+    /// `evaluate` so post-extraction verdicts can be installed without re-running
+    /// segmentation and ECAPA over the same audio.
     func replaceTimeline(_ spans: [GatedSpan]) {
         lock.lock(); timeline = spans; lock.unlock()
     }
@@ -218,9 +212,12 @@ final class SpeakerGateService: @unchecked Sendable {
 
     /// Direct port of `merge_spans` in TSE/src/tse.py.
     ///
-    /// Bounds are for the GATE, not for ASR: min 1.0 s because shorter embeddings
-    /// are duration-noise dominated, max 6.0 s to bound decision latency. Batch
-    /// transcription packs speech into ≤30 s chunks instead — do not share these.
+    /// Bounds are for the GATE, not for ASR. Batch transcription packs speech into
+    /// <=30 s chunks instead — do not share these.
+    ///
+    /// `minDurationSeconds` defaults to the embedder's floor but `rescueSpans`
+    /// passes 0: nothing is dropped for LENGTH there, because length can be
+    /// manufactured out of silence. Only speech content qualifies a span.
     static func mergeSpans(
         _ spans: [SpeechSegment],
         totalSamples: Int,
@@ -249,11 +246,11 @@ final class SpeakerGateService: @unchecked Sendable {
         }
         merged.append(cur)
 
-        // A single VAD span can already exceed maxLen — continuous background
-        // speech fills the silences and the detector returns one enormous span.
-        // The merge loop above only prevents JOINING past the cap, it never
-        // shortens an over-long input, so without this the gate would make one
-        // decision over tens of seconds and segment-level gating would be defeated.
+        // A single span can already exceed maxLen — continuous background speech
+        // fills the silences and the detector returns one enormous span. The merge
+        // loop above only prevents JOINING past the cap, it never shortens an
+        // over-long input, so without this the gate would make one decision over
+        // tens of seconds and segment-level gating would be defeated.
         var split: [SpeechSegment] = []
         for seg in merged {
             let length = seg.end - seg.start
