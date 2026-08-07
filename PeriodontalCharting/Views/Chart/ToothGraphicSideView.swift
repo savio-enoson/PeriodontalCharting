@@ -110,6 +110,8 @@ struct ToothGraphicSideView: View, Equatable {
 
         return ZStack {
             if !tooth.missing {
+//                gumBoneBackground()
+
                 if let img = uiImage {
                     let defaultCEJRatio: CGFloat = isMirrored ? 0.35 : 0.65
                     let defaultCEJ = originalW > 0 ? (img.size.height * img.scale * defaultCEJRatio) : 0

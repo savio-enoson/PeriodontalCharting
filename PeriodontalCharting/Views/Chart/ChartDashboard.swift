@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 import Combine
 
 
@@ -43,8 +44,13 @@ struct ChartContentView: View, Equatable {
 }
 
 struct ChartDashboard: View {
+    /// The persisted chart being edited. `nil` when no record is selected.
+    var chart: PatientChart?
+    @Environment(\.modelContext) private var modelContext
+
     @State private var mouth: [Int: ToothObject] = ToothObject.fullMouthEmpty()
     @State private var isSingleColumn = false
+    @State private var saveConfirmation = false
     @StateObject private var selectionModel = ChartSelectionModel()
     @State private var zoomScale: CGFloat = 1.0
     @State private var targetRect: CGRect? = nil
@@ -53,8 +59,8 @@ struct ChartDashboard: View {
     @State private var showDebugMenu = false
     @State private var showAIMode = false
     @State private var showSettings = false
-    @State private var showTranscription: Bool = false
     @State private var showZoomSlider = false
+    @State private var show3DView = false
     @State private var highlightTask: Task<Void, Never>?
     @Binding var columnVisibility: NavigationSplitViewVisibility
 
@@ -71,6 +77,10 @@ struct ChartDashboard: View {
                 .onPreferenceChange(ToothFramePreferenceKey.self) { frames in
                     self.toothFrames = frames
                 }
+                // ZoomableScrollView hosts this content in a nested UIHostingController,
+                // which does NOT inherit environmentObjects from the outer SwiftUI
+                // hierarchy. Inject here so ToothColumnView can read selectionModel.
+                .environmentObject(selectionModel)
         }
         .onChange(of: showAIMode) { _, newValue in
             if newValue {
@@ -102,6 +112,12 @@ struct ChartDashboard: View {
                         systemImage: isSingleColumn ? "rectangle.split.2x2" : "rectangle.split.1x2"
                     )
                 }
+
+                Button {
+                    show3DView = true
+                } label: {
+                    Label("", systemImage: "view.3d")
+                }
                 
                 Button {
                     withAnimation { showZoomSlider.toggle() }
@@ -114,19 +130,20 @@ struct ChartDashboard: View {
                 } label: {
                     Label("Debug", systemImage: "ladybug")
                 }
-                
                 Button {
-                    showTranscription = true
+                    saveChart()
                 } label: {
-                    Label("Transcribe", systemImage: "waveform")
+                    Label(saveConfirmation ? "Saved" : "Save",
+                          systemImage: saveConfirmation ? "checkmark.circle.fill" : "square.and.arrow.down")
                 }
+                .disabled(chart == nil)
 
                 Button {
                     // Export logic placeholder
                 } label: {
                     Label("Export", systemImage: "square.and.arrow.up")
                 }
-                
+
                 Button {
                     showSettings = true
                 } label: {
@@ -218,15 +235,37 @@ struct ChartDashboard: View {
         .sheet(isPresented: $showSettings) {
             OnboardingView(hasCompletedOnboarding: .constant(true), isSettingsMode: true)
         }
-        .sheet(isPresented: $showTranscription) {
-            LiveTranscriptionView()
+        .fullScreenCover(isPresented: $show3DView) {
+            PeriodontalAnatomyPresenter(mouth: mouth)
         }
         .onChange(of: aiViewModel.commandHistory) { _, _ in recomputeChart() }
         .onChange(of: aiViewModel.committedCommands) { _, _ in recomputeChart() }
         .onChange(of: aiViewModel.currentCursor) { _, _ in updateHighlight() }
         .onChange(of: aiViewModel.activeSelection) { _, _ in updateHighlight() }
+        .onAppear { loadChart() }
     }
-    
+
+    /// Load the selected chart's stored mouth into local editing state. The
+    /// parent re-inits this view via `.id(...)` whenever the selection changes,
+    /// so `.onAppear` fires for each distinct chart.
+    private func loadChart() {
+        if let chart {
+            mouth = chart.mouth
+        }
+    }
+
+    private func saveChart() {
+        guard let chart else { return }
+        chart.mouth = mouth
+        try? modelContext.save()
+
+        withAnimation { saveConfirmation = true }
+        Task {
+            try? await Task.sleep(for: .seconds(1.5))
+            withAnimation { saveConfirmation = false }
+        }
+    }
+
     private func updateTooth(_ tooth: ToothObject) {
         mouth[tooth.toothNumber] = tooth
     }

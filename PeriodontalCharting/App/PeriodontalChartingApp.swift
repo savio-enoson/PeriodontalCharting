@@ -6,12 +6,16 @@
 //
 
 import SwiftUI
+import SwiftData
 
 @main
 struct PeriodontalChartingApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                // Persist patient charts with SwiftData. The container is created
+                // once and injected into the environment for @Query / modelContext.
+                .modelContainer(for: PatientChart.self)
                 // Warm the shared WhisperKit model at launch so live/AI-Mode
                 // transcription is ready the moment the user reaches for it,
                 // instead of paying the ~1 GB load on first use.
