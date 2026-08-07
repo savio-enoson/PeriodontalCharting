@@ -1,8 +1,7 @@
 import SwiftUI
 import SwiftData
 import Combine
-
-
+import UIKit
 
 struct ChartContentView: View, Equatable {
     var isSingleColumn: Bool
@@ -61,6 +60,7 @@ struct ChartDashboard: View {
     @State private var showSettings = false
     @State private var showZoomSlider = false
     @State private var show3DView = false
+    @State private var exportURL: URL?
     @State private var highlightTask: Task<Void, Never>?
     @Binding var columnVisibility: NavigationSplitViewVisibility
 
@@ -139,7 +139,7 @@ struct ChartDashboard: View {
                 .disabled(chart == nil)
 
                 Button {
-                    // Export logic placeholder
+                    exportURL = exportPDF()
                 } label: {
                     Label("Export", systemImage: "square.and.arrow.up")
                 }
@@ -235,6 +235,9 @@ struct ChartDashboard: View {
         .sheet(isPresented: $showSettings) {
             OnboardingView(hasCompletedOnboarding: .constant(true), isSettingsMode: true)
         }
+        .sheet(item: $exportURL) { url in
+            ShareSheet(items: [url])   // UIActivityViewController wrapper
+        }
         .fullScreenCover(isPresented: $show3DView) {
             PeriodontalAnatomyPresenter(mouth: mouth)
         }
@@ -314,4 +317,49 @@ struct ChartDashboard: View {
         }
     }
     
+    private func exportPDF() -> URL? {
+        // Always render the 2-column layout at full content size,
+        // ignoring the on-screen zoom/scroll state.
+        let content = ChartContentView(
+            isSingleColumn: false,
+            mouth: mouth,
+            updateTooth: { _ in }          // no-op; static render
+        )
+        .environmentObject(selectionModel) // ToothColumnView needs this
+        .background(Color(.systemBackground))
+
+        let renderer = ImageRenderer(content: content)
+        renderer.proposedSize = .unspecified   // take natural size
+        renderer.scale = UIScreen.main.scale
+
+        var pdfURL: URL?
+        renderer.render { size, renderInContext in
+            let url = FileManager.default.temporaryDirectory
+                .appendingPathComponent("PeriodontalChart.pdf")
+            var box = CGRect(origin: .zero, size: size)
+            guard let ctx = CGContext(url as CFURL, mediaBox: &box, nil) else { return }
+            ctx.beginPDFPage(nil)
+            renderInContext(ctx)   // vector, not a bitmap
+            ctx.endPDFPage()
+            ctx.closePDF()
+            pdfURL = url
+        }
+        return pdfURL
+    }
+}
+
+/// Lets a `URL` drive `.sheet(item:)`, which requires an `Identifiable` item.
+extension URL: @retroactive Identifiable {
+    public var id: String { absoluteString }
+}
+
+/// Thin wrapper around `UIActivityViewController` so a file URL can be shared/exported.
+struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }
