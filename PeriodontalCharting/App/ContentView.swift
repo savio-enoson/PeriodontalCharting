@@ -4,21 +4,44 @@ struct ContentView: View {
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding: Bool = false
     @State private var records: [String] = ["2026-07-20 - Initial Exam"]
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
-    
+
+    /// @Observable singletons — read in `body` so the splash transitions itself.
+    private let assets = ChartAssetStore.shared
+    private let engine = TranscriptionEngine.shared
+
+    /// Chart images gate ONBOARDING as well as the chart: they are rendered in
+    /// the same `body` as the onboarding name field. A second or two behind a
+    /// determinate bar buys a responsive setup screen.
+    ///
+    /// The model gates only the CHART — and now only STARTS once setup is done.
+    private var needsSplash: Bool {
+        !assets.isReady || (hasCompletedOnboarding && !engine.isReady)
+    }
+
     var body: some View {
         content
-            // Blocking splash while the shared WhisperKit model loads/downloads.
-            // Only after onboarding, so first-time users complete setup while the
-            // model warms in the background. Auto-dismisses when the model is ready.
-            // Reading `isReady` here (an @Observable) drives the transition.
             .overlay {
-                if hasCompletedOnboarding && !TranscriptionEngine.shared.isReady {
+                if needsSplash {
                     ModelLoadingSplash()
                         .transition(.opacity)
                 }
             }
-            .animation(.easeInOut(duration: 0.35),
-                       value: TranscriptionEngine.shared.isReady)
+            .animation(.easeInOut(duration: 0.35), value: needsSplash)
+            // Decode the chart diagrams once, downscaled, and hold them.
+            .task { await assets.warm() }
+            // WhisperKit, deferred until setup is finished.
+            //
+            // It used to start at launch, which meant a ~180 s Core ML compile
+            // ran underneath onboarding — the first keyboard presentation, the
+            // audio-session activation and the image decode all queued behind it.
+            // Nothing in onboarding needs the model; the gate uses its own small
+            // packages. `task(id:)` fires again when the flag flips, so the load
+            // begins the moment "Complete Setup" is tapped and the splash covers
+            // it exactly as it does on every later launch.
+            .task(id: hasCompletedOnboarding) {
+                guard hasCompletedOnboarding else { return }
+                await engine.load()
+            }
     }
 
     @ViewBuilder
