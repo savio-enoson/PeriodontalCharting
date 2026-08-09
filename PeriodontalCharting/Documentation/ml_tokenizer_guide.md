@@ -197,7 +197,7 @@ If `useMLTokenizer` is `false`, or `mlTokenizer` is `nil` (model file not found 
 
 `init()` loads the model in two steps:
 
-1. **`vocab.txt`** — `Bundle.main.url(forResource: "vocab", withExtension: "txt")`. In `#if DEBUG`, if the bundle resource is absent, falls back to the hardcoded absolute path `…/AI/vocab.txt` in the project directory.
+1. **`vocab.txt`** — `Bundle.main.url(forResource: "vocab", withExtension: "txt")`. In `#if DEBUG`, if the bundle resource is absent, falls back to the hardcoded absolute path `…/AI/NLP_Tokenizer/vocab.txt` in the project directory.
 2. **`VoiceTokenizerModel.mlmodelc`** — `Bundle.main.url(forResource: "VoiceTokenizerModel", withExtension: "mlmodelc")`. In `#if DEBUG`, falls back to a hardcoded absolute path at the project root.
 
 If either resource fails to load, `self.model = nil` and all subsequent `predict()` calls return `nil` (the post-processing pass in `TokenizerManager` handles nil returns gracefully).

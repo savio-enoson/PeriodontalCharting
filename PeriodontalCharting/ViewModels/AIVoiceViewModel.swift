@@ -3,22 +3,39 @@ import Combine
 
 @MainActor
 class AIVoiceViewModel: ObservableObject {
-    @Published var liveTranscription: String = ""
+    @Published var committedTranscription: String = ""
+    @Published var uncommittedTranscription: String = ""
     @Published var isListening: Bool = false
     /// True while real Whisper dictation is feeding the parser (vs. the debug
     /// simulation, which sets `isListening`). Kept separate so both controls can
     /// show independent state; the two are mutually exclusive at runtime.
     @Published var isDictating: Bool = false
+    
+    var currentStatusMessage: String {
+        if UserDefaults.standard.bool(forKey: "useOfflineWav2Vec") {
+            return wav2VecTranscriber.statusMessage
+        } else {
+            return transcriber.statusMessage
+        }
+    }
 
     /// Real on-device transcription. AI Mode drives it and consumes its confirmed
     /// chunks; the standalone LiveTranscriptionView uses its own instance.
     private let transcriber = TranscriptionViewModel()
+    private let wav2VecTranscriber = Wav2VecViewModel()
     
     /// Speaker-filter state for the AI Mode header. The transcriber is private, so
     /// this is the only way the view can see it. Reading it inside a SwiftUI body
     /// tracks the @Observable transcriber directly — no @Published mirror needed,
     /// and it cannot go stale.
-    var gateStatus: TranscriptionViewModel.GateStatus { transcriber.gateStatus }
+    var gateStatus: TranscriptionViewModel.GateStatus { 
+        if UserDefaults.standard.bool(forKey: "useOfflineWav2Vec") {
+            let s = wav2VecTranscriber.gateStatus
+            return TranscriptionViewModel.GateStatus(active: s.active, extractorReady: s.extractorReady, spans: s.spans, rejected: s.rejected, routed: s.routed, rescued: s.rescued, withheldSegments: s.withheldSegments, lastDistance: s.lastDistance)
+        } else {
+            return transcriber.gateStatus 
+        }
+    }
     
     // Stubs for future parsing architecture
     @Published var currentCommand: AnnotationCommand? = nil
@@ -73,7 +90,8 @@ resesi 18, 17, 16, -1 -1
     func parseInstant(text: String) {
         stopSimulation()
         committedCommands = nil   // debug/instant: no ghosting, everything solid
-        liveTranscription = text
+        committedTranscription = text
+        uncommittedTranscription = ""
         let parser = VoiceCommandParser(configuration: self.getConfiguration())
         let parsedFinal = parser.parse(text: text, isFinal: true)
         
@@ -107,40 +125,91 @@ resesi 18, 17, 16, -1 -1
     func startLiveDictation() {
         stopSimulation()          // the two feeds are mutually exclusive
         isDictating = true
-        liveTranscription = ""
+        committedTranscription = ""
+        uncommittedTranscription = ""
         commandHistory = []
         committedCommands = []
         lastPreviewText = ""
         currentCommand = nil
         initializeCursorIfNeeded()
 
-        transcriber.onLiveTranscript = { [weak self] text in
-            self?.liveTranscription = text
-            self?.ingestPreview(text)         // full text → chart values + cursor
-        }
-        transcriber.onConfirmedTranscript = { [weak self] confirmed in
-            self?.ingestCommitted(confirmed)  // confirmed text → committed set (ghosting)
+        let useWav2Vec = UserDefaults.standard.bool(forKey: "useOfflineWav2Vec")
+        
+        if useWav2Vec {
+            wav2VecTranscriber.onLiveTranscript = { [weak self] fullText in
+                guard let self = self else { return }
+                let committed = self.committedTranscription
+                if fullText.hasPrefix(committed) {
+                    let uncommitted = String(fullText.dropFirst(committed.count)).trimmingCharacters(in: .whitespaces)
+                    self.uncommittedTranscription = uncommitted.isEmpty ? "" : " " + uncommitted
+                } else {
+                    self.uncommittedTranscription = fullText
+                }
+            }
+            wav2VecTranscriber.onConfirmedTranscript = { [weak self] confirmed in
+                guard let self = self else { return }
+                self.committedTranscription = confirmed
+                self.uncommittedTranscription = ""
+                self.ingestPreview(confirmed)
+                self.ingestCommitted(confirmed)
+            }
+        } else {
+            transcriber.onLiveTranscript = { [weak self] fullText in
+                guard let self = self else { return }
+                let committed = self.committedTranscription
+                if fullText.hasPrefix(committed) {
+                    let uncommitted = String(fullText.dropFirst(committed.count)).trimmingCharacters(in: .whitespaces)
+                    self.uncommittedTranscription = uncommitted.isEmpty ? "" : " " + uncommitted
+                } else {
+                    self.uncommittedTranscription = fullText
+                }
+            }
+            transcriber.onConfirmedTranscript = { [weak self] confirmed in
+                guard let self = self else { return }
+                self.committedTranscription = confirmed
+                self.uncommittedTranscription = ""
+                self.ingestPreview(confirmed)
+                self.ingestCommitted(confirmed)
+            }
         }
 
         Task { [weak self] in
             guard let self else { return }
-            await self.transcriber.loadModel()
+            if useWav2Vec {
+                await self.wav2VecTranscriber.loadModel()
+            } else {
+                await self.transcriber.loadModel()
+            }
             TokenizerManager.shared.loadModel()
             guard self.isDictating else { return }  // stopped during model load
-            self.transcriber.startLive()
+            if useWav2Vec {
+                self.wav2VecTranscriber.startLive()
+            } else {
+                self.transcriber.startLive()
+            }
         }
     }
 
     func stopLiveDictation() {
         guard isDictating else { return }
         isDictating = false
-        transcriber.stopLive()
-        transcriber.onLiveTranscript = nil
-        transcriber.onConfirmedTranscript = nil
+        
+        if UserDefaults.standard.bool(forKey: "useOfflineWav2Vec") {
+            wav2VecTranscriber.stopLive()
+            wav2VecTranscriber.onLiveTranscript = nil
+            wav2VecTranscriber.onConfirmedTranscript = nil
+        } else {
+            transcriber.stopLive()
+            transcriber.onLiveTranscript = nil
+            transcriber.onConfirmedTranscript = nil
+        }
         // Final flush over everything captured, then mark it all committed so no
         // cells remain ghosted once dictation ends.
         lastPreviewText = ""
-        ingestPreview(liveTranscription, isFinal: true)
+        let finalOutput = committedTranscription + uncommittedTranscription
+        committedTranscription = finalOutput
+        uncommittedTranscription = ""
+        ingestPreview(finalOutput, isFinal: true)
         committedCommands = commandHistory
     }
 
@@ -186,7 +255,8 @@ resesi 18, 17, 16, -1 -1
                 .replacingOccurrences(of: ",", with: " , ")
             self.words = spaced.components(separatedBy: " ").filter { !$0.isEmpty }
             self.currentWordIndex = 0
-            self.liveTranscription = ""
+            self.committedTranscription = ""
+            self.uncommittedTranscription = ""
             self.commandHistory = []
             self.currentCommand = nil
         }
@@ -200,12 +270,12 @@ resesi 18, 17, 16, -1 -1
                 if Task.isCancelled { break }
                 
                 let word = words[currentWordIndex]
-                if !liveTranscription.isEmpty && word != "\n" && word != "." && word != "," {
-                    liveTranscription += " "
+                if !committedTranscription.isEmpty && word != "\n" && word != "." && word != "," {
+                    committedTranscription += " "
                 }
-                liveTranscription += word
+                committedTranscription += word
                 
-                let currentText = self.liveTranscription
+                let currentText = self.committedTranscription
                 
                 // Offload parsing to a background thread to prevent UI lag
                 let parsedResult = await Task.detached {
@@ -232,7 +302,7 @@ resesi 18, 17, 16, -1 -1
             }
             
             // Final flush when completely done
-            let finalText = self.liveTranscription
+            let finalText = self.committedTranscription
             let finalResult = await Task.detached {
                 return self.parseOffline(text: finalText, config: config, isFinal: true)
             }.value
