@@ -1,3 +1,6 @@
 # Auto detect text files and perform LF normalization
 * text=auto
 *.mlmodel filter=lfs diff=lfs merge=lfs -text
+*.mlpackage/** filter=lfs diff=lfs merge=lfs -text
+**/*.bin filter=lfs diff=lfs merge=lfs -text
+**/*.mlmodel filter=lfs diff=lfs merge=lfs -text

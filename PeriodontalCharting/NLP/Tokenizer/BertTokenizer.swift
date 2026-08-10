@@ -12,7 +12,7 @@ final class BertTokenizer: @unchecked Sendable {
         var url = Bundle.main.url(forResource: "vocab", withExtension: "txt")
         #if DEBUG
         if url == nil {
-            url = URL(fileURLWithPath: "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/PeriodontalCharting/AI/vocab.txt")
+            url = URL(fileURLWithPath: "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/PeriodontalCharting/AI/NLP_Tokenizer/vocab.txt")
         }
         #endif
         if let url = url,

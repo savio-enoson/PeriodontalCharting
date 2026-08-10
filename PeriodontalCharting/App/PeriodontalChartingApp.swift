@@ -16,22 +16,19 @@ struct PeriodontalChartingApp: App {
                 // Persist patient charts with SwiftData. The container is created
                 // once and injected into the environment for @Query / modelContext.
                 .modelContainer(for: PatientChart.self)
-                // Warm the shared WhisperKit model at launch so live/AI-Mode
-                // transcription is ready the moment the user reaches for it,
-                // instead of paying the ~1 GB load on first use.
-                .task { await TranscriptionEngine.shared.load() }
-                
-                // Speaker identity, in its own task so it does NOT queue behind
-                // the ~600 MB model. Both stages read voice_sample.wav and need
-                // only the small Core ML packages.
-                //
-                // ORDER MATTERS: templates are in memory only, so without
-                // restoreEnrollment() a cold start has no centroid — and with no
-                // centroid the rescue path can never route, because the routing
-                // decision IS a distance from that centroid. This call had no
-                // call site before; that is why the gate looked inert at launch.
+                // Warm the shared models at launch so live/AI-Mode
+                // transcription is ready the moment the user reaches for it.
+                // We serialize the loading here to prevent CoreML from spiking
+                // memory by compiling multiple models concurrently.
                 .task {
-                    // Restore enrollment centroid here if needed
+                    // 1. Load the small speaker isolation / VAD models first.
+                    // ORDER MATTERS: templates are in memory only, so without
+                    // restoreEnrollment() a cold start has no centroid.
+                    await TranscriptionEngine.shared.restoreEnrollment()
+                    
+                    // 2. Load the ~600 MB WhisperKit model. This compile is heavy,
+                    // so it waits until the smaller models are done.
+                    await TranscriptionEngine.shared.load()
                 }
         }
     }

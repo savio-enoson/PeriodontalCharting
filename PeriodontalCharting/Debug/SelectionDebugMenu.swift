@@ -9,6 +9,7 @@ struct SelectionDebugMenu: View {
     @State private var showAlert = false
     @State private var alertMessage = ""
     @AppStorage("useMLTokenizer") var useMLTokenizer: Bool = true
+    @AppStorage("useOfflineWav2Vec") var useOfflineWav2Vec: Bool = false
     
     var body: some View {
         NavigationStack {
@@ -32,6 +33,10 @@ struct SelectionDebugMenu: View {
                 
                 Section("NLP Phase 1 Tokenizer") {
                     Toggle("Use ML Tokenizer (IndoBERT)", isOn: $useMLTokenizer)
+                }
+                
+                Section("Speech-to-Text Engine") {
+                    Toggle("Use Wav2Vec2 STT Engine", isOn: $useOfflineWav2Vec)
                 }
                 
                 Section("AI Simulation") {

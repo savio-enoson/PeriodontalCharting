@@ -91,7 +91,7 @@ final class TranscriptionEngine {
             // per-token loop — that's where the inference win is.
             let compute = ModelComputeOptions(
                 melCompute: .cpuAndGPU,
-                audioEncoderCompute: .cpuAndGPU, // .cpuAndGPU for fast loads
+                audioEncoderCompute: .cpuOnly, // .cpuOnly to prevent massive GPU retiling memory spikes
                 textDecoderCompute: .cpuAndNeuralEngine
             )
 

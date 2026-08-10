@@ -72,19 +72,40 @@ struct AIListeningView: View {
                 
                 // Section 1: Live Transcription
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("LIVE TRANSCRIPTION")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.secondary)
+                    HStack {
+                        Text("LIVE TRANSCRIPTION")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text(viewModel.currentStatusMessage)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                     
                     ScrollViewReader { proxy in
                         ScrollView {
-                            Text(viewModel.liveTranscription.isEmpty ? "Waiting for dictation..." : viewModel.liveTranscription)
-                                .font(.system(.footnote, design: .monospaced))
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .foregroundStyle(viewModel.liveTranscription.isEmpty ? .tertiary : .primary)
-                                .id("transcriptText")
+                            if viewModel.committedTranscription.isEmpty && viewModel.uncommittedTranscription.isEmpty {
+                                Text("Waiting for dictation...")
+                                    .font(.system(.footnote, design: .monospaced))
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .foregroundStyle(.tertiary)
+                                    .id("transcriptText")
+                            } else {
+                                (Text(viewModel.committedTranscription)
+                                    .foregroundStyle(.primary) +
+                                 Text(viewModel.uncommittedTranscription)
+                                    .foregroundStyle(.gray))
+                                    .font(.system(.footnote, design: .monospaced))
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .id("transcriptText")
+                            }
                         }
-                        .onChange(of: viewModel.liveTranscription) { _, _ in
+                        .onChange(of: viewModel.committedTranscription) { _, _ in
+                            withAnimation(.easeOut(duration: 0.2)) {
+                                proxy.scrollTo("transcriptText", anchor: .bottom)
+                            }
+                        }
+                        .onChange(of: viewModel.uncommittedTranscription) { _, _ in
                             withAnimation(.easeOut(duration: 0.2)) {
                                 proxy.scrollTo("transcriptText", anchor: .bottom)
                             }

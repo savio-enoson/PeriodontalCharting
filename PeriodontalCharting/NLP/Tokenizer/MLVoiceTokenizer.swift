@@ -32,7 +32,7 @@ final class MLVoiceTokenizer: @unchecked Sendable {
         var vocabURL = Bundle.main.url(forResource: "vocab", withExtension: "txt")
         #if DEBUG
         if vocabURL == nil {
-            vocabURL = URL(fileURLWithPath: "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/PeriodontalCharting/AI/vocab.txt")
+            vocabURL = URL(fileURLWithPath: "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/PeriodontalCharting/AI/NLP_Tokenizer/vocab.txt")
         }
         #endif
         
