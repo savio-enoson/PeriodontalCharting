@@ -1,9 +1,11 @@
 import Foundation
 
 extension VoiceTokenizer {
-    static func tokenize(text: String, isFinal: Bool = false) -> [VoiceToken] {
+    static func tokenize(text: String, isFinal: Bool = false, currentMetric: AnnotationOperation? = nil) -> [VoiceToken] {
         var tokens: [VoiceToken] = []
         let cleaned = text.lowercased()
+            // Fix wav2vec STT spaced digits for tooth identifiers (e.g. "gigi 1 8" -> "gigi 18")
+            .replacingOccurrences(of: #"(?i)\b(gigi|sampai|sampe|ke)\s+(\d)[,\.\s]+(\d)\b"#, with: "$1 $2$3", options: .regularExpression)
             // A decimal point BETWEEN digits ("1.5", "2.5", chained "1.5.3") is never
             // one charting value — depths/recession are whole mm dictated one digit
             // per site, so "1.5" is the two values 1 and 5. Split it to a space FIRST,
@@ -14,11 +16,10 @@ extension VoiceTokenizer {
             // for the rules below.
             .replacingOccurrences(of: #"(?<=\d)\.(?=\d)"#, with: " ", options: .regularExpression)
             .replacingOccurrences(of: ".", with: " _sep_ ")
-            .replacingOccurrences(of: ",", with: " ")
+            .replacingOccurrences(of: ",", with: " , ")
             .replacingOccurrences(of: "\n", with: " _sep_ ")
             .replacingOccurrences(of: "\r", with: " ")
-            .replacingOccurrences(of: "{", with: " ")
-            .replacingOccurrences(of: "}", with: " ")
+            .replacingOccurrences(of: #"\{.*?\}"#, with: " ", options: .regularExpression)
             .replacingOccurrences(of: "mesiolingual", with: "mesio lingual")
             .replacingOccurrences(of: "distolingual", with: "disto lingual")
             .replacingOccurrences(of: "mesiobukal", with: "mesio bukal")
@@ -47,7 +48,7 @@ extension VoiceTokenizer {
             case "misial", "mesyal": return "mesial"
             case "diso", "distio", "dista": return "disto"
             case "disal": return "distal"
-            case "bocal", "vocal", "buka", "buckal", "buk": return "bukal"
+            case "bocal", "vocal", "buka", "buckal", "buk", "pukal": return "bukal"
             case "plat", "plug", "flak", "plek", "flek", "black", "flag": return "plak"
             case "pocket", "poke", "poked": return "poket"
             case "beope", "biopi", "tiopi", "bleeding": return "bop"
@@ -239,17 +240,26 @@ extension VoiceTokenizer {
                         tokens.append(.toothIdentifier(num))
                         expectedValues = 3; currentValues = 0
                         i += 2
-                        while i < words.count, let extra = parseIntOrWord(words[i]), extra > 10 && extra < 99 {
+                        while i < words.count {
+                            while i < words.count && (words[i] == "," || words[i] == "_sep_") { i += 1 }
+                            guard i < words.count, let extra = parseIntOrWord(words[i]), extra > 10 && extra < 99 else { break }
+                            tokens.append(.word(","))
                             tokens.append(.toothIdentifier(extra))
                             expectedValues = 3; currentValues = 0
                             i += 1
                         }
                         continue
                     }
-                    if i + 2 < words.count, let d1 = parseIntOrWord(words[i+1]), let d2 = parseIntOrWord(words[i+2]), d1 > 0 && d1 <= 8 && d2 > 0 && d2 <= 8 {
-                        tokens.append(.toothIdentifier(d1 * 10 + d2))
-                        expectedValues = 3; currentValues = 0
-                        i += 3; continue
+                    if let d1 = parseIntOrWord(words[i+1]), d1 > 0 && d1 <= 8 {
+                        var j = i + 2
+                        while j < words.count && (words[j] == "," || words[j] == "_sep_" || words[j] == "." || words[j] == "-") {
+                            j += 1
+                        }
+                        if j < words.count, let d2 = parseIntOrWord(words[j]), d2 > 0 && d2 <= 8 {
+                            tokens.append(.toothIdentifier(d1 * 10 + d2))
+                            expectedValues = 3; currentValues = 0
+                            i = j + 1; continue
+                        }
                     }
                 }
                 i += 1; continue
@@ -293,26 +303,62 @@ extension VoiceTokenizer {
                 if num >= 1 && num <= 8 {
                     if i + 1 < words.count, let nextNum = parseIntOrWord(words[i+1]), nextNum >= 1 && nextNum <= 8 {
                         let combined = num * 10 + nextNum
-                        var thirdIsSingleDigit = false
-                        var isStreamEnd = false
-                        if i + 2 < words.count {
-                            if let thirdNum = parseIntOrWord(words[i+2]), thirdNum >= 0 && thirdNum <= 9 {
-                                thirdIsSingleDigit = true
-                            }
-                        } else {
-                            isStreamEnd = true
-                        }
-                        
+                        var isDefinitelyTooth = false
                         let isStartOfBlock = currentValues == 0 || (expectedValues >= 3 && currentValues % expectedValues == 0)
                         
-                        if !thirdIsSingleDigit && isStartOfBlock {
-                            if isStreamEnd && !isFinal {
-                                // Defer merging: we might just be waiting for the user to dictate the 3rd value.
-                            } else {
-                                tokens.append(.toothIdentifier(combined))
-                                expectedValues = 3; currentValues = 0
-                                i += 2; continue
+                        if i > 0 {
+                            var prevIdx = i - 1
+                            while prevIdx >= 0 && (words[prevIdx] == "_sep_" || words[prevIdx] == "," || words[prevIdx] == "." || words[prevIdx] == "dan" || words[prevIdx] == "maupun") {
+                                prevIdx -= 1
                             }
+                            if prevIdx >= 0 {
+                                let prevWord = words[prevIdx]
+                                if isToothPrefix(prevWord) {
+                                    isDefinitelyTooth = true
+                                    print("DEBUG Tokenizer: \(combined) is preceded by tooth prefix \(prevWord)")
+                                }
+                            }
+                        }
+                        
+                        if !isDefinitelyTooth {
+                            if i + 2 < words.count {
+                                let nextWord = words[i+2]
+                                if isAspectOrAction(nextWord) {
+                                    isDefinitelyTooth = true
+                                    print("DEBUG Tokenizer: \(combined) is followed by aspect/action \(nextWord)")
+                                } else if isStartOfBlock && hasExactlyNValues(words: words, from: i + 2, expected: expectedValues) {
+                                    // If expectedValues is < 3 (e.g. after a site specific anatomy), a sequence of identical digits
+                                    // like "2 2 2" is almost certainly a sequence of values rather than tooth 22 + value 2.
+                                    if num == nextNum && expectedValues < 3 {
+                                        isDefinitelyTooth = false
+                                    } else {
+                                        isDefinitelyTooth = true
+                                        print("DEBUG Tokenizer: \(combined) is followed by exactly \(expectedValues) values")
+                                    }
+                                } else if isSequenceOfTeethEndingInAction(words: words, from: i) {
+                                    isDefinitelyTooth = true
+                                    print("DEBUG Tokenizer: \(combined) is part of a sequence of teeth ending in action")
+                                } else if currentValues == 0 && num != nextNum && (nextWord == "_sep_" || nextWord == "," || nextWord == "." || nextWord == "dan" || nextWord == "maupun" || nextWord == "serta") {
+                                    isDefinitelyTooth = true
+                                    print("DEBUG Tokenizer: \(combined) is followed by separator and currentValues == 0")
+                                }
+                            } else {
+                                if isFinal {
+                                    isDefinitelyTooth = true
+                                }
+                            }
+                        }
+                        
+                        if let metric = currentMetric, metric == .probingDepth {
+                            isDefinitelyTooth = false
+                        }
+                        
+                        if isDefinitelyTooth {
+                            tokens.append(.toothIdentifier(combined))
+                            expectedValues = 3; currentValues = 0
+                            i += 2; continue
+                        } else {
+                            print("DEBUG Tokenizer: \(combined) was NOT deemed a tooth. nextWord was \(i+2 < words.count ? words[i+2] : "nil")")
                         }
                     }
                 }

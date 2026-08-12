@@ -10,7 +10,7 @@ A comprehensive, iPad-optimised SwiftUI application for dental professionals to 
 |---|---|
 | **[project_guide.md](project_guide.md)** *(this file)* | Project brief, design principles, getting started, color semantics, roadmap |
 | **[frontend_guide.md](frontend_guide.md)** | Project structure, architecture, Swift file-by-file reference |
-| **[system_guide.md](system_guide.md)** | NLP pipeline, tokenization, command inference, annotation logic |
+| **[system_guide.md](system_guide.md)** | NLP pipeline, tokenization, `StatefulParser` design, command inference, annotation logic |
 | **[ml_tokenizer_guide.md](ml_tokenizer_guide.md)** | ML tokenizer (MLVoiceTokenizer + TokenizerManager): label schema, state conditioning, inference loop, post-processing |
 
 ---
@@ -33,7 +33,7 @@ This project modernises the workflow across three layers:
 
 1. **Chart rendering (Complete):** A WHO-standard, visually dense clinical chart that renders a full 32-tooth mouth across four quadrants. The chart scales seamlessly on iPad, supporting pinch-to-zoom and a 1-column vs 2-column layout toggle.
 
-2. **Voice annotation pipeline (Complete):** A real-time voice-transcription pipeline that converts clinical dictation in **Indonesian** (e.g., *"gigi 16 tiga empat lima tiga empat tiga"*) into structured `AnnotationCommand` mutations, enabling completely hands-free charting. Whisper large-v3-turbo provides on-device speech-to-text; an ML word classifier (`MLVoiceTokenizer`) and a deterministic rule-based parser (`VoiceCommandParser`) convert the transcript into chart mutations. The NLP engine handles complex clinical ranges, missing teeth, dynamic highlighting, and sequence traversals based on custom clinician configurations.
+2. **Voice annotation pipeline (Complete):** A real-time voice-transcription pipeline that converts clinical dictation in **Indonesian** (e.g., *"gigi 16 tiga empat lima tiga empat tiga"*) into structured `AnnotationCommand` mutations, enabling completely hands-free charting. Whisper large-v3-turbo provides on-device speech-to-text; an ML word classifier (`MLVoiceTokenizer`) and a stateful session parser (`StatefulParser`) convert confirmed transcription chunks into chart mutations. The NLP engine handles complex clinical ranges, missing teeth, dynamic highlighting, and sequence traversals based on custom clinician configurations.
 
 3. **Speaker isolation (handled by a separate peer module):** A speaker verification and source separation layer that prevents assistant voices or ambient speech from reaching the chart. See `Audio/` for the relevant components.
 
@@ -51,7 +51,7 @@ This project modernises the workflow across three layers:
 
 - **Deterministic replay:** The chart is rebuilt from scratch by replaying the full command history on every change. There is no mutable chart state — only an append-only log of `AnnotationCommand` values. This guarantees that re-parsing the same transcript always produces the same chart, regardless of mid-stream partial parses during live streaming.
 
-- **Stateless per call:** The `VoiceCommandParser` is re-instantiated fresh on every `parse(text:isFinal:)` call from `AIVoiceViewModel`. The accumulated text — not the parser instance — is the session state. This prevents any stale internal state from carrying between parse calls.
+- **Incremental session parser:** `StatefulParser` persists across Whisper VAD chunk boundaries for the duration of a dictation session. Cursor position, active selection, and pending numbers carry forward between chunks. `isFinal: true` marks the end of the **entire session**, triggering a forced flush of all buffered state. For regression tests and simulation, a fresh `StatefulParser` is constructed and fed the complete transcript at once — the "incremental" aspect is transparent to batch callers.
 
 - **Ghosted preview:** During live dictation, the chart renders a two-tier display: *preview commands* (derived from the full running transcript including unconfirmed Whisper hypotheses) shown in full color, and *committed commands* (derived from Whisper-confirmed chunks only) marked as finalised. This keeps the chart maximally responsive while clearly communicating certainty.
 
@@ -121,7 +121,7 @@ All colors are system-adaptive — no manual Dark Mode handling is required. The
 - [x] **Native SwiftUI** — all views use semantic system colors and adaptive system fonts. Fully supports iOS 17+, Swift 6 strict concurrency (zero warnings), Dark Mode, and Dynamic Type out of the box.
 - [x] **Navigation style** — `NavigationSplitView` with navy chrome, custom floating toolbars, adaptive sidebar toggle.
 - [x] **Onboarding & Configuration** — `OnboardingView` with audio calibration, live anatomical visualiser, and drag-and-drop traversal config.
-- [x] **State Machine** — Indonesian NLP engine (`VoiceTokenizer` / `MLVoiceTokenizer` + `VoiceCommandParser`) parses `liveTranscription` into `AnnotationCommand` mutations with range support, verbal numbers, and sub-site targeting.
+- [x] **State Machine** — Indonesian NLP engine (`MLVoiceTokenizer` / `VoiceTokenizer` + `StatefulParser`) parses confirmed Whisper chunks into `AnnotationCommand` mutations with range support, verbal numbers, and sub-site targeting. `StatefulParser` persists across chunk boundaries within a session.
 - [x] **Dynamic UI Camera & Highlighting** — dual-state highlight mask (cursor vs active selection) with `ScrollViewProxy` auto-pan and padded frame limits for free panning in AI Mode.
 - [x] **Selection Debug Menu** — developer sheet with WPM slider, transcript picker, instant fill, regression testing buttons, and pre-built highlight scenarios.
 - [x] **Regression Testing** — `ChartProcessor` + `ChartTestingUtilities` + CLI `test_parser.sh` for headless parser validation against JSON ground truth files. In-app "Save as Ground Truth" / "Test vs Ground Truth" buttons in the debug menu.

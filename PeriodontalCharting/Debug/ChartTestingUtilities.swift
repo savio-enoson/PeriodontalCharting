@@ -72,7 +72,7 @@ struct ChartTestingUtilities {
                 differences.append("Tooth \(toothNum) GM mismatch. Expected: \(expectedTooth.gingivalMargin), Actual: \(actualTooth.gingivalMargin)")
             }
             if expectedTooth.bleeding != actualTooth.bleeding {
-                differences.append("Tooth \(toothNum) Bleeding mismatch.")
+                differences.append("Tooth \(toothNum) Bleeding mismatch. Expected: \(expectedTooth.bleeding), Actual: \(actualTooth.bleeding)")
             }
             if expectedTooth.plaque != actualTooth.plaque {
                 differences.append("Tooth \(toothNum) Plaque mismatch.")
@@ -93,8 +93,10 @@ struct ChartTestingUtilities {
     @MainActor
     static func parseTranscript(text: String, config: ChartingConfiguration) -> [Int: ToothObject] {
         var mouth = ToothObject.fullMouthEmpty()
-        let parser = VoiceCommandParser(configuration: config)
-        let commands = parser.parse(text: text, isFinal: true)
+        var parser = StatefulParser(configuration: config)
+        let tokens = TokenizerManager.shared.tokenize(text: text, isFinal: true, currentMetric: parser.cursor.currentMetric)
+        parser.consume(tokens: tokens, isFinal: true)
+        let commands = parser.commands
         
         for command in commands {
             ChartProcessor.apply(command: command, to: &mouth)

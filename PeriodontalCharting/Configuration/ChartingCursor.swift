@@ -61,9 +61,11 @@ struct ChartingCursor: Equatable {
     }
     
     mutating func advanceToNextTooth() -> Bool {
-        sequenceIndex += 1
-        if sequenceIndex < currentSequence.count {
-            self.currentTooth = currentSequence[sequenceIndex]
+        if sequenceIndex + 1 < currentSequence.count {
+            sequenceIndex += 1
+            let oldTooth = currentTooth
+            currentTooth = currentSequence[sequenceIndex]
+            print("DEBUG CURSOR: advanced from \(oldTooth) to \(currentTooth)")
             return true
         } else {
             // Reached end of row, advance to next row
@@ -97,7 +99,15 @@ struct ChartingCursor: Equatable {
     }
     
     mutating func jumpTo(tooth: Int) {
+        if self.currentTooth == tooth { return }
         self.currentTooth = tooth
+        
+        if let idx = currentSequence.firstIndex(of: tooth) {
+            sequenceIndex = idx
+        } else {
+            // Jump across jaw/quadrant -> Reset sequence to outer aspect of the new tooth
+            _ = jumpTo(tooth: tooth, aspect: .outer, updateSequenceIndex: true)
+        }
     }
     
     mutating func syncWithSequence() {

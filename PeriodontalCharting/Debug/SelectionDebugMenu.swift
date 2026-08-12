@@ -8,8 +8,9 @@ struct SelectionDebugMenu: View {
     
     @State private var showAlert = false
     @State private var alertMessage = ""
-    @AppStorage("useMLTokenizer") var useMLTokenizer: Bool = true
-    @AppStorage("useOfflineWav2Vec") var useOfflineWav2Vec: Bool = false
+    @AppStorage("useMLTokenizer") var useMLTokenizer: Bool = false
+    @AppStorage("useOfflineWav2Vec") var useOfflineWav2Vec: Bool = true
+    @AppStorage("useStatefulParser") var useStatefulParser: Bool = true
     
     var body: some View {
         NavigationStack {
@@ -23,6 +24,11 @@ struct SelectionDebugMenu: View {
                             }
                         }
                     ))
+                    
+                    Button("Fill Random Data") {
+                        mouth = ToothObject.fullMouthMock()
+                        dismiss()
+                    }
                 }
 
                 Section("Speaker Gate (TSE)") {
@@ -31,18 +37,40 @@ struct SelectionDebugMenu: View {
                     }
                 }
                 
-                Section("NLP Phase 1 Tokenizer") {
-                    Toggle("Use ML Tokenizer (IndoBERT)", isOn: $useMLTokenizer)
+                Section("Parser Engine") {
+                    Picker("Parser", selection: Binding(
+                        get: { useMLTokenizer ? "CoreML Parser" : "StatefulParser" },
+                        set: { useMLTokenizer = ($0 == "CoreML Parser") }
+                    )) {
+                        Text("StatefulParser").tag("StatefulParser")
+                        Text("CoreML Parser").tag("CoreML Parser")
+                    }.pickerStyle(.segmented)
                 }
                 
                 Section("Speech-to-Text Engine") {
-                    Toggle("Use Wav2Vec2 STT Engine", isOn: $useOfflineWav2Vec)
+                    Picker("STT Engine", selection: Binding(
+                        get: { useOfflineWav2Vec ? "Wav2Vec2 STT" : "Whisper STT" },
+                        set: { useOfflineWav2Vec = ($0 == "Wav2Vec2 STT") }
+                    )) {
+                        Text("Whisper STT").tag("Whisper STT")
+                        Text("Wav2Vec2 STT").tag("Wav2Vec2 STT")
+                    }.pickerStyle(.segmented)
                 }
                 
                 Section("AI Simulation") {
                     VStack(alignment: .leading) {
                         Text("WPM: \(Int(aiViewModel.wpm))")
                         Slider(value: $aiViewModel.wpm, in: 20...300, step: 10)
+                    }
+                    Button(aiViewModel.isListening ? "Stop Simulation" : "Start Simulation (Streaming)") {
+                        if aiViewModel.isListening {
+                            aiViewModel.stopSimulation()
+                        } else {
+                            if let text = TestTranscripts.all.first(where: { $0.0 == aiViewModel.selectedTestTranscriptName })?.1 {
+                                aiViewModel.toggleSimulation(from: text)
+                                dismiss()
+                            }
+                        }
                     }
                 }
                 

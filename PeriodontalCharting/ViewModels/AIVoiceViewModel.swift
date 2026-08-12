@@ -52,13 +52,19 @@ class AIVoiceViewModel: ObservableObject {
     @Published var pendingValues: [String] = []
     @Published var wpm: Double = 120.0
     
+    /// The live session parser. Created when dictation begins, held alive for
+    /// the entire session, consumed chunk-by-chunk. nil outside a session.
+    private var sessionParser: StatefulParser? = nil
+    
+    /// Number of commands in sessionParser at the last confirmed-chunk boundary.
+    /// Commands at indices < this value are "committed" (solid); at >= are "preview" (ghosted).
+    private var committedCommandCount: Int = 0
+    
     @Published var selectedTestTranscriptName: String = TestTranscripts.all.first?.0 ?? ""
     var selectedTestTranscript: String {
         return TestTranscripts.all.first(where: { $0.0 == selectedTestTranscriptName })?.1 ?? ""
     }
     private var simulationTask: Task<Void, Never>?
-    /// Last text handed to `ingestPreview`, to skip redundant re-parses at ~10 Hz.
-    private var lastPreviewText: String = ""
     private var words: [String] = []
     private var currentWordIndex: Int = 0
     
@@ -69,7 +75,7 @@ resesi 18, 17, 16, -1 -1
     /// Initializes the starting cursor position if it hasn't been set yet.
     func initializeCursorIfNeeded() {
         if self.currentCursor == nil {
-            self.currentCursor = VoiceCommandParser(configuration: self.getConfiguration()).cursor
+            self.currentCursor = StatefulParser(configuration: self.getConfiguration()).cursor
         }
     }
     
@@ -92,11 +98,13 @@ resesi 18, 17, 16, -1 -1
         committedCommands = nil   // debug/instant: no ghosting, everything solid
         committedTranscription = text
         uncommittedTranscription = ""
-        let parser = VoiceCommandParser(configuration: self.getConfiguration())
-        let parsedFinal = parser.parse(text: text, isFinal: true)
         
-        self.commandHistory = parsedFinal
-        if let last = parsedFinal.last, last.operation == parser.cursor.currentMetric {
+        var parser = StatefulParser(configuration: self.getConfiguration())
+        let tokens = TokenizerManager.shared.tokenize(text: text, isFinal: true, currentMetric: parser.cursor.currentMetric)
+        parser.consume(tokens: tokens, isFinal: true)
+        
+        self.commandHistory = parser.commands
+        if let last = parser.commands.last, last.operation == parser.cursor.currentMetric {
             self.currentCommand = last
         } else {
             self.currentCommand = nil
@@ -129,9 +137,11 @@ resesi 18, 17, 16, -1 -1
         uncommittedTranscription = ""
         commandHistory = []
         committedCommands = []
-        lastPreviewText = ""
         currentCommand = nil
         initializeCursorIfNeeded()
+
+        sessionParser = StatefulParser(configuration: getConfiguration())
+        committedCommandCount = 0
 
         let useWav2Vec = UserDefaults.standard.bool(forKey: "useOfflineWav2Vec")
         
@@ -148,10 +158,7 @@ resesi 18, 17, 16, -1 -1
             }
             wav2VecTranscriber.onConfirmedTranscript = { [weak self] confirmed in
                 guard let self = self else { return }
-                self.committedTranscription = confirmed
-                self.uncommittedTranscription = ""
-                self.ingestPreview(confirmed)
-                self.ingestCommitted(confirmed)
+                self.processConfirmedChunk(confirmed)
             }
         } else {
             transcriber.onLiveTranscript = { [weak self] fullText in
@@ -166,10 +173,7 @@ resesi 18, 17, 16, -1 -1
             }
             transcriber.onConfirmedTranscript = { [weak self] confirmed in
                 guard let self = self else { return }
-                self.committedTranscription = confirmed
-                self.uncommittedTranscription = ""
-                self.ingestPreview(confirmed)
-                self.ingestCommitted(confirmed)
+                self.processConfirmedChunk(confirmed)
             }
         }
 
@@ -203,46 +207,69 @@ resesi 18, 17, 16, -1 -1
             transcriber.onLiveTranscript = nil
             transcriber.onConfirmedTranscript = nil
         }
-        // Final flush over everything captured, then mark it all committed so no
-        // cells remain ghosted once dictation ends.
-        lastPreviewText = ""
+        
         let finalOutput = committedTranscription + uncommittedTranscription
+        if finalOutput.hasPrefix(committedTranscription) {
+            let leftover = String(finalOutput.dropFirst(committedTranscription.count)).trimmingCharacters(in: .whitespaces)
+            if !leftover.isEmpty {
+                let tokens = TokenizerManager.shared.tokenize(text: leftover, isFinal: true, currentMetric: sessionParser?.cursor.currentMetric)
+                sessionParser?.consume(tokens: tokens, isFinal: true)
+            } else {
+                sessionParser?.consume(tokens: [], isFinal: true)
+            }
+        } else {
+            sessionParser?.consume(tokens: [], isFinal: true)
+        }
+        
         committedTranscription = finalOutput
         uncommittedTranscription = ""
-        ingestPreview(finalOutput, isFinal: true)
-        committedCommands = commandHistory
+        
+        if let parser = sessionParser {
+            committedCommandCount = parser.commands.count
+            self.commandHistory = parser.commands
+            self.committedCommands = parser.commands
+            if let last = parser.commands.last, last.operation == parser.cursor.currentMetric {
+                self.currentCommand = last
+            } else {
+                self.currentCommand = nil
+            }
+            self.currentCursor = parser.cursor
+            self.activeSelection = parser.activeSelection
+            self.pendingValues = parser.pendingValues
+        }
+        
+        sessionParser = nil
     }
 
-    /// Parse the FULL live transcript and publish the chart-driving state (values,
-    /// cursor, selection). Skipped when the text hasn't changed since the last pass.
-    private func ingestPreview(_ text: String, isFinal: Bool = false) {
-        if !isFinal && text == lastPreviewText { return }
-        lastPreviewText = text
-        guard !text.isEmpty else {
-            commandHistory = []
-            currentCommand = nil
-            return
-        }
-        let parser = VoiceCommandParser(configuration: getConfiguration())
-        let parsed = parser.parse(text: text, isFinal: isFinal)
-
-        self.commandHistory = parsed
-        if let last = parsed.last, last.operation == parser.cursor.currentMetric {
-            self.currentCommand = last
+    private func processConfirmedChunk(_ confirmed: String) {
+        let newChunk: String
+        if confirmed.hasPrefix(self.committedTranscription) {
+            newChunk = String(confirmed.dropFirst(self.committedTranscription.count)).trimmingCharacters(in: .whitespaces)
         } else {
-            self.currentCommand = nil
+            newChunk = confirmed // fallback
         }
-        self.currentCursor = parser.cursor
-        self.activeSelection = parser.activeSelection
-        self.pendingValues = parser.pendingValues
-    }
-
-    /// Parse the confirmed-only text into the committed command set. The chart
-    /// ghosts any preview cell not backed by these.
-    private func ingestCommitted(_ text: String) {
-        guard !text.isEmpty else { committedCommands = []; return }
-        let parser = VoiceCommandParser(configuration: getConfiguration())
-        committedCommands = parser.parse(text: text, isFinal: false)
+        
+        self.committedTranscription = confirmed
+        self.uncommittedTranscription = ""
+        
+        if !newChunk.isEmpty {
+            let tokens = TokenizerManager.shared.tokenize(text: newChunk, isFinal: false, currentMetric: sessionParser?.cursor.currentMetric)
+            sessionParser?.consume(tokens: tokens, isFinal: false)
+            
+            if let parser = sessionParser {
+                committedCommandCount = parser.commands.count
+                self.commandHistory = parser.commands
+                self.committedCommands = Array(parser.commands.prefix(committedCommandCount))
+                if let last = parser.commands.last, last.operation == parser.cursor.currentMetric {
+                    self.currentCommand = last
+                } else {
+                    self.currentCommand = nil
+                }
+                self.currentCursor = parser.cursor
+                self.activeSelection = parser.activeSelection
+                self.pendingValues = parser.pendingValues
+            }
+        }
     }
 
     private func startSimulation(from text: String?) {
@@ -329,9 +356,10 @@ resesi 18, 17, 16, -1 -1
         return ChartingConfiguration()
     }
     nonisolated private func parseOffline(text: String, config: ChartingConfiguration, isFinal: Bool) -> ([AnnotationCommand], ChartingCursor, TeethSelection?, [String]) {
-        let parser = VoiceCommandParser(configuration: config)
-        let commands = parser.parse(text: text, isFinal: isFinal)
-        return (commands, parser.cursor, parser.activeSelection, parser.pendingValues)
+        var parser = StatefulParser(configuration: config)
+        let tokens = TokenizerManager.shared.tokenize(text: text, isFinal: isFinal, currentMetric: parser.cursor.currentMetric)
+        parser.consume(tokens: tokens, isFinal: isFinal)
+        return (parser.commands, parser.cursor, parser.activeSelection, parser.pendingValues)
     }
 }
 
@@ -341,4 +369,3 @@ extension ChartingConfiguration: @unchecked Sendable {}
 extension AnnotationCommand: @unchecked Sendable {}
 extension ChartingCursor: @unchecked Sendable {}
 extension TeethSelection: @unchecked Sendable {}
-

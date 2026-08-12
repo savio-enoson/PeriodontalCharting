@@ -14,13 +14,13 @@ final class TokenizerManager {
         }
     }
     
-    func tokenize(text: String, isFinal: Bool = false) -> [VoiceToken] {
+    func tokenize(text: String, isFinal: Bool = false, currentMetric: AnnotationOperation? = nil) -> [VoiceToken] {
         let useML = UserDefaults.standard.object(forKey: "useMLTokenizer") as? Bool ?? true
         if useML {
             loadModel()
         }
         guard useML, let mlTokenizer = mlTokenizer else {
-            return VoiceTokenizer.tokenize(text: text, isFinal: isFinal)
+            return VoiceTokenizer.tokenize(text: text, isFinal: isFinal, currentMetric: currentMetric)
         }
         
         var tokens: [VoiceToken] = []
@@ -146,11 +146,9 @@ final class TokenizerManager {
                             break
                         }
                         
-                        if prevToken == nil {
+                        if let prev = prevToken, case .word(let w) = prev, w.lowercased() == "gigi" || w.lowercased() == "gigi_" {
                             shouldStitch = true
-                        } else if case .word(let w) = prevToken!, w.lowercased() == "gigi" || w.lowercased() == "gigi_" {
-                            shouldStitch = true
-                        } else if case .action(let act) = prevToken!, (act == .from || act == .until) {
+                        } else if let prev = prevToken, case .action(let act) = prev, (act == .from || act == .until || act == .until2) {
                             shouldStitch = true
                         } else if let next = nextToken {
                             if case .anatomy(_) = next {
@@ -177,6 +175,10 @@ final class TokenizerManager {
                                 shouldStitch = false
                             }
                         }
+                    }
+                    
+                    if let metric = currentMetric, metric == .probingDepth {
+                        shouldStitch = false
                     }
                     
                     if shouldStitch {

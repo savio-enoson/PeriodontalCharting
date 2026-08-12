@@ -10,6 +10,13 @@ import SwiftData
 
 @main
 struct PeriodontalChartingApp: App {
+    init() {
+        UserDefaults.standard.register(defaults: [
+            "useMLTokenizer": false,
+            "useOfflineWav2Vec": true
+        ])
+    }
+    
     var body: some Scene {
         WindowGroup {
             ContentView()

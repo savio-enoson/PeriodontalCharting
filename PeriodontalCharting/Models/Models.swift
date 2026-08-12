@@ -115,10 +115,8 @@ struct ChartAnatomyResolver {
         switch anatomy {
         case .mesioBuccal, .mesioLingual, .mesioPalatal, .mesial: isMesial = true
         case .distoBuccal, .distoLingual, .distoPalatal, .distal: isMesial = false
-        case .midBuccal, .midLingual, .midPalatal, .midLabial:
+        case .midBuccal, .midLingual, .midPalatal, .midLabial, .buccal, .labial, .lingual, .palatal:
             return (aspect, 1)
-        case .buccal, .labial, .lingual, .palatal:
-            return (aspect, nil)
         default: return nil
         }
         
@@ -129,7 +127,9 @@ struct ChartAnatomyResolver {
             siteIndex = isMesial ? 0 : 2
         }
         
-        return (aspect, siteIndex)
+        let result = (aspect, siteIndex)
+        print("ChartAnatomyResolver.resolve: anatomy=\(anatomy), tooth=\(tooth), isRight=\(isRight), isMesial=\(isMesial) -> result=\(String(describing: result))")
+        return result
     }
     
     private static let _fullCanonicalFlat: [(Int, ChartAspect, Int)] = {
