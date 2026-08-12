@@ -36,12 +36,12 @@ For the Swift file-by-file reference, see [frontend_guide.md](frontend_guide.md)
 
 ## 1. Overview
 
-The ML tokenizer replaces the rule-based `VoiceTokenizer` as the primary Phase 1 component. Its job is identical: convert a normalized text string into a `[VoiceToken]` array that `VoiceCommandParser` can consume. The difference is how it works internally — instead of a hand-written alias dictionary and regex rules, it runs a CoreML word classifier that has learned clinical vocabulary from labeled training examples.
+The ML tokenizer replaces the rule-based `VoiceTokenizer` as the primary Phase 1 component. Its job is identical: convert a normalized text string into a `[VoiceToken]` array that `StatefulParser` can consume. The difference is how it works internally — instead of a hand-written alias dictionary and regex rules, it runs a CoreML word classifier that has learned clinical vocabulary from labeled training examples.
 
 The critical constraint is that clinical tokenization is a **small, closed-vocabulary** word classification problem. The vocabulary of clinically meaningful token types is fixed (40 labels). A CoreML word classifier operating at per-word granularity is fast enough for live dictation and accurate enough to handle the spelling variants, STT transcription errors, and context-dependent disambiguations that the rule-based tokenizer struggles with.
 
 > [!IMPORTANT]
-> The ML tokenizer replaces only **Phase 1** (word classification). Phase 2 (`VoiceCommandParser`) is unchanged — it receives the same `[VoiceToken]` array regardless of which Phase 1 path produced it. The two phases are architecturally independent.
+> The ML tokenizer replaces only **Phase 1** (word classification). Phase 2 (`StatefulParser`) is unchanged — it receives the same `[VoiceToken]` array regardless of which Phase 1 path produced it. The two phases are architecturally independent.
 
 The ML path is gated by `UserDefaults.standard.bool(forKey: "useMLTokenizer")`, which defaults to `true`. Setting it to `false` (e.g., via the **Debug → NLP Phase 1 Tokenizer** toggle in the app) falls back to `VoiceTokenizer` directly.
 
@@ -126,7 +126,7 @@ The normalization output is a space-joined word array.
 
 After normalization, `tokenize()` splits the word array on `"_sep_"` boundaries into sentences. Each sentence is processed by the ML inference loop with a **fresh `MLTokenizerState`** — state (active metric, prior label history) does not carry across sentence boundaries, matching the semantic reset that `_sep_` represents.
 
-`_sep_` tokens are re-inserted between sentence segments in the final output so `VoiceCommandParser` can see the boundaries.
+`_sep_` tokens are re-inserted between sentence segments in the final output so `StatefulParser` can see the boundaries.
 
 ### 2.3 ML Inference Loop
 
@@ -478,4 +478,4 @@ The post-processing pass in `TokenizerManager.tokenize()` runs over the raw ML o
 | Post-processing pass | ✅ Complete |
 | `useMLTokenizer` UserDefaults toggle | ✅ Complete — `true` by default; toggled via **Debug → NLP Phase 1 Tokenizer** at runtime |
 | Rule-based `VoiceTokenizer` fallback | ✅ Complete — activated when model is absent or toggle is off; includes additional STT robustness heuristics (see §1 Overview) |
-| Wiring to live dictation pipeline | ✅ Complete — `AIVoiceViewModel` calls `TokenizerManager.shared.tokenize()` via `VoiceCommandParser.parse()` |
+| Wiring to live dictation pipeline | ✅ Complete — `AIVoiceViewModel` calls `TokenizerManager.shared.tokenize()` and feeds the result to `StatefulParser.consume(tokens:isFinal:)` |

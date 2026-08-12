@@ -58,10 +58,9 @@ PeriodontalCharting/
     │   │   ├── VoiceTokenizer+Helpers.swift       <- Rule-based utilities
     │   │   └── VoiceTokenizer+Parsing.swift       <- Rule-based text-to-token transformation loop
     │   └── Parser/
-    │       ├── VoiceCommandParser.swift           <- State properties and init
-    │       ├── VoiceCommandParser+Parse.swift     <- Main token processing loop
-    │       ├── VoiceCommandParser+Flush.swift     <- Emission and flush logic
-    │       └── VoiceCommandParser+Lookahead.swift <- Stream lookahead utilities
+    │       ├── StatefulParser.swift               <- Struct declaration, state variables, consume() switch
+    │       ├── StatefulParser+Flush.swift         <- flushNumbers, emitBoolIfPending, discardOrFlush, restoreToMainSequence
+    │       └── StatefulParser+Lookahead.swift     <- tryResolveRangeDigits (fragmented Wav2Vec digit accumulator)
     │
     ├── Configuration/
     │   ├── ChartingConfiguration.swift            <- Config enums + ChartingConfiguration struct
@@ -486,7 +485,7 @@ An `@MainActor` `ObservableObject` that orchestrates the voice pipeline — both
 - **`toggleSimulation(from:)`** — If already listening, stops the simulation. Otherwise starts it. Stops live dictation first (mutually exclusive).
 - **`toggleLiveDictation()`** — Primary public method called by `AIListeningView`. Calls `startLiveDictation()` or `stopLiveDictation()` based on `isDictating`.
 - **`startSimulation(from:)`** *(private)* — Splits the transcript into words (expanding `\n`, `.`, `,` as discrete tokens). Resets state, then spawns an `@MainActor` bound `Task` that appends one word per loop iteration. Parsing is offloaded to a detached thread via `Task.detached` calling a `nonisolated` helper (`parseOffline`) to prevent UI hitching during dense token streams. Sets `committedCommands = nil` (no ghosting in simulation mode).
-- **`parseInstant(text:)`** — Stops any running simulation/dictation, sets `liveTranscription = text`, runs a fresh `VoiceCommandParser` with `isFinal: true`. Sets `committedCommands = nil` (no ghosting). Used by the Debug menu’s **Fill Chart** and **Test Debug Transcript** buttons.
+- **`parseInstant(text:)`** — Stops any running simulation/dictation, runs a fresh `StatefulParser` with `isFinal: true` on the given text. Sets `committedCommands = nil` (no ghosting). Used by the Debug menu's **Fill Chart** and **Test Debug Transcript** buttons.
 - **`startLiveDictation()`** — Hooks `TranscriptionViewModel.onLiveTranscript` → `ingestPreview` (full transcript → chart preview) and `onConfirmedTranscript` → `ingestCommitted` (confirmed-only → committed set). Calls `TokenizerManager.shared.loadModel()` if not yet loaded, then starts the live stream.
 - **`stopLiveDictation()`** — Stops the stream, performs a final `isFinal: true` parse over the full accumulated transcript, and sets `committedCommands = commandHistory` so no cells remain ghosted.
 - **`ingestPreview(_:isFinal:)`** *(private)* — Parses the full running transcript (skips if text unchanged). Updates `commandHistory`, `currentCommand`, `currentCursor`, `activeSelection`, `pendingValues`.
@@ -581,7 +580,7 @@ A static utility struct providing the headless save/load/compare pipeline used b
 | `saveChart(mouth:)` | `([Int: ToothObject]) -> Bool` | Encodes the mouth dict as a sorted `[ToothObject]` JSON array (pretty-printed) and writes it to disk. |
 | `loadChart()` | `-> [Int: ToothObject]?` | Reads the ground truth JSON, decodes `[ToothObject]`, and rebuilds the `[Int: ToothObject]` dictionary. |
 | `compareCharts(expected:actual:)` | `([Int:ToothObject], [Int:ToothObject]) -> [String]` | Iterates all teeth in `expected`. Checks `probingDepth`, `gingivalMargin`, `bleeding`, `plaque`, and `missing` for equality. Returns human-readable difference strings, empty if charts match exactly. |
-| `parseTranscript(text:config:)` | `@MainActor (String, ChartingConfiguration) -> [Int: ToothObject]` | Creates a fresh `VoiceCommandParser`, runs `parse(text:isFinal:true)`, applies all commands via `ChartProcessor.apply`, and returns the final mouth state. |
+| `parseTranscript(text:config:)` | `@MainActor (String, ChartingConfiguration) -> [Int: ToothObject]` | Creates a fresh `StatefulParser`, calls `consume(tokens: allTokens, isFinal: true)`, applies all commands via `ChartProcessor.apply`, and returns the final mouth state. |
 
 > [!IMPORTANT]
 > `saveChart` and `loadChart` depend on all chart types being `Codable`. `MobilityClass`, `FurcationClass`, `FurcationData`, `AspectData<T>`, and `ToothObject` all conform to `Codable`.
@@ -869,10 +868,9 @@ The NLP pipeline implements a **three-phase architecture**: **Tokenization → P
 | `NLP/Tokenizer/VoiceTokenizer.swift` | Rule-based base class declaration (fallback path) |
 | `NLP/Tokenizer/VoiceTokenizer+Helpers.swift` | Rule-based utility helpers |
 | `NLP/Tokenizer/VoiceTokenizer+Parsing.swift` | Rule-based main `tokenize(text:isFinal:)` loop — normalization, spell correction, multi-word matching, number disambiguation |
-| `NLP/Parser/VoiceCommandParser.swift` | State property declarations and `init(configuration:)` |
-| `NLP/Parser/VoiceCommandParser+Parse.swift` | Main `parse(text:isFinal:)` token loop — all case handlers |
-| `NLP/Parser/VoiceCommandParser+Flush.swift` | `flushNumbers`, `emitBoolIfPending`, `startPostTargeting`, `flushPostTargetIfPending`, `restoreToMainSequence` |
-| `NLP/Parser/VoiceCommandParser+Lookahead.swift` | `resolveAnatomyWithLookahead`, `isContinuingList`, `hasUpcomingToothIdentifier` |
+| `NLP/Parser/StatefulParser.swift` | Struct declaration, all state variables, `consume(token:)` switch, `consume(tokens:isFinal:)` |
+| `NLP/Parser/StatefulParser+Flush.swift` | `flushNumbers`, `emitBoolIfPending`, `discardOrFlush`, `restoreToMainSequence` |
+| `NLP/Parser/StatefulParser+Lookahead.swift` | `tryResolveRangeDigits` — fragmented digit accumulator for Wav2Vec range-end tooth numbers |
 
 ---
 

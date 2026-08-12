@@ -546,7 +546,7 @@ final class TranscriptionViewModel: LiveCaptureDriver {
                 let slice = Array(buffer[startIndex...])
 
                 let results = await Task.detached(priority: .utility) {
-                    (try? gate.appendEvaluation(audio: slice,
+                    (try? await gate.appendEvaluation(audio: slice,
                                                 absoluteOffsetSeconds: from,
                                                 extractor: extractor)) ?? []
                 }.value
