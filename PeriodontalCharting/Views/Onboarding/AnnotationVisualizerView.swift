@@ -2,7 +2,7 @@ import SwiftUI
 
 struct AnnotationVisualizerView: View {
     let config: ChartingConfiguration
-    
+
     var body: some View {
         VStack(spacing: 24) {
             ChartSectionVisualizer(jaw: .upper, aspect: .buccal, imageName: "Upper-Outer", label: "Upper Outer", config: config)
@@ -20,30 +20,51 @@ struct ChartSectionVisualizer: View {
     let imageName: String
     let label: String
     let config: ChartingConfiguration
-    
+
+    /// @Observable singleton — reading `image(_:)` in `body` registers this view
+    /// for updates, so each diagram appears as warming reaches it.
+    private let assets = ChartAssetStore.shared
+
     var body: some View {
         VStack(spacing: 8) {
             visualizerOverlay(for: aspect, label: label)
-            
-            Image(imageName)
-                .resizable()
-                .scaledToFit()
+
+            diagram
                 .frame(maxWidth: .infinity)
         }
     }
-    
+
+    /// The pre-decoded image when the store has it.
+    ///
+    /// The `Image(imageName)` fallback is for previews and any path that reaches
+    /// this before warming — correct, but it decodes the full ~6800 px original,
+    /// which is exactly what ChartAssetStore exists to avoid. It should not be
+    /// hit in the app: ContentView holds the splash until `assets.isReady`.
+    @ViewBuilder
+    private var diagram: some View {
+        if let prepared = assets.image(imageName) {
+            prepared
+                .resizable()
+                .scaledToFit()
+        } else {
+            Image(imageName)
+                .resizable()
+                .scaledToFit()
+        }
+    }
+
     @ViewBuilder
     private func visualizerOverlay(for aspect: AspectType, label sideText: String) -> some View {
         let index = config.sequenceIndex(for: jaw, aspect: aspect)
         let direction = config.direction(for: jaw, aspect: aspect)
         let isLeftToRight = direction == .leftToRight
-        
+
         VStack(alignment: isLeftToRight ? .leading : .trailing, spacing: 4) {
             Text("\(index). \(sideText)")
                 .font(.caption)
                 .fontWeight(.bold)
                 .foregroundColor(.secondary)
-            
+
             HStack(spacing: 0) {
                 if isLeftToRight {
                     Image(systemName: "\(index).circle.fill")
@@ -83,8 +104,7 @@ extension ChartingConfiguration {
                 }
             }
         }
-        
+
         return (result.firstIndex(where: { $0.0 == jaw && $0.1 == aspect }) ?? 0) + 1
     }
 }
-

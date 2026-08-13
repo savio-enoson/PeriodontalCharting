@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct QuadrantView: View {
-    var title: String
+    var title: LocalizedStringKey
     var teeth: [ToothObject]
     var isUpperJaw: Bool
     var showLeftLabels: Bool = true
@@ -15,7 +15,7 @@ struct QuadrantView: View {
                 .foregroundStyle(.primary)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            Text(isUpperJaw ? "Outer (Facial)" : "Inner (Lingual)")
+            (isUpperJaw ? Text("Outer (Facial)") : Text("Inner (Lingual)"))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
@@ -46,7 +46,7 @@ struct QuadrantView: View {
             )
             .clipShape(RoundedRectangle(cornerRadius: 3))
 
-            Text(isUpperJaw ? "Inner (Palatal)" : "Outer (Facial)")
+            (isUpperJaw ? Text("Inner (Palatal)") : Text("Outer (Facial)"))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }

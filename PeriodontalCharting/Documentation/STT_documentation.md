@@ -168,8 +168,6 @@ Runs on `Task.detached(priority: .userInitiated)`.
 
 7. **Canonical word mapping:** The decoded word sequence is split on spaces; each word is looked up in `decoder.dynamicMapping`. If found, the canonical form replaces the raw form. This applies single-word substitutions. Multi-word phrase substitutions are applied inside `CTCDecoder.decode` itself.
 
-8. **Number Formatting & NLP Reconstruction:** The Wav2Vec2 model outputs multi-digit numbers as space-separated single digits (e.g., `18 222` is emitted as `1 8 2 2 2`). The downstream `VoiceTokenizer` (NLP pipeline) is explicitly designed to handle this by applying `isStartOfBlock` heuristics to reconstruct structural `toothIdentifier` tokens from these single-digit streams. The `VoiceTokenizer` specifically uses chunking separated by newlines (converted to `_sep_`) to maintain these block boundaries cleanly. All local regression testing scripts (e.g. `dr_lucky_ground.txt`) must manually insert spaces between digits and separate clinical thoughts with newlines to correctly simulate this native output and chunk-streaming behavior.
-
 ### 3.3 Streaming VAD & Commit Logic — `Wav2VecViewModel`
 
 `Wav2VecViewModel` is the live-session orchestrator. It is `@MainActor @Observable` and is instantiated once inside `AIVoiceViewModel` (not shared).
@@ -317,7 +315,7 @@ After `CTCDecoder.decode` returns, the result string is split by spaces. Each wo
 
 **2. Multi-word phrase mapping (`CTCDecoder.decode`):**
 
-After word-boundary finalization, mapping keys are sorted by descending length and checked via `String.contains`. Longer phrases match first, preventing a shorter key from partially matching inside a longer phrase. This handles multi-word clinical contractions. Note that for missing teeth targeting, the token must exactly be `"gak ada"` (or `"tidak ada"`). Standalone words like `"gak"` or `"tidak"` do not trigger the `.missing` operation. This enforces **strict targeting**, ensuring missing status is only applied when explicitly intended rather than cascading automatically.
+After word-boundary finalization, mapping keys are sorted by descending length and checked via `String.contains`. Longer phrases match first, preventing a shorter key from partially matching inside a longer phrase. This handles multi-word clinical contractions (e.g., `"gak ada"` → `"missing"`).
 
 > [!NOTE]
 > The `canonical_mapping.json` file is also used to expand the trie during model loading. Any key in the mapping that is not already in the lexicon is inserted into the trie as a valid word, ensuring the beam decoder can produce the variant spelling that the mapping then normalizes.
