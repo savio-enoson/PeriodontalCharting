@@ -144,7 +144,8 @@ PeriodontalCharting/
     │   ├── project_guide.md
     │   ├── frontend_guide.md                      <- This file
     │   ├── system_guide.md
-    │   └── ml_tokenizer_guide.md
+    │   ├── ml_tokenizer_guide.md
+    │   └── STT_documentation.md
     │
     └── Assets.xcassets/
 ```

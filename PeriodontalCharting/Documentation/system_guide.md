@@ -209,8 +209,8 @@ After normalization, the text is split on whitespace into a word array.
 |---|---|---|
 | `.next` | `"lanjut"`, `"kemudian"`, `"selanjutnya"`, `"berikutnya"` | Advance cursor / flush current selection |
 | `.commit` | `"selesai"` | Advance cursor / flush current selection (synonym for `.next`) |
-| `.missing` | `"gak"` (+ `"ada"`), `"missing"` | Tooth is missing / edentulous |
-| `.missing2` | `"tidak"` (+ `"ada"`) | Alternative missing form |
+| `.missing` | `"gak ada"`, `"missing"` | Tooth is missing / edentulous (note: `"gak"` alone is ignored) |
+| `.missing2` | `"tidak ada"` | Alternative missing form (note: `"tidak"` alone is ignored) |
 | `.from` | `"dari"` | Start of a range or possessive target specifier |
 | `.until` | `"sampai"` | End of a range |
 | `.until2` | `"hingga"` | End of a range (synonym) |
@@ -237,6 +237,8 @@ Multi-word tokens are checked *before* single-word tokens. The tokenizer peeks a
 ### 3.4 Number Disambiguation
 
 Two-digit integers in the range **11–98** without a preceding `"gigi"` keyword are ambiguous: they could be a tooth number (e.g., `"16"`) or a pair of probing depth values (`"1"` then `"6"`).
+
+**Block-Start Tooth Protection:** When the parser encounters a sequence of single digits that matches a valid two-digit tooth (e.g., `1` and `7` following `Disto Bukal`), it evaluates whether the number is followed by *exactly* the expected number of values for the current block. If it is (e.g., `Disto Bukal 1 7 2`, where `2` is exactly 1 value expected by `Disto Bukal`), the token `17` is flagged with `isSequenceOfTeeth = true`. This protects it from being aggressively broken apart and coerced into values by the `probingDepth` metric check.
 
 The tokenizer disambiguates using the **current active metric's expected block size**:
 - If the active metric expects blocks of **≥ 3** values (like `.probingDepth`) or **0** values (like boolean metrics), adjacent single digits are merged into a `.toothIdentifier`.
@@ -386,7 +388,7 @@ stopLiveDictation()
 #### `.action`
 
 - **`.next` / `.commit` (`"lanjut"` / `"selesai"`):** Call `discardOrFlush()` then `restoreToMainSequence()`.
-- **`.missing` / `.missing2` (`"gak ada"` / `"tidak ada"`):** Call `discardOrFlush()`. Collect all targets from `pendingTeeth` plus the `activeSelection` start tooth (if not already included). Emit `.missing` commands for all of them, add to `missingTeeth`, advance cursor past them, then `restoreToMainSequence()`.
+- **`.missing` / `.missing2` (`"gak ada"` / `"tidak ada"`):** Check if `activeSelection` was explicitly targeted (i.e. `!isSelectionUsed` or `!pendingNumbers.isEmpty`). If so, add it to the targets. Then call `discardOrFlush()`. Emit `.missing` commands for all accumulated targets, add to `missingTeeth`, advance cursor past them, and finally call `restoreToMainSequence()`. If no targets are found (e.g., noise), safely ignore the command.
 - **`.until` / `.until2` (`"sampai"` / `"hingga"`):** Set `isWaitingForRangeEnd = true`.
 - **`.from` (`"dari"`):** See §4.5 for the full disambiguation logic.
 - **`.at` / `.at2` (`"pada"` / `"di"`):** If `pendingNumbers` is non-empty, set `isPostTargeting = true` and clear `activeSelection` (discard any eagerly-built cursor selection — the pending numbers will be bound to the explicit tooth list that follows). If no numbers are pending, no-op.
@@ -398,7 +400,7 @@ stopLiveDictation()
 2. Clear `isListAggregationActive`, `isNextNumberNegative`, `pendingRangeDigits`.
 3. **Jaw tokens** (`.upperJaw`, `.lowerJaw`): Call `discardOrFlush()`, clear `activeSelection`, jump cursor to the start of the respective jaw via `cursor.jumpTo(jaw:)`, reset metric to `.probingDepth`. Return.
 4. **Waiting for range end:** Append `a` to `pendingAnatomies`. Return. (The anatomy will be resolved when the next tooth identifier arrives as `endTooth`.)
-5. **No active selection:** Resolve anatomy via `ChartAnatomyResolver`. If it's a full-face anatomy (site = `nil`), update the cursor's aspect if needed; append `a` to `pendingAnatomies` for later resolution.
+5. **No active selection:** Resolve anatomy via `ChartAnatomyResolver`. If the resolved anatomy aspect differs from the current global cursor aspect, *unconditionally* update the global aspect via `cursor.jumpTo(aspect:)` (e.g., `"Lanjut palatal"` updates the global sequence, even if the anatomy returns a specific site index). If it's a full-face anatomy (site = `nil`), append `a` to `pendingAnatomies` for later resolution.
 6. **Active selection exists:** Resolve anatomy against the selection's `startTooth`. Update `startAspect`/`startSite`/`endSite` on the selection, expanding bounds if multiple anatomies aggregate on the same aspect. If the aspect changes, apply the aspect-jump safeguard (see §6.4). If numbers are already pending for a different site, call `discardOrFlush()` first.
 
 #### `.word(w)`
@@ -623,11 +625,12 @@ This is called before any context switch (new tooth, new metric, new anatomy) to
 A convenience helper used before context-switching actions (`.next`, `.commit`, `_sep_`, jaw jumps):
 
 ```swift
-mutating func discardOrFlush() {
+mutating func discardOrFlush(clearSelection: Bool = true) {
+    emitBoolIfPending()
     if !pendingNumbers.isEmpty {
         flushNumbers(force: true)
-    } else {
-        emitBoolIfPending()
+    }
+    if clearSelection {
         activeSelection = nil
     }
     isPostTargeting = false
@@ -679,9 +682,14 @@ Each 3-value block is flushed and the cursor advances without requiring `"lanjut
 
 ## 9. Lookahead Utilities
 
-One lookahead function lives in `StatefulParser+Lookahead.swift`:
+Lookahead functions are used to resolve ambiguity in the speech stream.
 
-### `tryResolveRangeDigits()`
+### `hasExactlyNValues()` (in `VoiceTokenizer+Helpers.swift`)
+
+Used by the tokenizer to differentiate between two single-digit values (e.g., `3 3`) and a tooth identifier (e.g., `33`). If the tokenizer encounters a potential tooth identifier formed by adjacent digits, it checks if it is immediately followed by exactly `expectedValues` (usually 3). 
+* **Crucial constraint**: This lookahead strictly breaks on structural separators (`_sep_` and `.`). This prevents it from "bleeding" into the next dictation chunk or sentence, which could lead to falsely identifying a sequence of values in the next sentence as the trailing values for a hallucinated tooth identifier in the current sentence.
+
+### `tryResolveRangeDigits()` (in `StatefulParser+Lookahead.swift`)
 
 Called when `isWaitingForRangeEnd == true` and a `.number(n)` token arrives. This handles the Wav2Vec-specific case where multi-digit tooth numbers are emitted as individual digit tokens (e.g., `"1"` then `"5"` for tooth 15):
 
@@ -913,3 +921,5 @@ These are the non-obvious rules that prevent subtle bugs. They are worth knowing
 | **`dari` does not use a deferred flag.** The form is resolved immediately: pending numbers → post-targeting; no pending numbers → `isRangeStartPending`. | The old `isFromPending` flag caused anatomy tokens that arrived between `dari` and `sampai` to be incorrectly resolved as possessive, breaking range commands. |
 | **`ChartProcessor` rebuilds from full `commandHistory` on every change.** | Guarantees idempotency. Mid-stream partial parses cannot corrupt the chart state because the history is always replayed from scratch. |
 | **The `StatefulParser` instance persists for the entire session.** The `isFinal` flag marks the end of the **session**, not a single chunk. | Ensures cursor position, `missingTeeth`, and pending state carry forward correctly between confirmed VAD chunks, enabling natural cross-sentence clinical patterns (e.g., jaw switch in one sentence, PD values in the next). |
+| **`Lanjut` and continuation words are NOT tooth prefixes.** Words like `"lanjut"`, `"kemudian"`, `"selanjutnya"` are purely `.commit`/`.next` actions. | If treated as tooth prefixes, dictating `"Lanjut"` followed by values (e.g., `"2 2 2"`) causes the first digits to be incorrectly grabbed as a tooth identifier (e.g., tooth `22`), jumping the cursor entirely out of sequence. |
+| **The `isFinal` fallback heuristic must expect probing depths.** The final fallback that converts trailing numbers into a tooth identifier (`!isDefinitelyTooth && isFinal && nextWord == "nil"`) is guarded by `expectedValues != 3`. | Prevents the last sequence of valid probing depth values in a dictation session from being mistakenly swallowed and converted into a spurious tooth jump just because the stream ended. |

@@ -101,12 +101,26 @@ resesi 18, 17, 16, -1 -1
     func parseInstant(text: String) {
         stopSimulation()
         committedCommands = nil   // debug/instant: no ghosting, everything solid
-        committedTranscription = text
+        
+        // Simulate Wav2Vec2 STT engine by forcing spaces between consecutive digits
+        let sttSimulated = text.replacingOccurrences(of: #"(?<=\d)(?=\d)"#, with: " ", options: .regularExpression)
+        let chunks = sttSimulated.components(separatedBy: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        
+        committedTranscription = ""
         uncommittedTranscription = ""
         
         var parser = StatefulParser(configuration: self.getConfiguration())
-        let tokens = TokenizerManager.shared.tokenize(text: text, isFinal: true, currentMetric: parser.cursor.currentMetric)
-        parser.consume(tokens: tokens, isFinal: true)
+        
+        for (idx, chunk) in chunks.enumerated() {
+            let isFinal = idx == chunks.count - 1
+            if !committedTranscription.isEmpty {
+                committedTranscription += " \n "
+            }
+            committedTranscription += chunk
+            
+            let tokens = TokenizerManager.shared.tokenize(text: chunk, isFinal: isFinal, currentMetric: parser.cursor.currentMetric)
+            parser.consume(tokens: tokens, isFinal: isFinal)
+        }
         
         self.commandHistory = parser.commands
         if let last = parser.commands.last, last.operation == parser.cursor.currentMetric {
@@ -290,11 +304,9 @@ resesi 18, 17, 16, -1 -1
         stopLiveDictation()   // the two feeds are mutually exclusive
         committedCommands = nil   // simulation: no ghosting, everything solid
         if let newText = text {
-            let spaced = newText
-                .replacingOccurrences(of: "\n", with: " \n ")
-                .replacingOccurrences(of: ".", with: " . ")
-                .replacingOccurrences(of: ",", with: " , ")
-            self.words = spaced.components(separatedBy: " ").filter { !$0.isEmpty }
+            // Simulate Wav2Vec2 STT engine by forcing spaces between consecutive digits
+            let sttSimulated = newText.replacingOccurrences(of: #"(?<=\d)(?=\d)"#, with: " ", options: .regularExpression)
+            self.words = sttSimulated.components(separatedBy: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
             self.currentWordIndex = 0
             self.committedTranscription = ""
             self.uncommittedTranscription = ""
@@ -310,16 +322,18 @@ resesi 18, 17, 16, -1 -1
             while currentWordIndex < words.count {
                 if Task.isCancelled { break }
                 
-                let word = words[currentWordIndex]
-                if !committedTranscription.isEmpty && word != "\n" && word != "." && word != "," {
-                    committedTranscription += " "
+                let chunk = words[currentWordIndex]
+                if !committedTranscription.isEmpty {
+                    committedTranscription += " \n "
                 }
-                committedTranscription += word
+                committedTranscription += chunk
                 
                 let currentText = self.committedTranscription
                 
                 // Offload parsing to a background thread to prevent UI lag
                 let parsedResult = await Task.detached {
+                    // For simulation, we parse from scratch with the accumulated chunks,
+                    // but we do NOT pass isFinal: true until the very end, to preserve chunk state behaviors.
                     return self.parseOffline(text: currentText, config: config, isFinal: false)
                 }.value
                 
@@ -337,9 +351,7 @@ resesi 18, 17, 16, -1 -1
                 
                 currentWordIndex += 1
                 
-                let wordsPerSecond = wpm / 60.0
-                let secondsPerWord = 1.0 / wordsPerSecond
-                try? await Task.sleep(for: .seconds(secondsPerWord))
+                try? await Task.sleep(for: .seconds(0.8)) // Emulate time between chunks
             }
             
             // Final flush when completely done

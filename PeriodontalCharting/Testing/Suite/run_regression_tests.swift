@@ -17,7 +17,8 @@ struct RegressionRunner {
         UserDefaults.standard.set(false, forKey: "useMLTokenizer")
         
         // 1. Read the transcript
-        let transcriptRaw = try String(contentsOfFile: transcriptPath, encoding: .utf8)
+        let rawContent = try String(contentsOfFile: transcriptPath, encoding: .utf8)
+        let transcriptRaw = rawContent.replacingOccurrences(of: #"(?<=\d)(?=\d)"#, with: " ", options: .regularExpression)
         
         print("--- Testing Transcript: \(transcriptPath.components(separatedBy: "/").last ?? "") ---")
         
