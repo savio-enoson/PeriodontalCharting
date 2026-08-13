@@ -10,7 +10,12 @@ class AIVoiceViewModel: ObservableObject {
     /// simulation, which sets `isListening`). Kept separate so both controls can
     /// show independent state; the two are mutually exclusive at runtime.
     @Published var isDictating: Bool = false
-    
+    /// True after the mic is turned off but while the last decode and the final
+    /// speaker-gate pass are still landing (the async `transcriber.stopLive()` and
+    /// the final parse). The chart is not final yet, so the mic button shows a
+    /// "still working" state and stays disabled until this flips back to false.
+    @Published var isFinishing: Bool = false
+
     var currentStatusMessage: String {
         if UserDefaults.standard.bool(forKey: "useOfflineWav2Vec") {
             return wav2VecTranscriber.statusMessage
@@ -197,48 +202,57 @@ resesi 18, 17, 16, -1 -1
     func stopLiveDictation() {
         guard isDictating else { return }
         isDictating = false
-        
-        if UserDefaults.standard.bool(forKey: "useOfflineWav2Vec") {
-            wav2VecTranscriber.stopLive()
-            wav2VecTranscriber.onLiveTranscript = nil
-            wav2VecTranscriber.onConfirmedTranscript = nil
-        } else {
-            transcriber.stopLive()
-            transcriber.onLiveTranscript = nil
-            transcriber.onConfirmedTranscript = nil
-        }
-        
-        let finalOutput = committedTranscription + uncommittedTranscription
-        if finalOutput.hasPrefix(committedTranscription) {
-            let leftover = String(finalOutput.dropFirst(committedTranscription.count)).trimmingCharacters(in: .whitespaces)
-            if !leftover.isEmpty {
-                let tokens = TokenizerManager.shared.tokenize(text: leftover, isFinal: true, currentMetric: sessionParser?.cursor.currentMetric)
-                sessionParser?.consume(tokens: tokens, isFinal: true)
+        // Mic is off, but the last decode and the final gate pass are still
+        // landing. `transcriber.stopLive()` is async, so the teardown and final
+        // parse run in a Task; `isFinishing` gates the mic button until they
+        // finish. The class is @MainActor, so every mutation below stays on the
+        // main actor. Callers stay synchronous and untouched.
+        isFinishing = true
+        Task {
+            defer { isFinishing = false }
+
+            if UserDefaults.standard.bool(forKey: "useOfflineWav2Vec") {
+                wav2VecTranscriber.stopLive()
+                wav2VecTranscriber.onLiveTranscript = nil
+                wav2VecTranscriber.onConfirmedTranscript = nil
+            } else {
+                await transcriber.stopLive()
+                transcriber.onLiveTranscript = nil
+                transcriber.onConfirmedTranscript = nil
+            }
+
+            let finalOutput = committedTranscription + uncommittedTranscription
+            if finalOutput.hasPrefix(committedTranscription) {
+                let leftover = String(finalOutput.dropFirst(committedTranscription.count)).trimmingCharacters(in: .whitespaces)
+                if !leftover.isEmpty {
+                    let tokens = TokenizerManager.shared.tokenize(text: leftover, isFinal: true, currentMetric: sessionParser?.cursor.currentMetric)
+                    sessionParser?.consume(tokens: tokens, isFinal: true)
+                } else {
+                    sessionParser?.consume(tokens: [], isFinal: true)
+                }
             } else {
                 sessionParser?.consume(tokens: [], isFinal: true)
             }
-        } else {
-            sessionParser?.consume(tokens: [], isFinal: true)
-        }
-        
-        committedTranscription = finalOutput
-        uncommittedTranscription = ""
-        
-        if let parser = sessionParser {
-            committedCommandCount = parser.commands.count
-            self.commandHistory = parser.commands
-            self.committedCommands = parser.commands
-            if let last = parser.commands.last, last.operation == parser.cursor.currentMetric {
-                self.currentCommand = last
-            } else {
-                self.currentCommand = nil
+
+            committedTranscription = finalOutput
+            uncommittedTranscription = ""
+
+            if let parser = sessionParser {
+                committedCommandCount = parser.commands.count
+                self.commandHistory = parser.commands
+                self.committedCommands = parser.commands
+                if let last = parser.commands.last, last.operation == parser.cursor.currentMetric {
+                    self.currentCommand = last
+                } else {
+                    self.currentCommand = nil
+                }
+                self.currentCursor = parser.cursor
+                self.activeSelection = parser.activeSelection
+                self.pendingValues = parser.pendingValues
             }
-            self.currentCursor = parser.cursor
-            self.activeSelection = parser.activeSelection
-            self.pendingValues = parser.pendingValues
+
+            sessionParser = nil
         }
-        
-        sessionParser = nil
     }
 
     private func processConfirmedChunk(_ confirmed: String) {
