@@ -6,6 +6,7 @@ AI/*.mlpackage
 **/openai_whisper-large-v3_turbo_632MB/
 **/openai_whisper-large-v3-v20240930_turbo_632MB/
 .claude/
+PeriodontalCharting.xcodeproj/
 **/xcuserdata/
 *.xcuserstate
 .DS_STORE
