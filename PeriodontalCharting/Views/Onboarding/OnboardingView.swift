@@ -171,10 +171,7 @@ struct OnboardingView: View {
                         .fontWeight(.semibold)
                         .frame(maxWidth: .infinity, alignment: .leading)
 
-                    Text("Read the passage below once for each condition. Recording more "
-                         + "than one is what lets the app still recognise you when you "
-                         + "change how you speak — measured, a single take made the app "
-                         + "silence its own dentist whenever he lowered his voice.")
+                    Text("Read the passage below once for each condition. Recording more than one is what lets the app still recognise you when you change how you speak — measured, a single take made the app silence its own dentist whenever he lowered his voice.")
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -188,7 +185,7 @@ struct OnboardingView: View {
                     // style the clinician actually dictates in, and it is the
                     // dominant ASR failure mode, so enrollment should cover it
                     // rather than being all prose.
-                    Text("""
+                    Text(verbatim: """
                     "Dokter gigi menyarankan untuk menggosok gigi sebanyak dua kali \
                     sehari, terutama sebelum tidur malam, guna menjaga kesehatan gusi Anda.
 
@@ -208,8 +205,7 @@ struct OnboardingView: View {
                     // The quiet take is the one that fixes the measured failure, so
                     // skipping it is called out rather than silently allowed.
                     if recordedTakes.contains(.normal) && !recordedTakes.contains(.soft) {
-                        Label("Record the quiet take too. Without it the app will withhold "
-                              + "your dictation whenever you speak softly.",
+                        Label("Record the quiet take too. Without it the app will withhold your dictation whenever you speak softly.",
                               systemImage: "exclamationmark.triangle.fill")
                             .font(.footnote)
                             .foregroundStyle(.orange)
@@ -226,7 +222,7 @@ struct OnboardingView: View {
                                           ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                                         .foregroundStyle(enrollmentSucceeded ? .green : .orange)
                                 }
-                                Text(isEnrolling ? "Registering your voice…" : enrollmentStatus)
+                                (isEnrolling ? Text("Registering your voice…") : Text(enrollmentStatus))
                                     .font(.footnote)
                             }
                             if !enrollmentDetail.isEmpty && !isEnrolling {
@@ -271,9 +267,7 @@ struct OnboardingView: View {
                 // enrolling leaves `speakerVerdict` returning `.matched` for
                 // everything — every voice in the room reaches the chart.
                 if !canComplete {
-                    Label("Record the normal take and register your voice first. Until "
-                          + "then the app cannot tell you from anyone else in the room, "
-                          + "and every voice would reach the chart.",
+                    Label("Record the normal take and register your voice first. Until then the app cannot tell you from anyone else in the room, and every voice would reach the chart.",
                           systemImage: "exclamationmark.shield.fill")
                         .font(.footnote)
                         .foregroundStyle(.orange)

@@ -196,14 +196,14 @@ enum AnnotationOperation: Hashable {
     
     var displayName: String {
         switch self {
-        case .probingDepth: return "Probing Depth"
-        case .gingivalMargin: return "Gingival Margin"
-        case .mobility: return "Mobility"
-        case .furcation: return "Furcation"
-        case .bleeding: return "Bleeding"
-        case .plaque: return "Plaque"
-        case .missing: return "Missing"
-        case .implant: return "Implant"
+        case .probingDepth: return String(localized: "Probing Depth")
+        case .gingivalMargin: return String(localized: "Gingival Margin")
+        case .mobility: return String(localized: "Mobility")
+        case .furcation: return String(localized: "Furcation")
+        case .bleeding: return String(localized: "Bleeding")
+        case .plaque: return String(localized: "Plaque")
+        case .missing: return String(localized: "Missing")
+        case .implant: return String(localized: "Implant")
         }
     }
 }

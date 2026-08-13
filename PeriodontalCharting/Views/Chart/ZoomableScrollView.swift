@@ -89,7 +89,8 @@ struct ZoomableScrollView<Content: View>: UIViewRepresentable {
             
             if showAIMode, let target = targetRect {
                 let zoomBinding = _zoomScale
-                
+                let coordinator = context.coordinator
+
                 DispatchQueue.main.async {
                     let targetScale = scrollView.maximumZoomScale
                     let visibleWidth = scrollView.bounds.width
@@ -117,10 +118,16 @@ struct ZoomableScrollView<Content: View>: UIViewRepresentable {
                         scrollView.zoomScale = targetScale
                     }
                     
+                    // Suspend the pan-bound clamp while the camera drives the
+                    // offset, so it can freely frame an edge tooth without the
+                    // guard nudging it mid-flight.
+                    coordinator.activeCameraAnimations += 1
                     UIView.animate(withDuration: 0.4, delay: 0, options: [.curveEaseInOut, .beginFromCurrentState]) {
                         scrollView.contentOffset = CGPoint(x: offsetX, y: offsetY)
+                    } completion: { _ in
+                        coordinator.activeCameraAnimations = max(0, coordinator.activeCameraAnimations - 1)
                     }
-                    
+
                     zoomBinding.wrappedValue = targetScale
                 }
             } else if !showAIMode {
@@ -148,6 +155,9 @@ struct ZoomableScrollView<Content: View>: UIViewRepresentable {
         var isUpdatingFromCoordinator = false
         var lastShowAIMode: Bool = false
         var lastTargetRect: CGRect? = nil
+        /// >0 while the AI-Mode camera is animating the offset; suspends the
+        /// pan-bound clamp so it does not fight the programmatic framing.
+        var activeCameraAnimations = 0
 
         init(_ parent: ZoomableScrollView) {
             self.parent = parent
@@ -161,6 +171,44 @@ struct ZoomableScrollView<Content: View>: UIViewRepresentable {
             isUpdatingFromCoordinator = true
             parent.zoomScale = scrollView.zoomScale
             isUpdatingFromCoordinator = false
+            clampToKeepContentVisible(scrollView)
+        }
+
+        func scrollViewDidScroll(_ scrollView: UIScrollView) {
+            clampToKeepContentVisible(scrollView)
+        }
+
+        /// Prevents the chart from ever being panned entirely off-screen (the
+        /// blank-white state). Only active in the AI-Mode free-pan regime, where
+        /// the oversized content insets deliberately let the offset run past the
+        /// content edges — in the normal regime UIScrollView already clamps, so
+        /// its bounce is left untouched.
+        private func clampToKeepContentVisible(_ scrollView: UIScrollView) {
+            guard activeCameraAnimations == 0 else { return }
+            let inset = scrollView.contentInset
+            guard inset.left > 1 || inset.top > 1 else { return }
+
+            let bounds = scrollView.bounds.size
+            let content = scrollView.contentSize
+            guard bounds.width > 0, bounds.height > 0 else { return }
+
+            // Keep at least this much of the chart on screen on each axis.
+            let keepX = max(80, bounds.width * 0.18)
+            let keepY = max(80, bounds.height * 0.18)
+
+            var offset = scrollView.contentOffset
+
+            let loX = keepX - bounds.width
+            let hiX = content.width - keepX
+            if loX <= hiX { offset.x = min(max(offset.x, loX), hiX) }
+
+            let loY = keepY - bounds.height
+            let hiY = content.height - keepY
+            if loY <= hiY { offset.y = min(max(offset.y, loY), hiY) }
+
+            if offset != scrollView.contentOffset {
+                scrollView.contentOffset = offset
+            }
         }
     }
 }

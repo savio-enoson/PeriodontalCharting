@@ -103,7 +103,7 @@ struct ChartDashboard: View {
                         }
                     }
                 } label: {
-                    Label("AI Mode", systemImage: "apple.intelligence")
+                    Label("Voice", systemImage: "apple.intelligence")
                 }
                 
                 Button {
@@ -118,7 +118,7 @@ struct ChartDashboard: View {
                 Button {
                     show3DView = true
                 } label: {
-                    Label("", systemImage: "view.3d")
+                    Label("3D", systemImage: "cube.transparent")
                 }
                 
                 Button {
@@ -127,11 +127,11 @@ struct ChartDashboard: View {
                     Label("Zoom", systemImage: "magnifyingglass")
                 }
                 
-                Button {
-                    showDebugMenu = true
-                } label: {
-                    Label("Debug", systemImage: "ladybug")
-                }
+//                Button {
+//                    showDebugMenu = true
+//                } label: {
+//                    Label("Debug", systemImage: "ladybug")
+//                }
                 Button {
                     saveChart()
                 } label: {
@@ -235,7 +235,7 @@ struct ChartDashboard: View {
                 .environmentObject(selectionModel)
                 .environmentObject(aiViewModel)
         }
-        .sheet(isPresented: $showSettings) {
+        .fullScreenCover(isPresented: $showSettings) {
             OnboardingView(hasCompletedOnboarding: .constant(true), isSettingsMode: true)
         }
         .sheet(item: $exportURL) { url in
