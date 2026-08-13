@@ -55,13 +55,13 @@ struct AIListeningView: View {
                     .disabled(viewModel.isFinishing || (!modelReady && !viewModel.isDictating))
 
                     // DEBUG: Start Simulation
-                    Button(action: {
-                        viewModel.toggleSimulation(from: viewModel.selectedTestTranscript)
-                    }) {
-                        Image(systemName: viewModel.isListening ? "stop.circle.fill" : "play.circle.fill")
-                            .font(.title2)
-                            .foregroundStyle(viewModel.isListening ? .red : .blue)
-                    }
+//                    Button(action: {
+//                        viewModel.toggleSimulation(from: viewModel.selectedTestTranscript)
+//                    }) {
+//                        Image(systemName: viewModel.isListening ? "stop.circle.fill" : "play.circle.fill")
+//                            .font(.title2)
+//                            .foregroundStyle(viewModel.isListening ? .red : .blue)
+//                    }
                     // The two feeds are mutually exclusive, and starting a
                     // simulation mid-finish would race the final commit for the
                     // chart. AIVoiceViewModel guards against it, but greying the
