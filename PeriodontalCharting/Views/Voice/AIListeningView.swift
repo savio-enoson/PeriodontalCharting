@@ -204,7 +204,7 @@ struct AIListeningView: View {
                             ForEach(Array(viewModel.commandHistory.suffix(5).reversed().enumerated()), id: \.offset) { _, cmd in
                                 HistoryCard(
                                     operation: cmd.operation.displayName,
-                                    selection: "Tooth \(cmd.teethSelection.startTooth.toothNumber) (\(cmd.values.map { String($0) }.joined(separator: ", ")))"
+                                    selection: "\(String(localized: "Tooth")) \(cmd.teethSelection.startTooth.toothNumber) (\(cmd.values.map { String($0) }.joined(separator: ", ")))"
                                 )
                             }
                         }
@@ -240,7 +240,7 @@ struct AIListeningView: View {
 }
 
 struct CommandRow: View {
-    let label: String
+    let label: LocalizedStringKey
     let value: String
     
     var body: some View {
