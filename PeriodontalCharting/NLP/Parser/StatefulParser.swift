@@ -207,13 +207,17 @@ struct StatefulParser: Equatable, Sendable {
                 
                 _ = cursor.jumpTo(tooth: tooth, aspect: activeSelection?.endAspect ?? cursor.currentAspect, updateSequenceIndex: cursor.currentMetric == .probingDepth)
             } else {
-                print("DEBUG toothIdentifier(\(tooth)): else block entered. activeSel=\(activeSelection != nil), pendingEmpty=\(pendingNumbers.isEmpty), listAgg=\(isListAggregationActive), rangeStart=\(isRangeStartPending), freshMetric=\(isFreshMetric)")
+                let isPlainTooth = activeSelection != nil && activeSelection!.startSite == nil && activeSelection!.startAspect == nil && activeSelection!.endSite == nil && activeSelection!.endAspect == nil && pendingAnatomies.isEmpty
+                
+                print("DEBUG toothIdentifier(\(tooth)): else block entered. activeSel=\(activeSelection != nil), pendingEmpty=\(pendingNumbers.isEmpty), listAgg=\(isListAggregationActive), isPlainTooth=\(isPlainTooth), rangeStart=\(isRangeStartPending), freshMetric=\(isFreshMetric)")
                 if let _ = activeSelection, pendingNumbers.isEmpty {
                     if isRangeStartPending {
                         activeSelection?.endTooth = ToothObject.create(number: tooth)
                         isRangeStartPending = false
-                    } else if isListAggregationActive {
-                        pendingTeeth.append(tooth)
+                    } else if isListAggregationActive || isPlainTooth {
+                        if !pendingTeeth.contains(tooth) {
+                            pendingTeeth.append(tooth)
+                        }
                         isListAggregationActive = false
                     } else {
                         emitBoolIfPending()
@@ -419,11 +423,12 @@ struct StatefulParser: Equatable, Sendable {
             
             if activeSelection == nil {
                 if let resolved = ChartAnatomyResolver.resolve(anatomy: a, for: cursor.currentTooth, currentAspect: cursor.currentAspect) {
+                    if resolved.aspect != cursor.currentAspect {
+                        let aspectType: AspectType = (resolved.aspect == .outer) ? .buccal : .palatal
+                        _ = cursor.jumpTo(aspect: aspectType)
+                    }
+                    
                     if resolved.site == nil {
-                        if resolved.aspect != cursor.currentAspect {
-                            let aspectType: AspectType = (resolved.aspect == .outer) ? .buccal : .palatal
-                            _ = cursor.jumpTo(aspect: aspectType)
-                        }
                         if !isRangeStartPending {
                             // Normal pass-switch (even if redundant): consume via cursor jump, and allow it to be stored.
                             isRangeStartPending = false
@@ -530,35 +535,46 @@ struct StatefulParser: Equatable, Sendable {
                 discardOrFlush()
                 restoreToMainSequence()
                 
-            case .missing, .missing2:
-                discardOrFlush()
+            case .missing:
                 var targets = pendingTeeth
-                let currentT = activeSelection?.startTooth.toothNumber ?? cursor.currentTooth
-                if !targets.contains(currentT) {
-                    targets.append(currentT)
+                
+                if let explicitSel = activeSelection?.startTooth.toothNumber {
+                    if !targets.contains(explicitSel) {
+                        if !isSelectionUsed {
+                            targets.append(explicitSel)
+                        } else if !pendingNumbers.isEmpty {
+                            targets.append(explicitSel)
+                        }
+                    }
                 }
                 
-                for targetTooth in targets {
-                    missingTeeth.insert(targetTooth)
-                    let cmd = AnnotationCommand(
-                        operation: .missing,
-                        teethSelection: TeethSelection(startTooth: ToothObject.create(number: targetTooth), startAspect: nil, startSite: nil, endTooth: ToothObject.create(number: targetTooth), endAspect: nil, endSite: nil),
-                        aspect: cursor.currentAspect,
-                        values: ["True"]
-                    )
-                    commands.append(cmd)
-                }
+                discardOrFlush()
                 
-                pendingTeeth = []
-                activeSelection = nil
-                didSpecifyExplicitFullAspect = false
-                cursor.resyncToothToSequence()
-                cursor.syncWithSequence()
-                
-                while missingTeeth.contains(cursor.currentTooth) {
-                    if !cursor.advanceToNextTooth() { break }
+                if targets.isEmpty {
+                    print("DEBUG Parser: Ignoring .missing because no explicit tooth was targeted")
+                } else {
+                    for targetTooth in targets {
+                        missingTeeth.insert(targetTooth)
+                        let cmd = AnnotationCommand(
+                            operation: .missing,
+                            teethSelection: TeethSelection(startTooth: ToothObject.create(number: targetTooth), startAspect: nil, startSite: nil, endTooth: ToothObject.create(number: targetTooth), endAspect: nil, endSite: nil),
+                            aspect: cursor.currentAspect,
+                            values: ["True"]
+                        )
+                        commands.append(cmd)
+                    }
+                    
+                    pendingTeeth = []
+                    activeSelection = nil
+                    didSpecifyExplicitFullAspect = false
+                    cursor.resyncToothToSequence()
+                    cursor.syncWithSequence()
+                    
+                    while missingTeeth.contains(cursor.currentTooth) {
+                        if !cursor.advanceToNextTooth() { break }
+                    }
+                    restoreToMainSequence()
                 }
-                restoreToMainSequence()
                 
             case .until, .until2:
                 isWaitingForRangeEnd = true
@@ -620,6 +636,7 @@ struct StatefulParser: Equatable, Sendable {
             } else if w == "_sep_" {
                 discardOrFlush(clearSelection: false)
                 isListAggregationActive = false
+                pendingTeeth.removeAll()
                 if activeSelection == nil && pendingNumbers.isEmpty {
                     pendingAnatomies.removeAll()
                 }

@@ -2,6 +2,7 @@ import Foundation
 
 extension VoiceTokenizer {
     static func tokenize(text: String, isFinal: Bool = false, currentMetric: AnnotationOperation? = nil) -> [VoiceToken] {
+        var currentMetric = currentMetric
         var tokens: [VoiceToken] = []
         let cleaned = text.lowercased()
             // Fix wav2vec STT spaced digits for tooth identifiers (e.g. "gigi 1 8" -> "gigi 18")
@@ -135,7 +136,7 @@ extension VoiceTokenizer {
             words = recovered
         }
 
-        var i = 0
+        print("DEBUG Tokenizer input words: \(words)"); var i = 0
         var expectedValues = 3
         var currentValues = 0
 
@@ -206,33 +207,33 @@ extension VoiceTokenizer {
             if w == "semua" || w == "semuanya" || w == "seluruh" || w == "seluruhnya" { tokens.append(.action(.all)); i += 1; continue }
             if w == "lanjut" || w == "selesai" || w == "kemudian" || w == "selanjutnya" || w == "berikutnya" { tokens.append(.action(.commit)); i += 1; continue }
             
-            if w == "midlingual" || w == "tengahlingual" { tokens.append(.anatomy(.midLingual)); updateExpectedValues(for: .midLingual); i += 1; continue }
-            if w == "midbukal" || w == "tengahbukal" { tokens.append(.anatomy(.midBuccal)); updateExpectedValues(for: .midBuccal); i += 1; continue }
-            if w == "midpalatal" || w == "tengahpalatal" { tokens.append(.anatomy(.midPalatal)); updateExpectedValues(for: .midPalatal); i += 1; continue }
-            if w == "midlabial" || w == "tengahlabial" { tokens.append(.anatomy(.midLabial)); updateExpectedValues(for: .midLabial); i += 1; continue }
+            if w == "midlingual" || w == "tengahlingual" { tokens.append(.anatomy(.midLingual)); updateExpectedValues(for: .midLingual); currentValues = 0; i += 1; continue }
+            if w == "midbukal" || w == "tengahbukal" { tokens.append(.anatomy(.midBuccal)); updateExpectedValues(for: .midBuccal); currentValues = 0; i += 1; continue }
+            if w == "midpalatal" || w == "tengahpalatal" { tokens.append(.anatomy(.midPalatal)); updateExpectedValues(for: .midPalatal); currentValues = 0; i += 1; continue }
+            if w == "midlabial" || w == "tengahlabial" { tokens.append(.anatomy(.midLabial)); updateExpectedValues(for: .midLabial); currentValues = 0; i += 1; continue }
 
             if w == "mid" || w == "tengah" {
-                if nextW == "lingual" { tokens.append(.anatomy(.midLingual)); updateExpectedValues(for: .midLingual); i += 2; continue }
-                if nextW == "bukal" { tokens.append(.anatomy(.midBuccal)); updateExpectedValues(for: .midBuccal); i += 2; continue }
-                if nextW == "palatal" { tokens.append(.anatomy(.midPalatal)); updateExpectedValues(for: .midPalatal); i += 2; continue }
-                if nextW == "labial" { tokens.append(.anatomy(.midLabial)); updateExpectedValues(for: .midLabial); i += 2; continue }
+                if nextW == "lingual" { tokens.append(.anatomy(.midLingual)); updateExpectedValues(for: .midLingual); currentValues = 0; i += 2; continue }
+                if nextW == "bukal" { tokens.append(.anatomy(.midBuccal)); updateExpectedValues(for: .midBuccal); currentValues = 0; i += 2; continue }
+                if nextW == "palatal" { tokens.append(.anatomy(.midPalatal)); updateExpectedValues(for: .midPalatal); currentValues = 0; i += 2; continue }
+                if nextW == "labial" { tokens.append(.anatomy(.midLabial)); updateExpectedValues(for: .midLabial); currentValues = 0; i += 2; continue }
             }
             
             if w == "mesio" || w == "mesial" {
-                if nextW == "bukal" { tokens.append(.anatomy(.mesioBuccal)); updateExpectedValues(for: .mesioBuccal); i += 2; continue }
-                if nextW == "lingual" { tokens.append(.anatomy(.mesioLingual)); updateExpectedValues(for: .mesioLingual); i += 2; continue }
-                if nextW == "palatal" { tokens.append(.anatomy(.mesioPalatal)); updateExpectedValues(for: .mesioPalatal); i += 2; continue }
-                tokens.append(.anatomy(.mesial)); updateExpectedValues(for: .mesial); i += 1; continue
+                if nextW == "bukal" { tokens.append(.anatomy(.mesioBuccal)); updateExpectedValues(for: .mesioBuccal); currentValues = 0; i += 2; continue }
+                if nextW == "lingual" { tokens.append(.anatomy(.mesioLingual)); updateExpectedValues(for: .mesioLingual); currentValues = 0; i += 2; continue }
+                if nextW == "palatal" { tokens.append(.anatomy(.mesioPalatal)); updateExpectedValues(for: .mesioPalatal); currentValues = 0; i += 2; continue }
+                tokens.append(.anatomy(.mesial)); updateExpectedValues(for: .mesial); currentValues = 0; i += 1; continue
             }
             if w == "disto" || w == "distal" {
-                if nextW == "bukal" { tokens.append(.anatomy(.distoBuccal)); updateExpectedValues(for: .distoBuccal); i += 2; continue }
-                if nextW == "lingual" { tokens.append(.anatomy(.distoLingual)); updateExpectedValues(for: .distoLingual); i += 2; continue }
-                if nextW == "palatal" { tokens.append(.anatomy(.distoPalatal)); updateExpectedValues(for: .distoPalatal); i += 2; continue }
-                tokens.append(.anatomy(.distal)); updateExpectedValues(for: .distal); i += 1; continue
+                if nextW == "bukal" { tokens.append(.anatomy(.distoBuccal)); updateExpectedValues(for: .distoBuccal); currentValues = 0; i += 2; continue }
+                if nextW == "lingual" { tokens.append(.anatomy(.distoLingual)); updateExpectedValues(for: .distoLingual); currentValues = 0; i += 2; continue }
+                if nextW == "palatal" { tokens.append(.anatomy(.distoPalatal)); updateExpectedValues(for: .distoPalatal); currentValues = 0; i += 2; continue }
+                tokens.append(.anatomy(.distal)); updateExpectedValues(for: .distal); currentValues = 0; i += 1; continue
             }
             
-            if w == "rahang" && nextW == "atas" { tokens.append(.anatomy(.upperJaw)); updateExpectedValues(for: .upperJaw); i += 2; continue }
-            if w == "rahang" && nextW == "bawah" { tokens.append(.anatomy(.lowerJaw)); updateExpectedValues(for: .lowerJaw); i += 2; continue }
+            if w == "rahang" && nextW == "atas" { tokens.append(.anatomy(.upperJaw)); updateExpectedValues(for: .upperJaw); currentValues = 0; i += 2; continue }
+            if w == "rahang" && nextW == "bawah" { tokens.append(.anatomy(.lowerJaw)); updateExpectedValues(for: .lowerJaw); currentValues = 0; i += 2; continue }
             
             if w == "gigi" {
                 if i + 1 < words.count {
@@ -304,6 +305,7 @@ extension VoiceTokenizer {
                     if i + 1 < words.count, let nextNum = parseIntOrWord(words[i+1]), nextNum >= 1 && nextNum <= 8 {
                         let combined = num * 10 + nextNum
                         var isDefinitelyTooth = false
+                        var isSequenceOfTeeth = false
                         let isStartOfBlock = currentValues == 0 || (expectedValues >= 3 && currentValues % expectedValues == 0)
                         
                         if i > 0 {
@@ -321,35 +323,51 @@ extension VoiceTokenizer {
                         }
                         
                         if !isDefinitelyTooth {
+                            let nextWord = i + 2 < words.count ? words[i+2] : "nil"
+                            var trailingContextFound = false
                             if i + 2 < words.count {
-                                let nextWord = words[i+2]
-                                if isAspectOrAction(nextWord) {
-                                    isDefinitelyTooth = true
-                                    print("DEBUG Tokenizer: \(combined) is followed by aspect/action \(nextWord)")
-                                } else if isStartOfBlock && hasExactlyNValues(words: words, from: i + 2, expected: expectedValues) {
-                                    // If expectedValues is < 3 (e.g. after a site specific anatomy), a sequence of identical digits
-                                    // like "2 2 2" is almost certainly a sequence of values rather than tooth 22 + value 2.
-                                    if num == nextNum && expectedValues < 3 {
-                                        isDefinitelyTooth = false
-                                    } else {
-                                        isDefinitelyTooth = true
-                                        print("DEBUG Tokenizer: \(combined) is followed by exactly \(expectedValues) values")
+                                for word in words.dropFirst(i+2) {
+                                    if word == "_sep_" || word == "," || word == "." { break }
+                                    if isAspectOrAction(word) {
+                                        trailingContextFound = true
+                                        break
                                     }
-                                } else if isSequenceOfTeethEndingInAction(words: words, from: i) {
+                                }
+                            }
+                            
+                            if trailingContextFound {
+                                isSequenceOfTeeth = true
+                                print("DEBUG Tokenizer: \(combined) is followed by aspect/action context")
+                                isDefinitelyTooth = true
+                            } else if isStartOfBlock && hasExactlyNValues(words: words, from: i + 2, expected: expectedValues) {
+                                // If expectedValues is < 3 (e.g. after a site specific anatomy), a sequence of identical digits
+                                // like "2 2 2" is almost certainly a sequence of values rather than tooth 22 + value 2.
+                                if num == nextNum && expectedValues < 3 {
+                                    isDefinitelyTooth = false
+                                } else {
                                     isDefinitelyTooth = true
-                                    print("DEBUG Tokenizer: \(combined) is part of a sequence of teeth ending in action")
-                                } else if currentValues == 0 && num != nextNum && (nextWord == "_sep_" || nextWord == "," || nextWord == "." || nextWord == "dan" || nextWord == "maupun" || nextWord == "serta") {
+                                    isSequenceOfTeeth = true // Protect from aggressive PD check
+                                    print("DEBUG Tokenizer: \(combined) is followed by exactly \(expectedValues) values")
+                                }
+                            } else if isSequenceOfTeethEndingInAction(words: words, from: i) {
+                                isSequenceOfTeeth = true
+                                isDefinitelyTooth = true
+                                print("DEBUG Tokenizer: \(combined) is part of a sequence of teeth ending in action")
+                            } else {
+                                print("DEBUG Eval: currentValues=\(currentValues), num=\(num), nextNum=\(nextNum), nextWord=\(nextWord)")
+                                if currentValues == 0 && num != nextNum && (nextWord == "_sep_" || nextWord == "nil" || nextWord == "," || nextWord == "." || nextWord == "dan" || nextWord == "maupun" || nextWord == "serta") {
                                     isDefinitelyTooth = true
+                                    isSequenceOfTeeth = true
                                     print("DEBUG Tokenizer: \(combined) is followed by separator and currentValues == 0")
                                 }
-                            } else {
-                                if isFinal {
-                                    isDefinitelyTooth = true
-                                }
+                            }
+                            
+                            if !isDefinitelyTooth && isFinal && nextWord == "nil" && expectedValues != 3 {
+                                isDefinitelyTooth = true
                             }
                         }
                         
-                        if let metric = currentMetric, metric == .probingDepth {
+                        if let metric = currentMetric, metric == .probingDepth, !isSequenceOfTeeth {
                             isDefinitelyTooth = false
                         }
                         
@@ -367,7 +385,7 @@ extension VoiceTokenizer {
                 i += 1; continue
             }
             
-            if let anatomy = AnatomyType(rawValue: w) { tokens.append(.anatomy(anatomy)); updateExpectedValues(for: anatomy); i += 1; continue }
+            if let anatomy = AnatomyType(rawValue: w) { tokens.append(.anatomy(anatomy)); updateExpectedValues(for: anatomy); currentValues = 0; i += 1; continue }
             if w == "lanjut" {
                 tokens.append(.action(.next))
                 expectedValues = 3; currentValues = 0
@@ -388,16 +406,16 @@ extension VoiceTokenizer {
             }
             if let action = ActionType(rawValue: w) { tokens.append(.action(action)); expectedValues = 3; currentValues = 0; i += 1; continue }
             
-            if w == "resesi" || w == "kemunduran" { tokens.append(.metric(.gingivalMargin, multiplier: -1)); updateExpectedValues(for: AnnotationOperation.gingivalMargin); i += 1; continue }
-            if w == "margin" || w == "gingival" { tokens.append(.metric(.gingivalMargin, multiplier: 1)); updateExpectedValues(for: AnnotationOperation.gingivalMargin); i += 1; continue }
-            if w == "enlargement" || w == "pembengkakan" || w == "pembesaran" { tokens.append(.metric(.gingivalMargin, multiplier: 1)); updateExpectedValues(for: AnnotationOperation.gingivalMargin); i += 1; continue }
+            if w == "resesi" || w == "kemunduran" { tokens.append(.metric(.gingivalMargin, multiplier: -1)); currentMetric = .gingivalMargin; updateExpectedValues(for: AnnotationOperation.gingivalMargin); i += 1; continue }
+            if w == "margin" || w == "gingival" { tokens.append(.metric(.gingivalMargin, multiplier: 1)); currentMetric = .gingivalMargin; updateExpectedValues(for: AnnotationOperation.gingivalMargin); i += 1; continue }
+            if w == "enlargement" || w == "pembengkakan" || w == "pembesaran" { tokens.append(.metric(.gingivalMargin, multiplier: 1)); currentMetric = .gingivalMargin; updateExpectedValues(for: AnnotationOperation.gingivalMargin); i += 1; continue }
             
-            if w == "poket" || w == "probing" || w == "kedalaman" { tokens.append(.metric(.probingDepth, multiplier: 1)); updateExpectedValues(for: AnnotationOperation.probingDepth); i += 1; continue }
-            if w == "bop" || w == "berdarah" { tokens.append(.metric(.bleeding, multiplier: 1)); updateExpectedValues(for: AnnotationOperation.bleeding); i += 1; continue }
-            if w == "plaque" || w == "plak" { tokens.append(.metric(.plaque, multiplier: 1)); updateExpectedValues(for: AnnotationOperation.plaque); i += 1; continue }
-            if w == "kegoyangan" || w == "mobilitas" || w == "mobility" { tokens.append(.metric(.mobility, multiplier: 1)); updateExpectedValues(for: AnnotationOperation.mobility); i += 1; continue }
-            if w == "furkasi" || w == "furcation" { tokens.append(.metric(.furcation, multiplier: 1)); updateExpectedValues(for: AnnotationOperation.furcation); i += 1; continue }
-            if w == "implan" || w == "implant" { tokens.append(.metric(.implant, multiplier: 1)); updateExpectedValues(for: AnnotationOperation.implant); i += 1; continue }
+            if w == "poket" || w == "probing" || w == "kedalaman" { tokens.append(.metric(.probingDepth, multiplier: 1)); currentMetric = .probingDepth; updateExpectedValues(for: AnnotationOperation.probingDepth); i += 1; continue }
+            if w == "bop" || w == "berdarah" { tokens.append(.metric(.bleeding, multiplier: 1)); currentMetric = .bleeding; updateExpectedValues(for: AnnotationOperation.bleeding); i += 1; continue }
+            if w == "plaque" || w == "plak" { tokens.append(.metric(.plaque, multiplier: 1)); currentMetric = .plaque; updateExpectedValues(for: AnnotationOperation.plaque); i += 1; continue }
+            if w == "kegoyangan" || w == "mobilitas" || w == "mobility" { tokens.append(.metric(.mobility, multiplier: 1)); currentMetric = .mobility; updateExpectedValues(for: AnnotationOperation.mobility); i += 1; continue }
+            if w == "furkasi" || w == "furcation" { tokens.append(.metric(.furcation, multiplier: 1)); currentMetric = .furcation; updateExpectedValues(for: AnnotationOperation.furcation); i += 1; continue }
+            if w == "implan" || w == "implant" { tokens.append(.metric(.implant, multiplier: 1)); currentMetric = .implant; updateExpectedValues(for: AnnotationOperation.implant); i += 1; continue }
             
             tokens.append(.word(w))
             i += 1

@@ -12,6 +12,7 @@ A comprehensive, iPad-optimised SwiftUI application for dental professionals to 
 | **[frontend_guide.md](frontend_guide.md)** | Project structure, architecture, Swift file-by-file reference |
 | **[system_guide.md](system_guide.md)** | NLP pipeline, tokenization, `StatefulParser` design, command inference, annotation logic |
 | **[ml_tokenizer_guide.md](ml_tokenizer_guide.md)** | ML tokenizer (MLVoiceTokenizer + TokenizerManager): label schema, state conditioning, inference loop, post-processing |
+| **[STT_documentation.md](STT_documentation.md)** | Speech-to-text layer: Wav2Vec2 (default) and Whisper pipelines, audio capture, VAD, CTC decoding, speaker gate |
 
 ---
 

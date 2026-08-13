@@ -4,7 +4,6 @@ extension VoiceTokenizer {
     static func isToothPrefix(_ word: String) -> Bool {
         let w = word.lowercased()
         let prefixes = [
-            "lanjut", "kemudian", "selanjutnya", "berikutnya",
             "sampai", "hingga", "ke", "dan", "maupun", "gigi"
         ]
         return prefixes.contains(w)
@@ -32,17 +31,25 @@ extension VoiceTokenizer {
     
     static func hasExactlyNValues(words: [String], from index: Int, expected: Int) -> Bool {
         var valuesFound = 0
+        print("DEBUG hasExactlyNValues: expected=\(expected), words=\(Array(words.suffix(from: index).prefix(5)))")
         for i in index..<words.count {
             let word = words[i].lowercased()
-            if word == "_sep_" || word == "," || word == "." || word == "dan" || word == "maupun" {
+            if word == "_sep_" || word == "." {
+                print("DEBUG hasExactlyNValues: break on \(word)")
+                break
+            }
+            if word == "," || word == "dan" || word == "maupun" {
                 continue
             }
             if let num = parseIntOrWord(word), num >= 0 && num <= 9 {
                 valuesFound += 1
+                print("DEBUG hasExactlyNValues: found value \(num)")
             } else {
+                print("DEBUG hasExactlyNValues: break on non-value \(word)")
                 break
             }
         }
+        print("DEBUG hasExactlyNValues: returning \(valuesFound == expected) (found \(valuesFound))")
         return valuesFound == expected
     }
     

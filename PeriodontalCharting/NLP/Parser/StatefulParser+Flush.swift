@@ -10,6 +10,7 @@ extension StatefulParser {
             print("DEBUG discardOrFlush: before if clearSelection=\(clearSelection)")
             if clearSelection {
                 print("DEBUG discardOrFlush: EXECUTING activeSelection = nil")
+                emitBoolIfPending()
                 activeSelection = nil
                 didSpecifyExplicitFullAspect = false
             }

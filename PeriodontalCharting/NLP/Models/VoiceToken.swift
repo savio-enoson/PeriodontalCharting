@@ -2,8 +2,7 @@ import Foundation
 
 enum ActionType: String, Equatable {
     case next = "lanjut"
-    case missing = "gak"
-    case missing2 = "tidak"
+    case missing = "missing"
     case from = "dari"
     case until = "sampai"
     case until2 = "hingga"
