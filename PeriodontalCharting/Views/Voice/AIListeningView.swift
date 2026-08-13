@@ -26,7 +26,7 @@ struct AIListeningView: View {
                     // Gated on the shared model: a spinner shows until it's ready
                     // (TranscriptionEngine is @Observable, so this flips automatically),
                     // then the mic becomes tappable. This is the model-ready indicator.
-                    let modelReady = TranscriptionEngine.shared.isReady
+                    let modelReady = Wav2VecEngine.shared.isModelLoaded
                     Button(action: { viewModel.toggleLiveDictation() }) {
                         if viewModel.isFinishing {
                             // The mic is already off, but the last decode and the

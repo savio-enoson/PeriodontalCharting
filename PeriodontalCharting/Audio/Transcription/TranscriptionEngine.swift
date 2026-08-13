@@ -33,24 +33,19 @@ import Foundation
 import CoreML
 import Observation
 import os
-import WhisperKit
 
 @MainActor
 @Observable
 final class TranscriptionEngine {
     @ObservationIgnored static let shared = TranscriptionEngine()
 
-    @ObservationIgnored private(set) var whisperKit: WhisperKit?
     @ObservationIgnored private(set) var vad: SileroVADEngine?
-    /// Observable so the UI can show a model-ready indicator (see ChartDashboard).
+    /// Observable so the UI can show a gate-ready indicator.
     private(set) var isReady = false
     private(set) var statusMessage = "Loading model…"
-    /// 0…1 while downloading, 0 otherwise. Bind this for a determinate bar.
+    /// Retained for UI compatibility (the splash binds it). Always 0 now that
+    /// there is no model to download — the Wav2Vec model is bundled.
     private(set) var downloadProgress: Double = 0
-
-    /// True when this launch skipped WhisperKit. Callers that need transcription
-    /// should check this rather than testing `whisperKit == nil` themselves.
-    private(set) var isGateOnly = false
 
     /// App-wide speaker gate. Enrollment lives HERE, not in whatever view happened
     /// to trigger it — a locally-constructed service deallocates and takes the
@@ -58,25 +53,9 @@ final class TranscriptionEngine {
     private(set) var speakerGate: SpeakerGateService?
 
     /// The in-flight (or completed) load, so concurrent callers coalesce onto one
-    /// load instead of racing to build multiple WhisperKit instances.
+    /// load instead of racing to build the gate infrastructure twice.
     @ObservationIgnored private var loadTask: Task<Void, Never>?
     @ObservationIgnored private var enrollmentTask: Task<Void, Never>?
-
-    // Model naming: folders in argmaxinc/whisperkit-coreml use an underscore before
-    // "turbo" (openai_whisper-large-v3_turbo), NOT a hyphen.
-    private static let bundledModelName = "openai_whisper-large-v3-v20240930_turbo_632MB"
-    /// Exact repo folder name. `WhisperKit.download` globs `*<variant>/*`.
-    private static let networkModelVariant = "openai_whisper-large-v3-v20240930_turbo_632MB"
-    /// Remembers where a completed download landed.
-    private static let cachedModelPathKey = "WhisperKitCachedModelPath"
-
-    /// [Dev] Skip the WhisperKit load entirely. The speaker gate, the extractor and
-    /// enrollment are all independent of it, so gate work does not need the ~187 s
-    /// encoder compile. Launch drops to ~2 s; transcription is disabled.
-    private static let gateOnlyKey = "GateOnlyMode"
-
-    /// [Dev] Runtime A/B switch for the encoder compute unit — see `performLoad`.
-    private static let fastModelLoadKey = "FastModelLoad"
 
     /// Take 1 of the ACTIVE profile. Kept as a single URL because some callers
     /// still want "the primary recording"; use `VoiceProfileStore.activeTakeURLs`
@@ -126,183 +105,17 @@ final class TranscriptionEngine {
     }
 
     private func performLoad() async {
-        guard whisperKit == nil else { return }
-        do {
-            // GATE-ONLY: bail out before anything expensive. Everything the gate
-            // path needs is loaded elsewhere — `makeSpeakerGateIfNeeded()` builds
-            // the ECAPA embedder on demand and TSEEngine.prepare() runs on its own
-            // task — so the gate, enrollment and the extractor all still work.
-            if UserDefaults.standard.bool(forKey: Self.gateOnlyKey) {
-                isGateOnly = true
-                vad = try? SileroVADEngine()
-                isReady = true
-                downloadProgress = 0
-                statusMessage = "Gate-only mode — transcription disabled"
-                print("[ModelLoad] GATE-ONLY: WhisperKit not loaded (saves ~187s).")
-                print("[Mem] gate-only: \(Self.availableMemoryMB()) MB available")
-                return
-            }
-
-            // Compute-unit choice trades LOAD time against RUNTIME, and the two
-            // wants are opposite. Measured on the A16:
-            //   .cpuAndNeuralEngine   encoder compile ~180 s per install, then
-            //                         ~440 ms per decode window
-            //   .cpuAndGPU            loads in seconds, but holds far more resident
-            //                         (attention over a 1500-frame window) and then
-            //                         competes with SwiftUI for the GPU — the mel
-            //                         spikes in [RTF] (19 ms typical, 1127 ms worst)
-            //                         are that contention on a TINY model.
-            //
-            // The encoder runs once per DECODE TICK, not once per recording, so
-            // .cpuAndGPU is a debugging convenience, not a shipping choice.
-            //
-            // DO NOT try to have both by compiling the ANE bundle in the background
-            // while a GPU encoder is live. `WhisperMLModel.loadModel(prewarmMode:)`
-            // FULLY LOADS the model before discarding it, so the memory PEAK is
-            // identical to a real load — two ~600 MB encoders at once. Tried on
-            // 2026-08-05: jetsammed the app after 58 s.
-            //
-            // Deferring the encoder and loading mel + decoder first does not work
-            // either: `loadTokenizerIfNeeded()` reads `audioEncoder.embedSize`, so
-            // no encoder means no tokenizer, and no tokenizer means no clinical
-            // bias filter.
-            let fastLoad = UserDefaults.standard.bool(forKey: Self.fastModelLoadKey)
-            let compute = ModelComputeOptions(
-                melCompute: .cpuAndGPU,
-                audioEncoderCompute: fastLoad ? .cpuAndGPU : .cpuAndNeuralEngine,
-                textDecoderCompute: .cpuAndNeuralEngine
-            )
-
-            // Xcode's synchronized-group build flattens the model folder, so the four
-            // *.mlmodelc bundles land at the bundle ROOT. Detect via AudioEncoder.mlmodelc.
-            let resourceURL = Bundle.main.resourceURL
-            let hasBundledModel = resourceURL.map {
-                FileManager.default.fileExists(
-                    atPath: $0.appendingPathComponent("AudioEncoder.mlmodelc").path)
-            } ?? false
-
-            let modelFolder: URL
-            if hasBundledModel, let folder = resourceURL {
-                statusMessage = "Loading bundled model…"
-                modelFolder = folder
-            } else {
-                modelFolder = try await resolveDownloadedModel()
-            }
-
-            // Always load from an explicit folder — never let WhisperKit re-resolve
-            // and re-download behind our back.
-            let config = WhisperKitConfig(modelFolder: modelFolder.path,
-                                          computeOptions: compute,
-                                          download: false)
-
-            statusMessage = "Preparing model…"
-            print("[Mem] before WhisperKit load: \(Self.availableMemoryMB()) MB available")
-            let loadStart = Date()
-            let kit = try await WhisperKit(config)
-            let loadWall = Date().timeIntervalSince(loadStart)
-
-            // [ModelLoad] Where the load time goes. Pure on-device work: CoreML
-            // compiling the .mlmodelc for the chosen compute units plus tokenizer
-            // load.
-            //
-            // The cache is SUPPOSED to be per-install, not per-launch. ~180 s on a
-            // second launch with no rebuild in between means it is being
-            // invalidated, and that is a real bug — the clinic would pay three
-            // minutes on every launch, not just after an update.
-            let t = kit.currentTimings
-            print(String(format: "[ModelLoad] %.2fs wall | modelLoading %.2fs — prewarm %.2f, encoder %.2f, decoder %.2f, tokenizer %.2f  [encoder on %@]",
-                         loadWall, t.modelLoading, t.prewarmLoadTime, t.encoderLoadTime, t.decoderLoadTime, t.tokenizerLoadTime,
-                         fastLoad ? "GPU" : "ANE"))
-
-            // Real per-step logit bias for the clinical vocabulary. Unlike the
-            // initial-prompt priming this stays active for the whole session.
-            if let tokenizer = kit.tokenizer {
-                kit.textDecoder.logitsFilters = [
-                    SequenceBiasFilter(sequences: ClinicalConfig.boostSequences(for: tokenizer)),
-                ]
-            }
-            whisperKit = kit
-            // Silero VAD is optional: if it fails to load, batch falls back to
-            // whole-clip transcription and live decodes every window ungated.
-            vad = try? SileroVADEngine()
-            isReady = true
-            downloadProgress = 0
-            statusMessage = "Model ready (\(Self.bundledModelName))"
-            print("[Mem] after WhisperKit load:  \(Self.availableMemoryMB()) MB available")
-        } catch {
-            downloadProgress = 0
-            statusMessage = "Failed to load: \(error.localizedDescription)"
-        }
-    }
-
-    // MARK: - Model download
-
-    /// Where downloads land. Application Support rather than Caches: the system can
-    /// purge Caches under disk pressure, and re-downloading 600 MB mid-clinic is not
-    /// a risk worth taking. Excluded from iCloud backup — it is re-downloadable.
-    private static func downloadBase() throws -> URL {
-        var url = FileManager.default.urls(for: .applicationSupportDirectory,
-                                           in: .userDomainMask)[0]
-            .appendingPathComponent("WhisperKitModels", isDirectory: true)
-        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-        var values = URLResourceValues()
-        values.isExcludedFromBackup = true
-        try? url.setResourceValues(values)
-        return url
-    }
-
-    /// Reuse a previous download if we have one; otherwise fetch with progress.
-    private func resolveDownloadedModel() async throws -> URL {
-        let fm = FileManager.default
-
-        // Downloaded on an earlier launch? Validate by the file WhisperKit needs,
-        // not just by the directory existing — a half-finished download leaves the
-        // folder behind.
-        if let cached = UserDefaults.standard.string(forKey: Self.cachedModelPathKey) {
-            let url = URL(fileURLWithPath: cached)
-            if fm.fileExists(atPath: url.appendingPathComponent("AudioEncoder.mlmodelc").path) {
-                statusMessage = "Loading downloaded model…"
-                return url
-            }
-            UserDefaults.standard.removeObject(forKey: Self.cachedModelPathKey)
-        }
-
-        // Retry: -1001 (request timed out) is transient, and the Hub API skips files
-        // it already has, so each attempt resumes rather than restarting.
-        var lastError: Error?
-        for attempt in 1...3 {
-            do {
-                statusMessage = attempt == 1
-                    ? "Downloading model…\n(one-time, ~600 MB — keep the app open)"
-                    : "Download interrupted — retrying (\(attempt) of 3)…"
-                downloadProgress = 0
-
-                let url = try await WhisperKit.download(
-                    variant: Self.networkModelVariant,
-                    downloadBase: try Self.downloadBase(),
-                    useBackgroundSession: false,
-                    progressCallback: { [weak self] progress in
-                        Task { @MainActor in
-                            guard let self else { return }
-                            let pct = progress.fractionCompleted
-                            self.downloadProgress = pct
-                            self.statusMessage = String(
-                                format: "Downloading model… %.0f%%\n(one-time — keep the app open)",
-                                pct * 100)
-                        }
-                    }
-                )
-
-                UserDefaults.standard.set(url.path, forKey: Self.cachedModelPathKey)
-                downloadProgress = 1
-                return url
-            } catch {
-                lastError = error
-                print("[ModelDownload] attempt \(attempt) failed: \(error.localizedDescription)")
-                try? await Task.sleep(nanoseconds: 2_000_000_000)
-            }
-        }
-        throw lastError ?? URLError(.timedOut)
+        if isReady { return }
+        // The heavy WhisperKit transcription model has been removed — Wav2Vec2 is
+        // the STT engine now and loads through Wav2VecEngine. All that remains here
+        // is the small Silero VAD the speaker gate depends on; the gate, extractor
+        // and enrollment build on demand (makeSpeakerGateIfNeeded / TSEEngine), so
+        // this is a fast, memory-cheap load.
+        vad = try? SileroVADEngine()
+        isReady = true
+        downloadProgress = 0
+        statusMessage = "Ready"
+        print("[Mem] gate infra ready: \(Self.availableMemoryMB()) MB available")
     }
 
     // MARK: - Speaker gate

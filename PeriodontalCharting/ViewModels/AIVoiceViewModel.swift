@@ -17,29 +17,17 @@ class AIVoiceViewModel: ObservableObject {
     @Published var isFinishing: Bool = false
 
     var currentStatusMessage: String {
-        if UserDefaults.standard.bool(forKey: "useOfflineWav2Vec") {
-            return wav2VecTranscriber.statusMessage
-        } else {
-            return transcriber.statusMessage
-        }
+        wav2VecTranscriber.statusMessage
     }
 
-    /// Real on-device transcription. AI Mode drives it and consumes its confirmed
-    /// chunks; the standalone LiveTranscriptionView uses its own instance.
-    private let transcriber = TranscriptionViewModel()
+    /// Real on-device transcription (Wav2Vec2). AI Mode drives it and consumes its
+    /// confirmed chunks.
     private let wav2VecTranscriber = Wav2VecViewModel()
-    
-    /// Speaker-filter state for the AI Mode header. The transcriber is private, so
-    /// this is the only way the view can see it. Reading it inside a SwiftUI body
-    /// tracks the @Observable transcriber directly — no @Published mirror needed,
-    /// and it cannot go stale.
-    var gateStatus: TranscriptionViewModel.GateStatus { 
-        if UserDefaults.standard.bool(forKey: "useOfflineWav2Vec") {
-            let s = wav2VecTranscriber.gateStatus
-            return TranscriptionViewModel.GateStatus(active: s.active, extractorReady: s.extractorReady, spans: s.spans, rejected: s.rejected, routed: s.routed, rescued: s.rescued, withheldSegments: s.withheldSegments, lastDistance: s.lastDistance)
-        } else {
-            return transcriber.gateStatus 
-        }
+
+    /// Speaker-filter state for the AI Mode header. Reading it inside a SwiftUI
+    /// body tracks the transcriber directly — no @Published mirror needed.
+    var gateStatus: Wav2VecViewModel.GateStatus {
+        wav2VecTranscriber.gateStatus
     }
     
     // Stubs for future parsing architecture
@@ -162,54 +150,26 @@ resesi 18, 17, 16, -1 -1
         sessionParser = StatefulParser(configuration: getConfiguration())
         committedCommandCount = 0
 
-        let useWav2Vec = UserDefaults.standard.bool(forKey: "useOfflineWav2Vec")
-        
-        if useWav2Vec {
-            wav2VecTranscriber.onLiveTranscript = { [weak self] fullText in
-                guard let self = self else { return }
-                let committed = self.committedTranscription
-                if fullText.hasPrefix(committed) {
-                    let uncommitted = String(fullText.dropFirst(committed.count)).trimmingCharacters(in: .whitespaces)
-                    self.uncommittedTranscription = uncommitted.isEmpty ? "" : " " + uncommitted
-                } else {
-                    self.uncommittedTranscription = fullText
-                }
+        wav2VecTranscriber.onLiveTranscript = { [weak self] fullText in
+            guard let self = self else { return }
+            let committed = self.committedTranscription
+            if fullText.hasPrefix(committed) {
+                let uncommitted = String(fullText.dropFirst(committed.count)).trimmingCharacters(in: .whitespaces)
+                self.uncommittedTranscription = uncommitted.isEmpty ? "" : " " + uncommitted
+            } else {
+                self.uncommittedTranscription = fullText
             }
-            wav2VecTranscriber.onConfirmedTranscript = { [weak self] confirmed in
-                guard let self = self else { return }
-                self.processConfirmedChunk(confirmed)
-            }
-        } else {
-            transcriber.onLiveTranscript = { [weak self] fullText in
-                guard let self = self else { return }
-                let committed = self.committedTranscription
-                if fullText.hasPrefix(committed) {
-                    let uncommitted = String(fullText.dropFirst(committed.count)).trimmingCharacters(in: .whitespaces)
-                    self.uncommittedTranscription = uncommitted.isEmpty ? "" : " " + uncommitted
-                } else {
-                    self.uncommittedTranscription = fullText
-                }
-            }
-            transcriber.onConfirmedTranscript = { [weak self] confirmed in
-                guard let self = self else { return }
-                self.processConfirmedChunk(confirmed)
-            }
+        }
+        wav2VecTranscriber.onConfirmedTranscript = { [weak self] confirmed in
+            guard let self = self else { return }
+            self.processConfirmedChunk(confirmed)
         }
 
         Task { [weak self] in
             guard let self else { return }
-            if useWav2Vec {
-                await self.wav2VecTranscriber.loadModel()
-            } else {
-                await self.transcriber.loadModel()
-            }
-            TokenizerManager.shared.loadModel()
+            await self.wav2VecTranscriber.loadModel()
             guard self.isDictating else { return }  // stopped during model load
-            if useWav2Vec {
-                self.wav2VecTranscriber.startLive()
-            } else {
-                self.transcriber.startLive()
-            }
+            self.wav2VecTranscriber.startLive()
         }
     }
 
@@ -225,15 +185,9 @@ resesi 18, 17, 16, -1 -1
         Task {
             defer { isFinishing = false }
 
-            if UserDefaults.standard.bool(forKey: "useOfflineWav2Vec") {
-                wav2VecTranscriber.stopLive()
-                wav2VecTranscriber.onLiveTranscript = nil
-                wav2VecTranscriber.onConfirmedTranscript = nil
-            } else {
-                await transcriber.stopLive()
-                transcriber.onLiveTranscript = nil
-                transcriber.onConfirmedTranscript = nil
-            }
+            wav2VecTranscriber.stopLive()
+            wav2VecTranscriber.onLiveTranscript = nil
+            wav2VecTranscriber.onConfirmedTranscript = nil
 
             let finalOutput = committedTranscription + uncommittedTranscription
             if finalOutput.hasPrefix(committedTranscription) {
