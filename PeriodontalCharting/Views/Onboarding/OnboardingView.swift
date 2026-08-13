@@ -7,19 +7,19 @@ struct OnboardingView: View {
     var isSettingsMode: Bool = false
 
     @StateObject private var audioManager = AudioManager.shared
-    /// @Observable singleton — reading its properties in `body` registers this
-    /// view for updates, so the take list and the spread warning stay live.
+    // @Observable singleton — reading its properties in `body` registers this
+    // view for updates, so the take list and the spread warning stay live.
     private let profileStore = VoiceProfileStore.shared
 
     @State private var config = ChartingConfiguration()
-    /// Which takes exist on disk FOR THE ACTIVE PROFILE. Per-take rather than one
-    /// `hasRecorded` flag, because calibration is several recordings in different
-    /// conditions — see CalibrationTake for why one was not enough.
+    // Which takes exist on disk FOR THE ACTIVE PROFILE. Per-take rather than one
+    // `hasRecorded` flag, because calibration is several recordings in different
+    // conditions — see CalibrationTake for why one was not enough.
     @State private var recordedTakes: Set<CalibrationTake> = []
-    /// The take currently being recorded. There is ONE AVAudioRecorder, so only
-    /// one row can be live at a time and every other Record button is disabled.
+    // The take currently being recorded. There is ONE AVAudioRecorder, so only
+    // one row can be live at a time and every other Record button is disabled.
     @State private var recordingTake: CalibrationTake?
-    /// Local edit buffer for the profile name, committed on submit / on save.
+    // Local edit buffer for the profile name, committed on submit / on save.
     @State private var profileName: String = ""
     @State private var recordingPermissionGranted = false
     @State private var enrollmentStatus = ""
@@ -27,21 +27,21 @@ struct OnboardingView: View {
     @State private var enrollmentSucceeded = false
     @State private var isEnrolling = false
 
-    /// There is no centroid at all without take 1.
+    // There is no centroid at all without take 1.
     private var hasRecorded: Bool { recordedTakes.contains(.normal) }
 
-    /// The gate arms on TEMPLATES, not on a file existing. A take that recorded
-    /// fine but failed enrollment leaves `speakerVerdict` returning `.matched`
-    /// for every voice in the room — the one thing this app exists to prevent —
-    /// so completion waits for the templates, not for the WAV.
+    // The gate arms on TEMPLATES, not on a file existing. A take that recorded
+    // fine but failed enrollment leaves `speakerVerdict` returning `.matched`
+    // for every voice in the room — the one thing this app exists to prevent —
+    // so completion waits for the templates, not for the WAV.
     private var isEnrolled: Bool { !(profileStore.active?.templates.isEmpty ?? true) }
 
-    /// Enforced on FIRST RUN only. The button previously read
-    /// `.disabled(!hasRecorded && false)`, which is unconditionally enabled.
-    ///
-    /// Not enforced in settings: the app is already armed there, and this same
-    /// button commits the annotation order, so blocking it would trap an
-    /// unrelated edit behind a re-calibration.
+    // Enforced on FIRST RUN only. The button previously read
+    // `.disabled(!hasRecorded && false)`, which is unconditionally enabled.
+    //
+    // Not enforced in settings: the app is already armed there, and this same
+    // button commits the annotation order, so blocking it would trap an
+    // unrelated edit behind a re-calibration.
     private var canComplete: Bool { isSettingsMode || isEnrolled }
 
     private var activeProfileID: String? { profileStore.activeID }
@@ -340,8 +340,8 @@ struct OnboardingView: View {
         recordedTakes = Set(CalibrationTake.recorded(in: dir))
     }
 
-    /// Save the edited name. Called on submit, on save, and on dismiss, because a
-    /// TextField that is never submitted would otherwise lose what was typed.
+    // Save the edited name. Called on submit, on save, and on dismiss, because a
+    // TextField that is never submitted would otherwise lose what was typed.
     private func commitProfileName() {
         guard let id = activeProfileID else { return }
         let trimmed = profileName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -355,9 +355,9 @@ struct OnboardingView: View {
         switchProfile(to: new.id)
     }
 
-    /// Switching restores cached embeddings — no audio is read and no ECAPA pass
-    /// runs — then re-conditions the extractor, which uses a different encoder and
-    /// cannot be restored from the gate's embeddings.
+    // Switching restores cached embeddings — no audio is read and no ECAPA pass
+    // runs — then re-conditions the extractor, which uses a different encoder and
+    // cannot be restored from the gate's embeddings.
     private func switchProfile(to id: String) {
         guard id != profileStore.activeID else { return }
         commitProfileName()
@@ -366,16 +366,16 @@ struct OnboardingView: View {
 
     // MARK: - Calibration takes
 
-    /// One take: what it is, why it exists, record and play.
-    ///
-    /// Files live inside the ACTIVE profile's directory. `AudioManager` appends
-    /// whatever filename it is given to the Documents root, so a relative path
-    /// with slashes routes correctly and AudioManager needs no change.
-    ///
-    /// Play is bound to THIS take via `audioManager.playingFilename` (which holds
-    /// the last path component) rather than the global `isPlaying` flag. There is
-    /// a single player, so a shared flag turned EVERY row's button into "Stop" the
-    /// moment any one of them started.
+    // One take: what it is, why it exists, record and play.
+    //
+    // Files live inside the ACTIVE profile's directory. `AudioManager` appends
+    // whatever filename it is given to the Documents root, so a relative path
+    // with slashes routes correctly and AudioManager needs no change.
+    //
+    // Play is bound to THIS take via `audioManager.playingFilename` (which holds
+    // the last path component) rather than the global `isPlaying` flag. There is
+    // a single player, so a shared flag turned EVERY row's button into "Stop" the
+    // moment any one of them started.
     @ViewBuilder
     private func takeRow(_ take: CalibrationTake) -> some View {
         let isThisRecording = audioManager.isRecording && recordingTake == take
@@ -474,24 +474,24 @@ struct OnboardingView: View {
 
     // MARK: - Enrollment
 
-    /// Build the speaker centroid from EVERY calibration take of the ACTIVE profile.
-    ///
-    /// The work lives on TranscriptionEngine so onboarding and launch-time restore
-    /// share ONE implementation; this is state assignment and message mapping.
-    /// Reports every stage, because "no usable speech" on its own cannot
-    /// distinguish a half-written file from a dead mic from spans that were merely
-    /// too thin on voice.
-    ///
-    /// `reset: true` ALWAYS. Every take is re-read from disk on each call, so
-    /// stacking without a reset would double-count the takes that have not
-    /// changed — and `SpeakerGate` evicts FIFO past 16 templates, so the oldest
-    /// condition would then be the one silently dropped.
-    ///
-    /// The EXTRACTOR is re-enrolled from the same recordings afterwards, and it is
-    /// a genuinely different mechanism: the gate wants a centroid over a few clean
-    /// spans spanning several conditions (SpeechBrain ECAPA), the extractor wants
-    /// 1024 frame-level keys and needs >= 10.3 s of speech in total (WeSpeaker
-    /// ECAPA — different weights, unrelated embedding space).
+    // Build the speaker centroid from EVERY calibration take of the ACTIVE profile.
+    //
+    // The work lives on TranscriptionEngine so onboarding and launch-time restore
+    // share ONE implementation; this is state assignment and message mapping.
+    // Reports every stage, because "no usable speech" on its own cannot
+    // distinguish a half-written file from a dead mic from spans that were merely
+    // too thin on voice.
+    //
+    // `reset: true` ALWAYS. Every take is re-read from disk on each call, so
+    // stacking without a reset would double-count the takes that have not
+    // changed — and `SpeakerGate` evicts FIFO past 16 templates, so the oldest
+    // condition would then be the one silently dropped.
+    //
+    // The EXTRACTOR is re-enrolled from the same recordings afterwards, and it is
+    // a genuinely different mechanism: the gate wants a centroid over a few clean
+    // spans spanning several conditions (SpeechBrain ECAPA), the extractor wants
+    // 1024 frame-level keys and needs >= 10.3 s of speech in total (WeSpeaker
+    // ECAPA — different weights, unrelated embedding space).
     private func enrollCalibration() {
         isEnrolling = true
         enrollmentStatus = ""

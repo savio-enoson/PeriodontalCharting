@@ -33,17 +33,17 @@ enum ClinicalConfig {
     
     // MARK: - Vocabulary (ported verbatim from the notebook)
     
-    /// Directional stems. In `app.py` (DIRECTIONAL_BOOST) these get the
-    /// strongest push — they're the highest-value, most acoustically
-    /// confusable terms (mesio/disto vs "misi"/"situ"/"stok" etc). Biased at
-    /// every decoding step via `SequenceBiasFilter` (see that file).
+    // Directional stems. In `app.py` (DIRECTIONAL_BOOST) these get the
+    // strongest push — they're the highest-value, most acoustically
+    // confusable terms (mesio/disto vs "misi"/"situ"/"stok" etc). Biased at
+    // every decoding step via `SequenceBiasFilter` (see that file).
     static let directionalBoostWords: [String] = [
         "mesio", "disto", "mesial", "distal", "distolingual", "mesiolingual","distobukal", "mesiobukal"
     ]
     
-    /// Core clinical words. In `app.py` (WORDS_TO_BOOST) these get a lighter
-    /// push than the directional stems — real words that are less prone to
-    /// mishearing, so a smaller nudge is enough.
+    // Core clinical words. In `app.py` (WORDS_TO_BOOST) these get a lighter
+    // push than the directional stems — real words that are less prone to
+    // mishearing, so a smaller nudge is enough.
     static let generalBoostWords: [String] = [
         "gigi", "bukal", "lingual", "palatal", "BOP", "resesi",  "kemunduran", "enlargement", "pembengkakan", "pembesaran", "poket", "probing", "kedalaman", "berdarah"
     ]
@@ -52,19 +52,19 @@ enum ClinicalConfig {
         "furcation", "furkasi", "margin", "gingival", "kegoyangan", "mobilitas", "mobility", "implan", "implant"
     ]
 
-    /// Logit bias values, ported directly from `app.py`'s `sequence_bias`
-    /// dict (18.0 / 10.0 / -20.0) rather than re-tuned from scratch — per
-    /// the "freeze the artifacts" principle, the Python PoC's bias map is
-    /// the validated ceiling and reimplementing it from a fresh guess is
-    /// exactly the kind of silent divergence that's hard to debug later.
+    // Logit bias values, ported directly from `app.py`'s `sequence_bias`
+    // dict (18.0 / 10.0 / -20.0) rather than re-tuned from scratch — per
+    // the "freeze the artifacts" principle, the Python PoC's bias map is
+    // the validated ceiling and reimplementing it from a fresh guess is
+    // exactly the kind of silent divergence that's hard to debug later.
     static let directionalBoostBias: Float = 20.0
     static let generalBoostBias: Float = 10.0
     static let lessCommonBoostBias: Float = 6.0
 
-    /// Known mis-transcriptions / hallucinations to suppress at decode time.
-    /// Ported from `words_to_suppress`. We keep the leading-space variants out
-    /// here because WhisperKit's `encode` handles spacing; we suppress the token
-    /// forms below.
+    // Known mis-transcriptions / hallucinations to suppress at decode time.
+    // Ported from `words_to_suppress`. We keep the leading-space variants out
+    // here because WhisperKit's `encode` handles spacing; we suppress the token
+    // forms below.
     static let suppressWords: [String] = [
         // gingival-margin / "misio" confusions
         "Tua", "tua", "tuwa", "Duda", "Mimpi", "Gingival", "Rekang",
@@ -81,19 +81,19 @@ enum ClinicalConfig {
 
     // MARK: - Token binding (runtime, against the loaded tokenizer)
 
-    /// Encode the suppress list into token IDs for the *currently loaded* model.
-    /// Returns a de-duplicated, sorted list suitable for `DecodingOptions.suppressTokens`.
-    ///
-    /// NOTE — divergence from the `app.py` ceiling worth a deliberate call:
-    /// `app.py`'s WORDS_TO_SUPPRESS gets a finite -20.0 bias (strongly discouraged,
-    /// but still selectable if every other token is worse). This goes through
-    /// WhisperKit's native `SuppressTokensFilter`, which hard-masks to -infinity
-    /// (never selectable, full stop). That's a real behavioral difference, not
-    /// just an implementation detail — if a hallucination word is ever the
-    /// acoustically correct answer in some edge case, Python could still emit
-    /// it and Swift never will. Flagging rather than "fixing" since -infinity
-    /// may well be the right call for pure hallucination words; worth deciding
-    /// on purpose rather than by accident of which API was easiest to reach.
+    // Encode the suppress list into token IDs for the *currently loaded* model.
+    // Returns a de-duplicated, sorted list suitable for `DecodingOptions.suppressTokens`.
+    //
+    // NOTE — divergence from the `app.py` ceiling worth a deliberate call:
+    // `app.py`'s WORDS_TO_SUPPRESS gets a finite -20.0 bias (strongly discouraged,
+    // but still selectable if every other token is worse). This goes through
+    // WhisperKit's native `SuppressTokensFilter`, which hard-masks to -infinity
+    // (never selectable, full stop). That's a real behavioral difference, not
+    // just an implementation detail — if a hallucination word is ever the
+    // acoustically correct answer in some edge case, Python could still emit
+    // it and Swift never will. Flagging rather than "fixing" since -infinity
+    // may well be the right call for pure hallucination words; worth deciding
+    // on purpose rather than by accident of which API was easiest to reach.
     static func suppressTokens(for tokenizer: WhisperTokenizer) -> [Int] {
         var ids = Set<Int>()
         for word in suppressWords {
@@ -109,14 +109,14 @@ enum ClinicalConfig {
         return ids.filter { $0 < special }.sorted()
     }
 
-    /// Encode `directionalBoostWords` + `generalBoostWords` into
-    /// `SequenceBiasFilter.BiasedSequence`s for the *currently loaded*
-    /// tokenizer, each at its own tier's bias. Encodes both bare and
-    /// space-prefixed forms, same as `suppressTokens(for:)`, since BPE
-    /// splits them differently and dictation audio can land on either —
-    /// `app.py` only encodes the single leading-space form it observed in
-    /// practice (e.g. `" mesio"`), so this is a deliberately wider net
-    /// around the same ceiling values, not a narrower one.
+    // Encode `directionalBoostWords` + `generalBoostWords` into
+    // `SequenceBiasFilter.BiasedSequence`s for the *currently loaded*
+    // tokenizer, each at its own tier's bias. Encodes both bare and
+    // space-prefixed forms, same as `suppressTokens(for:)`, since BPE
+    // splits them differently and dictation audio can land on either —
+    // `app.py` only encodes the single leading-space form it observed in
+    // practice (e.g. `" mesio"`), so this is a deliberately wider net
+    // around the same ceiling values, not a narrower one.
     static func boostSequences(for tokenizer: WhisperTokenizer) -> [SequenceBiasFilter.BiasedSequence] {
         let special = tokenizer.specialTokens.specialTokenBegin
         var seen = Set<[Int]>()
@@ -136,14 +136,14 @@ enum ClinicalConfig {
         return sequences
     }
 
-    /// DecodingOptions carrying the periodontal-charting bias (suppress
-    /// mis-hears via `suppressTokens`; vocabulary boost lives in
-    /// `SequenceBiasFilter`, wired in separately at the WhisperKit/
-    /// textDecoder level — see TranscriptionViewModel.loadModel()).
-    /// Centralized here (not in the view model) so the eval harness builds
-    /// the exact same options the app uses — a hand-copied second
-    /// definition is exactly the kind of silent divergence that makes an
-    /// eval number meaningless.
+    // DecodingOptions carrying the periodontal-charting bias (suppress
+    // mis-hears via `suppressTokens`; vocabulary boost lives in
+    // `SequenceBiasFilter`, wired in separately at the WhisperKit/
+    // textDecoder level — see TranscriptionViewModel.loadModel()).
+    // Centralized here (not in the view model) so the eval harness builds
+    // the exact same options the app uses — a hand-copied second
+    // definition is exactly the kind of silent divergence that makes an
+    // eval number meaningless.
     static func decodingOptions(for tokenizer: WhisperTokenizer?) -> DecodingOptions {
         var suppress: [Int] = []
         if let tokenizer {
@@ -205,8 +205,8 @@ enum ClinicalConfig {
 
     // MARK: - Post-processing (Swift port of nlp_clean)
 
-    /// Multi-word corruption repairs, applied BEFORE tokenizing the transcript.
-    /// (regex pattern, replacement) — ported from PHRASE_FIX.
+    // Multi-word corruption repairs, applied BEFORE tokenizing the transcript.
+    // (regex pattern, replacement) — ported from PHRASE_FIX.
     private static let phraseFixes: [(String, String)] = [
         (#"\bplak\s*ada\b"#, "gak ada"),
         // "gak ada" (tooth missing) merged/garbled by STT into one token
@@ -266,7 +266,7 @@ enum ClinicalConfig {
         (#"\b(mesio|disto)(bukal|lingual|palatal)\b"#, "$1 $2"),
     ]
 
-    /// Words to drop entirely (disfluencies + hallucinations). Ported from DISFLUENCY.
+    // Words to drop entirely (disfluencies + hallucinations). Ported from DISFLUENCY.
     private static let disfluency: Set<String> = [
         "uh", "eh", "em", "oke", "ok", "hmm", "ya", "tuh", "nih", "gitu",
         "terima", "kasih", "terimakasih", "menonton", "sudah", "applause",
@@ -279,7 +279,7 @@ enum ClinicalConfig {
         "kikimpa", "bistur"
     ]
 
-    /// Indonesian number words -> digits.
+    // Indonesian number words -> digits.
     private static let textToNum: [String: String] = {
         var m: [String: String] = [
             "satu": "1", "dua": "2", "tiga": "3", "empat": "4", "lima": "5",
@@ -295,10 +295,10 @@ enum ClinicalConfig {
         return m
     }()
 
-    /// Words that are correct clinical/Indonesian terms (never flag or drop).
-    /// Ordered to match Python's LEXICON so the Levenshtein tie-break (first
-    /// strictly-closer match wins) resolves identically. `lexicon` is the O(1)
-    /// membership set derived from it.
+    // Words that are correct clinical/Indonesian terms (never flag or drop).
+    // Ordered to match Python's LEXICON so the Levenshtein tie-break (first
+    // strictly-closer match wins) resolves identically. `lexicon` is the O(1)
+    // membership set derived from it.
     private static let lexiconList: [String] = [
         "gigi", "bukal", "palatal", "lingual", "labial", "mesial", "distal",
         "mesio", "disto", "distolingual", "mesiolingual", "resesi", "plak",
@@ -311,8 +311,8 @@ enum ClinicalConfig {
     ]
     private static let lexicon: Set<String> = Set(lexiconList)
 
-    /// Swift port of `nlp_clean`. Applies phrase fixes, drops disfluencies,
-    /// maps number-words to digits, and collapses immediate repeats.
+    // Swift port of `nlp_clean`. Applies phrase fixes, drops disfluencies,
+    // maps number-words to digits, and collapses immediate repeats.
     static func clean(_ text: String) -> String {
         var t = text
         for (pattern, repl) in phraseFixes {
@@ -362,9 +362,9 @@ enum ClinicalConfig {
 
     // MARK: - Levenshtein fuzzy match (port of get_best_match_levenshtein)
 
-    /// Nearest lexicon word to `word` within `maxEdits` edits, or nil. Iterates in
-    /// `lexiconList` order and keeps the first strictly-closer match, mirroring the
-    /// Python tie-break so the same corrections come out.
+    // Nearest lexicon word to `word` within `maxEdits` edits, or nil. Iterates in
+    // `lexiconList` order and keeps the first strictly-closer match, mirroring the
+    // Python tie-break so the same corrections come out.
     private static func bestLexiconMatch(_ word: String, maxEdits: Int) -> String? {
         var best: String?
         var minDist = Int.max
@@ -376,7 +376,7 @@ enum ClinicalConfig {
         return minDist <= maxEdits ? best : nil
     }
 
-    /// Classic two-row Levenshtein edit distance.
+    // Classic two-row Levenshtein edit distance.
     private static func levenshtein(_ a: [Character], _ b: [Character]) -> Int {
         if a.isEmpty { return b.count }
         if b.isEmpty { return a.count }

@@ -16,11 +16,11 @@ import SwiftUI
 struct ToothStatusPanel: View {
     let tooth: ToothObject
 
-    /// The app's brand navy — same value the chart's buttons and segmented
-    /// controls use.
+    // The app's brand navy — same value the chart's buttons and segmented
+    // controls use.
     private static let brandNavy = Color(red: 0.05, green: 0.2, blue: 0.5)
 
-    /// Inner aspect is palatal on the maxilla, lingual on the mandible.
+    // Inner aspect is palatal on the maxilla, lingual on the mandible.
     private var innerLabel: String {
         let quadrant = tooth.toothNumber / 10
         return (quadrant == 1 || quadrant == 2) ? "Palatal" : "Lingual"

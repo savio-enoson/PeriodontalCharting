@@ -28,11 +28,11 @@
 import Foundation
 
 enum CalibrationTake: String, CaseIterable, Identifiable {
-    /// The original file. A pre-profiles install already has this one.
+    // The original file. A pre-profiles install already has this one.
     case normal = "voice_sample.wav"
-    /// The one that matters. This is the condition the gate used to fail on.
+    // The one that matters. This is the condition the gate used to fail on.
     case soft   = "voice_sample_soft.wav"
-    /// Optional third condition — mask on, or standing further from the mic.
+    // Optional third condition — mask on, or standing further from the mic.
     case mask   = "voice_sample_mask.wav"
 
     var id: String { rawValue }
@@ -66,10 +66,10 @@ enum CalibrationTake: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Only the first is strictly required; without it there is no centroid.
+    // Only the first is strictly required; without it there is no centroid.
     var isRequired: Bool { self == .normal }
 
-    /// Takes that exist for a given profile directory, in order.
+    // Takes that exist for a given profile directory, in order.
     static func recorded(in directory: URL) -> [CalibrationTake] {
         allCases.filter { $0.exists(in: directory) }
     }

@@ -17,7 +17,7 @@ enum DentalArch: CaseIterable {
     case maxilla   // upper
     case mandible  // lower
 
-    /// FDI tooth numbers in the same left-to-right order the 2-D chart uses.
+    // FDI tooth numbers in the same left-to-right order the 2-D chart uses.
     var fdiOrder: [Int] {
         switch self {
         case .maxilla:  return [18, 17, 16, 15, 14, 13, 12, 11, 21, 22, 23, 24, 25, 26, 27, 28]

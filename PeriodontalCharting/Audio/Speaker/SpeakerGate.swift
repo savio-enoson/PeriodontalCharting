@@ -48,11 +48,23 @@ enum Verdict: String {
 struct GateResult {
     let verdict: Verdict
     let distance: Double?
+    // The unit embedding this verdict was computed from, so a caller that wants the
+    // vector itself does not pay a second ECAPA pass over the same audio. Nil when
+    // the span was too short to embed at all.
+    //
+    // Added for `SpeakerGate.probe` (family C of the T1 overlap metrics), which
+    // used to re-embed the same samples `classify` had just embedded — one wasted
+    // ANE inference per span, on the serial pump that publishes audio to WhisperKit,
+    // against an ANE the Whisper encoder already occupies for ~442 ms a window.
+    //
+    // Defaulted so the sites that construct a refusal — `.tooShort`, `.reject` —
+    // keep compiling as `GateResult(verdict:distance:)`.
+    var embedding: [Double]? = nil
 }
 
-/// `@unchecked Sendable`: after init the model is read-only, MLModel prediction is
-/// thread-safe, and all mutable state — enrollment AND thresholds — is behind
-/// `lock`, so this can be handed to a background classification task.
+// `@unchecked Sendable`: after init the model is read-only, MLModel prediction is
+// thread-safe, and all mutable state — enrollment AND thresholds — is behind
+// `lock`, so this can be handed to a background classification task.
 final class SpeakerGate: @unchecked Sendable {
 
     enum GateError: Error {
@@ -62,11 +74,11 @@ final class SpeakerGate: @unchecked Sendable {
     }
 
     static let sampleRate = 16_000
-    /// Must match `input_seconds` used at export time (tse.py `export_coreml`).
+    // Must match `input_seconds` used at export time (tse.py `export_coreml`).
     static let inputSamples = 48_000
 
-    /// Re-validated by re-measurement rather than assumed. A profile override that
-    /// is nil falls back to these.
+    // Re-validated by re-measurement rather than assumed. A profile override that
+    // is nil falls back to these.
     static let defaultAcceptThreshold = 0.675
     static let defaultRejectThreshold = 0.775
 
@@ -78,13 +90,13 @@ final class SpeakerGate: @unchecked Sendable {
     private var adaptThreshold: Double
     private let adaptMargin: Double
 
-    /// Below this, embeddings are dominated by duration artefact rather than
-    /// speaker identity (measured: a 1 s window sits ~0.46 from the 6 s embedding
-    /// of the *same* audio). `classify` refuses below it.
+    // Below this, embeddings are dominated by duration artefact rather than
+    // speaker identity (measured: a 1 s window sits ~0.46 from the 6 s embedding
+    // of the *same* audio). `classify` refuses below it.
     static let minDurationSeconds = 1.0
-    /// Enrollment capacity. Past this, `recomputeCentroidLocked` evicts FIFO.
-    /// Exposed so multi-condition calibration can budget templates per take and
-    /// never trigger eviction — which would drop the EARLIEST condition.
+    // Enrollment capacity. Past this, `recomputeCentroidLocked` evicts FIFO.
+    // Exposed so multi-condition calibration can budget templates per take and
+    // never trigger eviction — which would drop the EARLIEST condition.
     static let maxTemplates = 16
 
     private let model: MLModel
@@ -121,8 +133,8 @@ final class SpeakerGate: @unchecked Sendable {
         resolveIONames()
     }
 
-    /// Same lookup strategy as SileroVADEngine: Xcode's synchronized file group
-    /// flattens AI/ so the compiled model lands at the bundle ROOT.
+    // Same lookup strategy as SileroVADEngine: Xcode's synchronized file group
+    // flattens AI/ so the compiled model lands at the bundle ROOT.
     private static func locateModel() -> URL? {
         if let root = Bundle.main.resourceURL {
             let flat = root.appendingPathComponent("SpeakerEmbedding_ECAPA.mlmodelc")
@@ -131,8 +143,8 @@ final class SpeakerGate: @unchecked Sendable {
         return Bundle.main.url(forResource: "SpeakerEmbedding_ECAPA", withExtension: "mlmodelc")
     }
 
-    /// Core ML can rename graph I/O during conversion, so bind by shape rather
-    /// than trusting the names we asked for at export time.
+    // Core ML can rename graph I/O during conversion, so bind by shape rather
+    // than trusting the names we asked for at export time.
     private func resolveIONames() {
         let inputs = model.modelDescription.inputDescriptionsByName
         if inputs[inputName] == nil,
@@ -148,13 +160,13 @@ final class SpeakerGate: @unchecked Sendable {
 
     // MARK: - Operating point
 
-    /// Apply a profile's operating point. `nil` restores the measured defaults.
-    ///
-    /// handoff.md: the margin is asymmetric in the WRONG direction for the cost
-    /// model — a false accept puts a wrong number on a chart and nobody notices,
-    /// a false reject costs one repeat — so any adjustment goes DOWN. Nothing in
-    /// the app raises these automatically; a speaker whose own clips scatter
-    /// widely gets told to re-record instead (VoiceProfileStore.spreadWarning).
+    // Apply a profile's operating point. `nil` restores the measured defaults.
+    //
+    // handoff.md: the margin is asymmetric in the WRONG direction for the cost
+    // model — a false accept puts a wrong number on a chart and nobody notices,
+    // a false reject costs one repeat — so any adjustment goes DOWN. Nothing in
+    // the app raises these automatically; a speaker whose own clips scatter
+    // widely gets told to re-record instead (VoiceProfileStore.spreadWarning).
     func applyThresholds(accept: Double?, reject: Double?) {
         lock.lock()
         acceptThreshold = accept ?? Self.defaultAcceptThreshold
@@ -164,7 +176,12 @@ final class SpeakerGate: @unchecked Sendable {
     }
 
     // MARK: - Embedding
-
+    
+    
+    // THE ONLY PLACE A WAVEFORM BECOMES A VECTOR, and deliberately private.
+    // `SpeakerGate.probe` in TSEOverlapMetrics.swift needs the vector but does NOT
+    // get it from here — it receives it through `GateResult.embedding`, so family C
+    // of the metrics costs no inference at all.
     private func embed(_ samples: [Float]) throws -> [Double] {
         let n = Self.inputSamples
         guard let input = try? MLMultiArray(shape: [1, NSNumber(value: n)], dataType: .float32) else {
@@ -195,8 +212,8 @@ final class SpeakerGate: @unchecked Sendable {
         return Self.unit(vec)
     }
 
-    /// Internal rather than private: `leaveOneOutDistances` needs it from a static
-    /// context outside any instance.
+    // Internal rather than private: `leaveOneOutDistances` needs it from a static
+    // context outside any instance.
     static func unit(_ v: [Double]) -> [Double] {
         let norm = (v.reduce(0) { $0 + $1 * $1 }).squareRoot()
         guard norm > 1e-12 else { return v }
@@ -205,10 +222,10 @@ final class SpeakerGate: @unchecked Sendable {
 
     // MARK: - Enrollment
 
-    /// Add enrollment utterances. Pass SEVERAL spanning different conditions
-    /// (mask on/off, near/far, normal/quiet) — that difference was worth ~8x EER.
-    /// One clip is the weak case, and one VOLUME is the case that measured as
-    /// withholding the clinician's own soft dictation.
+    // Add enrollment utterances. Pass SEVERAL spanning different conditions
+    // (mask on/off, near/far, normal/quiet) — that difference was worth ~8x EER.
+    // One clip is the weak case, and one VOLUME is the case that measured as
+    // withholding the clinician's own soft dictation.
     @discardableResult
     func enroll(_ utterances: [[Float]]) throws -> Int {
         let minSamples = Int(Self.minDurationSeconds * Double(Self.sampleRate))
@@ -232,17 +249,17 @@ final class SpeakerGate: @unchecked Sendable {
         lock.unlock()
     }
 
-    /// The current templates, for caching on a profile.
+    // The current templates, for caching on a profile.
     var currentTemplates: [[Double]] {
         lock.lock(); defer { lock.unlock() }
         return templates
     }
 
-    /// Load cached embeddings instead of recomputing them from audio.
-    ///
-    /// This is what makes switching dentist instant. Rebuilding a centroid means
-    /// an ECAPA pass over every take of the profile; a clinic with a rotation
-    /// would pay that at every handover.
+    // Load cached embeddings instead of recomputing them from audio.
+    //
+    // This is what makes switching dentist instant. Rebuilding a centroid means
+    // an ECAPA pass over every take of the profile; a clinic with a rotation
+    // would pay that at every handover.
     func restore(templates newTemplates: [[Double]]) {
         lock.lock()
         templates = newTemplates
@@ -250,17 +267,17 @@ final class SpeakerGate: @unchecked Sendable {
         lock.unlock()
     }
 
-    /// Leave-one-out distances: each template against the centroid of the others.
-    ///
-    /// THE ONLY THRESHOLD EVIDENCE CALIBRATION CAN PRODUCE. A reject threshold
-    /// separates this person from SOMEBODY ELSE, and calibration contains no
-    /// somebody else. What this does show is whether the accept line has room for
-    /// a particular voice: clips clustering at 0.30–0.45 are comfortable against
-    /// 0.675, clips reaching 0.60+ mean the speaker will be withheld while talking
-    /// normally — and it is far better to learn that at setup than mid-patient.
-    ///
-    /// Returns empty below three templates, where leaving one out leaves too
-    /// little to average meaningfully.
+    // Leave-one-out distances: each template against the centroid of the others.
+    //
+    // THE ONLY THRESHOLD EVIDENCE CALIBRATION CAN PRODUCE. A reject threshold
+    // separates this person from SOMEBODY ELSE, and calibration contains no
+    // somebody else. What this does show is whether the accept line has room for
+    // a particular voice: clips clustering at 0.30–0.45 are comfortable against
+    // 0.675, clips reaching 0.60+ mean the speaker will be withheld while talking
+    // normally — and it is far better to learn that at setup than mid-patient.
+    //
+    // Returns empty below three templates, where leaving one out leaves too
+    // little to average meaningfully.
     static func leaveOneOutDistances(_ templates: [[Double]]) -> [Double] {
         guard templates.count >= 3, let dim = templates.first?.count else { return [] }
         var out: [Double] = []
@@ -280,7 +297,7 @@ final class SpeakerGate: @unchecked Sendable {
         return out
     }
 
-    /// Caller must hold `lock`.
+    // Caller must hold `lock`.
     private func recomputeCentroidLocked() {
         if templates.count > Self.maxTemplates {
             templates.removeFirst(templates.count - Self.maxTemplates)
@@ -339,7 +356,10 @@ final class SpeakerGate: @unchecked Sendable {
             lock.unlock()
         }
 
-        return GateResult(verdict: verdict, distance: distance)
+        // `emb` rides along so family C of the T1 metrics can measure the
+        // off-subspace residual without a second inference. One array copy of 192
+        // Doubles, saving one ANE call per span.
+        return GateResult(verdict: verdict, distance: distance, embedding: emb)
     }
 }
 
@@ -347,12 +367,12 @@ final class SpeakerGate: @unchecked Sendable {
 
 extension SpeakerGate {
 
-    /// Read any CoreAudio-decodable file as 16 kHz mono Float32, peak-normalized.
-    ///
-    /// PARITY NOTE: the offline pipeline also applies an 80 Hz high-pass and
-    /// peak-normalizes the WHOLE FILE before cutting segments. Measured effect of
-    /// the high-pass was +0.003 on distances (inside noise) so it is omitted, but
-    /// verify measured distances against Python before trusting on-device verdicts.
+    // Read any CoreAudio-decodable file as 16 kHz mono Float32, peak-normalized.
+    //
+    // PARITY NOTE: the offline pipeline also applies an 80 Hz high-pass and
+    // peak-normalizes the WHOLE FILE before cutting segments. Measured effect of
+    // the high-pass was +0.003 on distances (inside noise) so it is omitted, but
+    // verify measured distances against Python before trusting on-device verdicts.
     static func loadSamples(from url: URL) throws -> [Float] {
         let file = try AVAudioFile(forReading: url)
         let source = file.processingFormat

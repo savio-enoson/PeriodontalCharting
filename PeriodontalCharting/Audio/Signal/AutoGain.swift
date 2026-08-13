@@ -29,35 +29,35 @@ import Foundation
 
 struct AutoGain {
 
-    /// Target RMS for speech. journal.md: healthy speech after normalisation sits
-    /// at 0.05–0.2, and a good calibration recording measured 0.128.
+    // Target RMS for speech. journal.md: healthy speech after normalisation sits
+    // at 0.05–0.2, and a good calibration recording measured 0.128.
     static let targetRMS: Float = 0.1
 
-    /// Never amplify beyond this. A hard ceiling matters more than it looks:
-    /// without one, a silent room drives the gain up until the noise floor hits
-    /// the target and every hiss frame reads as speech.
+    // Never amplify beyond this. A hard ceiling matters more than it looks:
+    // without one, a silent room drives the gain up until the noise floor hits
+    // the target and every hiss frame reads as speech.
     static let maxGain: Float = 12.0
     static let minGain: Float = 0.4
 
-    /// Below this the buffer is treated as silence and the gain is HELD, not
-    /// adapted. This is the anti-pumping rule.
+    // Below this the buffer is treated as silence and the gain is HELD, not
+    // adapted. This is the anti-pumping rule.
     static let silenceRMS: Float = 0.004
 
-    /// Per-buffer smoothing (buffers are ~100 ms). 0.08 gives a ~1.5 s time
-    /// constant — slow enough that a single loud word does not duck the next one,
-    /// fast enough to follow a clinician leaning in and out over a patient.
+    // Per-buffer smoothing (buffers are ~100 ms). 0.08 gives a ~1.5 s time
+    // constant — slow enough that a single loud word does not duck the next one,
+    // fast enough to follow a clinician leaning in and out over a patient.
     static let smoothing: Float = 0.08
 
-    /// Above this, scale back rather than clip. Clipping is destroyed information
-    /// (journal.md: recording.wav has 1,660 clipped samples, permanently lost).
+    // Above this, scale back rather than clip. Clipping is destroyed information
+    // (journal.md: recording.wav has 1,660 clipped samples, permanently lost).
     static let limitPeak: Float = 0.95
 
     private(set) var gain: Float = 1.0
 
-    /// Scale one buffer in place and update the running gain.
-    ///
-    /// The gain is applied BEFORE it is updated, so a sudden loud burst is not
-    /// retroactively squashed — the next buffer absorbs it instead.
+    // Scale one buffer in place and update the running gain.
+    //
+    // The gain is applied BEFORE it is updated, so a sudden loud burst is not
+    // retroactively squashed — the next buffer absorbs it instead.
     mutating func apply(to buffer: inout [Float]) {
         guard !buffer.isEmpty else { return }
 
@@ -87,16 +87,16 @@ struct AutoGain {
 
     mutating func reset() { gain = 1.0 }
 
-    /// One-shot normalisation for a whole recording, for the calibration files.
-    ///
-    /// RMS-to-target rather than peak-to-1.0. Peak normalisation is hostage to a
-    /// single transient — one cough, chair scrape or button tap scales everything
-    /// else down around it — and it is why two takes from the same speaker
-    /// produced noise floors of 0.0087 and 0.0444, a 5x difference that the energy
-    /// segmenter then had to cope with.
-    ///
-    /// Measured on the RMS of the loudest half of the frames, so long silences at
-    /// the start and end of a take do not drag the target down.
+    // One-shot normalisation for a whole recording, for the calibration files.
+    //
+    // RMS-to-target rather than peak-to-1.0. Peak normalisation is hostage to a
+    // single transient — one cough, chair scrape or button tap scales everything
+    // else down around it — and it is why two takes from the same speaker
+    // produced noise floors of 0.0087 and 0.0444, a 5x difference that the energy
+    // segmenter then had to cope with.
+    //
+    // Measured on the RMS of the loudest half of the frames, so long silences at
+    // the start and end of a take do not drag the target down.
     static func normalise(_ samples: inout [Float]) {
         guard !samples.isEmpty else { return }
 

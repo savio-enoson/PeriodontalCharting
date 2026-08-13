@@ -23,8 +23,8 @@
 import Foundation
 import WhisperKit
 
-/// Accumulates stage timings across threads. `@unchecked Sendable` for the same
-/// reason as SpeakerGate: all mutable state is behind `lock`.
+// Accumulates stage timings across threads. `@unchecked Sendable` for the same
+// reason as SpeakerGate: all mutable state is behind `lock`.
 final class WhisperStageTimer: @unchecked Sendable {
     static let shared = WhisperStageTimer()
 
@@ -44,12 +44,12 @@ final class WhisperStageTimer: @unchecked Sendable {
         lock.lock(); encSeconds += seconds; encRuns += 1; lock.unlock()
     }
 
-    /// Everything accumulated since the last drain, then zeroed.
-    ///
-    /// Drained on a callback rather than per decode because the state callback
-    /// fires more often than the decode does — `onProgressCallback` mutates
-    /// `state.currentText` mid-decode. Reporting PER-RUN averages makes the
-    /// numbers independent of how the two interleave.
+    // Everything accumulated since the last drain, then zeroed.
+    //
+    // Drained on a callback rather than per decode because the state callback
+    // fires more often than the decode does — `onProgressCallback` mutates
+    // `state.currentText` mid-decode. Reporting PER-RUN averages makes the
+    // numbers independent of how the two interleave.
     func drain() -> (melMs: Double, melRuns: Int, encMs: Double, encRuns: Int) {
         lock.lock(); defer { lock.unlock() }
         let result = (melSeconds * 1000, melRuns, encSeconds * 1000, encRuns)
@@ -60,11 +60,11 @@ final class WhisperStageTimer: @unchecked Sendable {
     func reset() { _ = drain() }
 }
 
-/// Times `logMelSpectrogram` and forwards the rest.
-///
-/// `windowSamples` MUST be forwarded, not defaulted: `TranscribeTask` reads
-/// `featureExtractor.windowSamples ?? Constants.defaultWindowSamples` to size
-/// every decode window. Returning nil here would silently resize the window.
+// Times `logMelSpectrogram` and forwards the rest.
+//
+// `windowSamples` MUST be forwarded, not defaulted: `TranscribeTask` reads
+// `featureExtractor.windowSamples ?? Constants.defaultWindowSamples` to size
+// every decode window. Returning nil here would silently resize the window.
 final class TimedFeatureExtractor: FeatureExtracting, @unchecked Sendable {
     private let wrapped: any FeatureExtracting
 
@@ -83,7 +83,7 @@ final class TimedFeatureExtractor: FeatureExtracting, @unchecked Sendable {
     }
 }
 
-/// Times `encodeFeatures` and forwards the rest.
+// Times `encodeFeatures` and forwards the rest.
 final class TimedAudioEncoder: AudioEncoding, @unchecked Sendable {
     private let wrapped: any AudioEncoding
 

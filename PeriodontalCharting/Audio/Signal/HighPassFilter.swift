@@ -37,10 +37,10 @@ import Foundation
 
 struct HighPassFilter {
 
-    /// Corner frequency. Below the lowest male fundamental, above room rumble.
+    // Corner frequency. Below the lowest male fundamental, above room rumble.
     static let cornerHz: Double = 80
-    /// Butterworth (maximally flat) — no resonant peak at the corner, which a
-    /// higher Q would add right where voice starts.
+    // Butterworth (maximally flat) — no resonant peak at the corner, which a
+    // higher Q would add right where voice starts.
     static let q: Double = 0.707
 
     // RBJ cookbook biquad coefficients, normalised by a0.
@@ -62,7 +62,7 @@ struct HighPassFilter {
         a2 = Float((1 - alpha) / a0)
     }
 
-    /// Filter in place, carrying state into the next call.
+    // Filter in place, carrying state into the next call.
     mutating func apply(to buffer: inout [Float]) {
         for i in buffer.indices {
             let x = buffer[i]
@@ -75,10 +75,10 @@ struct HighPassFilter {
 
     mutating func reset() { z1 = 0; z2 = 0 }
 
-    /// One-shot for a whole recording. Runs the filter TWICE, forward then
-    /// backward, so the phase shift cancels — a file has no realtime constraint,
-    /// and a calibration template should not carry group delay the live path
-    /// doesn't. Doubles the rolloff to 24 dB/octave as a side effect.
+    // One-shot for a whole recording. Runs the filter TWICE, forward then
+    // backward, so the phase shift cancels — a file has no realtime constraint,
+    // and a calibration template should not carry group delay the live path
+    // doesn't. Doubles the rolloff to 24 dB/octave as a side effect.
     static func filterFile(_ samples: inout [Float],
                            sampleRate: Double = Double(SpeakerGate.sampleRate)) {
         var forward = HighPassFilter(sampleRate: sampleRate)

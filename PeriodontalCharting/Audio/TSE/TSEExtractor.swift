@@ -80,12 +80,12 @@ final class TargetSpeakerExtractor: @unchecked Sendable {
     // MARK: Enrollment state (guarded by `lock`)
 
     private let lock = NSLock()
-    /// (nBands, enrollKeys, attenDim) fp32 = 16 MB. Allocated ONCE at
-    /// calibration and handed to every predict() — re-marshalling this per block
-    /// is the single most expensive mistake available in this file.
+    // (nBands, enrollKeys, attenDim) fp32 = 16 MB. Allocated ONCE at
+    // calibration and handed to every predict() — re-marshalling this per block
+    // is the single most expensive mistake available in this file.
     private var enrollKV: MLMultiArray?
-    /// L2-normalised enrollment magnitude, frequency-major (bins x frames).
-    /// Pre-normalised because the tfmap needs it that way on every block.
+    // L2-normalised enrollment magnitude, frequency-major (bins x frames).
+    // Pre-normalised because the tfmap needs it that way on every block.
     private var enrollMagNorm: [Float] = []
     private var enrollMagFrames = 0
     private var enrollSeconds: Double = 0
@@ -117,8 +117,8 @@ final class TargetSpeakerExtractor: @unchecked Sendable {
         enrollProjection = try load("EnrollmentProjection_BSRNN")
     }
 
-    /// Same lookup as SpeakerGate / SileroVADEngine: Xcode's synchronized file
-    /// group flattens AI/, so compiled models land at the bundle ROOT.
+    // Same lookup as SpeakerGate / SileroVADEngine: Xcode's synchronized file
+    // group flattens AI/, so compiled models land at the bundle ROOT.
     private static func locateModel(_ name: String) -> URL? {
         if let root = Bundle.main.resourceURL {
             let flat = root.appendingPathComponent("\(name).mlmodelc")
@@ -129,15 +129,15 @@ final class TargetSpeakerExtractor: @unchecked Sendable {
 
     // MARK: - Enrollment
 
-    /// Build the conditioning tensors from calibration audio. Run once, off the
-    /// main actor; it is ~1 s of work and its result is reused for every span.
-    ///
-    /// Feed CONCATENATED SPEECH, not a raw file: the Python context concatenates
-    /// VAD spans from calibration.wav plus early spans of the session, giving
-    /// 38.8 s. Silence between spans would spend keys on nothing.
-    ///
-    /// Gain does not matter — the fbank's CMVN and the tfmap's per-frame L2
-    /// normalisation both remove it.
+    // Build the conditioning tensors from calibration audio. Run once, off the
+    // main actor; it is ~1 s of work and its result is reused for every span.
+    //
+    // Feed CONCATENATED SPEECH, not a raw file: the Python context concatenates
+    // VAD spans from calibration.wav plus early spans of the session, giving
+    // 38.8 s. Silence between spans would spend keys on nothing.
+    //
+    // Gain does not matter — the fbank's CMVN and the tfmap's per-frame L2
+    // normalisation both remove it.
     func prepareEnrollment(_ audio: [Float]) throws {
         let seconds = Double(audio.count) / Double(TSEConfig.sampleRate)
         let (features, frames) = fbank.compute(audio)
@@ -207,11 +207,11 @@ final class TargetSpeakerExtractor: @unchecked Sendable {
 
     // MARK: - Extraction
 
-    /// Extract the enrolled speaker from one span. Returns the same number of
-    /// samples as the input (the final partial hop is zero-filled).
-    ///
-    /// Cost on an A16 is roughly RTF 0.3 — a 6 s span costs ~1.8 s, added
-    /// SERIALLY before transcription. That is why only routed spans come here.
+    // Extract the enrolled speaker from one span. Returns the same number of
+    // samples as the input (the final partial hop is zero-filled).
+    //
+    // Cost on an A16 is roughly RTF 0.3 — a 6 s span costs ~1.8 s, added
+    // SERIALLY before transcription. That is why only routed spans come here.
     func extract(_ span: [Float]) throws -> [Float] {
         lock.lock()
         let kv = enrollKV
@@ -336,9 +336,9 @@ final class TargetSpeakerExtractor: @unchecked Sendable {
 
     // MARK: - tfmap
 
-    /// Port of `TFMapFeature.compute`. Attention over enrollment frames in the
-    /// magnitude domain, renormalised and rescaled to the mixture's per-frame
-    /// energy. VERIFIED to match wesep exactly on this Mac.
+    // Port of `TFMapFeature.compute`. Attention over enrollment frames in the
+    // magnitude domain, renormalised and rescaled to the mixture's per-frame
+    // energy. VERIFIED to match wesep exactly on this Mac.
     private static func computeTFMap(mixMagnitude: [Float],
                                      enrollNormalised: [Float],
                                      enrollFrames: Int,
@@ -396,8 +396,8 @@ final class TargetSpeakerExtractor: @unchecked Sendable {
         }
     }
 
-    /// F.normalize(x, p=2, dim=1) over a frequency-major matrix: each COLUMN is
-    /// one frame. eps 1e-12 matches torch, and keeps all-zero pad frames at zero.
+    // F.normalize(x, p=2, dim=1) over a frequency-major matrix: each COLUMN is
+    // one frame. eps 1e-12 matches torch, and keeps all-zero pad frames at zero.
     private static func normaliseColumns(_ x: inout [Float], rows: Int, columns: Int) {
         for t in 0..<columns {
             var square: Float = 0
@@ -424,8 +424,8 @@ final class TargetSpeakerExtractor: @unchecked Sendable {
         }
     }
 
-    /// Core ML hands back fp16 buffers for models converted at FLOAT16
-    /// precision, so never assume Float32 on an OUTPUT array.
+    // Core ML hands back fp16 buffers for models converted at FLOAT16
+    // precision, so never assume Float32 on an OUTPUT array.
     private static func read(_ a: MLMultiArray, into out: inout [Float]) {
         let n = min(a.count, out.count)
         guard a.strides.last?.intValue == 1 else {

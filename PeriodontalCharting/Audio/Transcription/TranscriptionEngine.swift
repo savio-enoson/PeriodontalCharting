@@ -42,45 +42,45 @@ final class TranscriptionEngine {
 
     @ObservationIgnored private(set) var whisperKit: WhisperKit?
     @ObservationIgnored private(set) var vad: SileroVADEngine?
-    /// Observable so the UI can show a model-ready indicator (see ChartDashboard).
+    // Observable so the UI can show a model-ready indicator (see ChartDashboard).
     private(set) var isReady = false
     private(set) var statusMessage = "Loading model…"
-    /// 0…1 while downloading, 0 otherwise. Bind this for a determinate bar.
+    // 0…1 while downloading, 0 otherwise. Bind this for a determinate bar.
     private(set) var downloadProgress: Double = 0
 
-    /// True when this launch skipped WhisperKit. Callers that need transcription
-    /// should check this rather than testing `whisperKit == nil` themselves.
+    // True when this launch skipped WhisperKit. Callers that need transcription
+    // should check this rather than testing `whisperKit == nil` themselves.
     private(set) var isGateOnly = false
 
-    /// App-wide speaker gate. Enrollment lives HERE, not in whatever view happened
-    /// to trigger it — a locally-constructed service deallocates and takes the
-    /// centroid with it.
+    // App-wide speaker gate. Enrollment lives HERE, not in whatever view happened
+    // to trigger it — a locally-constructed service deallocates and takes the
+    // centroid with it.
     private(set) var speakerGate: SpeakerGateService?
 
-    /// The in-flight (or completed) load, so concurrent callers coalesce onto one
-    /// load instead of racing to build multiple WhisperKit instances.
+    // The in-flight (or completed) load, so concurrent callers coalesce onto one
+    // load instead of racing to build multiple WhisperKit instances.
     @ObservationIgnored private var loadTask: Task<Void, Never>?
     @ObservationIgnored private var enrollmentTask: Task<Void, Never>?
 
     // Model naming: folders in argmaxinc/whisperkit-coreml use an underscore before
     // "turbo" (openai_whisper-large-v3_turbo), NOT a hyphen.
     private static let bundledModelName = "openai_whisper-large-v3-v20240930_turbo_632MB"
-    /// Exact repo folder name. `WhisperKit.download` globs `*<variant>/*`.
+    // Exact repo folder name. `WhisperKit.download` globs `*<variant>/*`.
     private static let networkModelVariant = "openai_whisper-large-v3-v20240930_turbo_632MB"
-    /// Remembers where a completed download landed.
+    // Remembers where a completed download landed.
     private static let cachedModelPathKey = "WhisperKitCachedModelPath"
 
-    /// [Dev] Skip the WhisperKit load entirely. The speaker gate, the extractor and
-    /// enrollment are all independent of it, so gate work does not need the ~187 s
-    /// encoder compile. Launch drops to ~2 s; transcription is disabled.
+    // [Dev] Skip the WhisperKit load entirely. The speaker gate, the extractor and
+    // enrollment are all independent of it, so gate work does not need the ~187 s
+    // encoder compile. Launch drops to ~2 s; transcription is disabled.
     private static let gateOnlyKey = "GateOnlyMode"
 
-    /// [Dev] Runtime A/B switch for the encoder compute unit — see `performLoad`.
+    // [Dev] Runtime A/B switch for the encoder compute unit — see `performLoad`.
     private static let fastModelLoadKey = "FastModelLoad"
 
-    /// Take 1 of the ACTIVE profile. Kept as a single URL because some callers
-    /// still want "the primary recording"; use `VoiceProfileStore.activeTakeURLs`
-    /// for anything that should see every take.
+    // Take 1 of the ACTIVE profile. Kept as a single URL because some callers
+    // still want "the primary recording"; use `VoiceProfileStore.activeTakeURLs`
+    // for anything that should see every take.
     static var calibrationURL: URL {
         let store = VoiceProfileStore.shared
         let dir = store.activeDirectory
@@ -88,21 +88,21 @@ final class TranscriptionEngine {
         return CalibrationTake.normal.url(in: dir)
     }
 
-    /// Megabytes this process may still allocate before jetsam kills it.
-    ///
-    /// This is the number that actually matters — not "memory used". The app holds
-    /// WhisperKit (~600 MB), eight Core ML packages for the gate and TSE, and
-    /// TSE's 16 MB enroll_kv, and it has been SIGKILL'd before. Print it after each
-    /// subsystem loads so a regression shows up as a shrinking number rather than
-    /// as a crash with no stack trace.
-    ///
-    /// Returns 0 if the OS declines to report, so treat 0 as "unknown", not "none".
+    // Megabytes this process may still allocate before jetsam kills it.
+    //
+    // This is the number that actually matters — not "memory used". The app holds
+    // WhisperKit (~600 MB), eight Core ML packages for the gate and TSE, and
+    // TSE's 16 MB enroll_kv, and it has been SIGKILL'd before. Print it after each
+    // subsystem loads so a regression shows up as a shrinking number rather than
+    // as a crash with no stack trace.
+    //
+    // Returns 0 if the OS declines to report, so treat 0 as "unknown", not "none".
     nonisolated static func availableMemoryMB() -> Int {
         Int(os_proc_available_memory()) / 1_048_576
     }
 
-    /// What one enrollment pass produced. A struct rather than a wide tuple
-    /// because it crosses a `Task.detached` boundary and the fields matter.
+    // What one enrollment pass produced. A struct rather than a wide tuple
+    // because it crosses a `Task.detached` boundary and the fields matter.
     private struct EnrollmentOutcome: Sendable {
         var templates = 0
         var seconds = 0.0
@@ -115,7 +115,7 @@ final class TranscriptionEngine {
 
     private init() {}
 
-    /// Load the shared model. Idempotent and coalesced.
+    // Load the shared model. Idempotent and coalesced.
     func load() async {
         if isReady { return }
         if loadTask == nil {
@@ -237,9 +237,9 @@ final class TranscriptionEngine {
 
     // MARK: - Model download
 
-    /// Where downloads land. Application Support rather than Caches: the system can
-    /// purge Caches under disk pressure, and re-downloading 600 MB mid-clinic is not
-    /// a risk worth taking. Excluded from iCloud backup — it is re-downloadable.
+    // Where downloads land. Application Support rather than Caches: the system can
+    // purge Caches under disk pressure, and re-downloading 600 MB mid-clinic is not
+    // a risk worth taking. Excluded from iCloud backup — it is re-downloadable.
     private static func downloadBase() throws -> URL {
         var url = FileManager.default.urls(for: .applicationSupportDirectory,
                                            in: .userDomainMask)[0]
@@ -251,7 +251,7 @@ final class TranscriptionEngine {
         return url
     }
 
-    /// Reuse a previous download if we have one; otherwise fetch with progress.
+    // Reuse a previous download if we have one; otherwise fetch with progress.
     private func resolveDownloadedModel() async throws -> URL {
         let fm = FileManager.default
 
@@ -307,17 +307,17 @@ final class TranscriptionEngine {
 
     // MARK: - Speaker gate
 
-    /// True once a centroid exists. Read this rather than tracking a separate flag.
+    // True once a centroid exists. Read this rather than tracking a separate flag.
     var isSpeakerEnrolled: Bool { speakerGate?.isEnrolled ?? false }
 
-    /// Build the app-wide gate on first use, independent of the WhisperKit load.
-    ///
-    /// Falls back to its own SileroVADEngine when `vad` is not set yet — during
-    /// onboarding it usually is not, because `performLoad` assigns it only AFTER
-    /// the WhisperKit load completes.
-    ///
-    /// Synchronous: it loads two small Core ML models on the main actor (~100 ms).
-    /// Acceptable for a one-time setup call; do not put it in a render path.
+    // Build the app-wide gate on first use, independent of the WhisperKit load.
+    //
+    // Falls back to its own SileroVADEngine when `vad` is not set yet — during
+    // onboarding it usually is not, because `performLoad` assigns it only AFTER
+    // the WhisperKit load completes.
+    //
+    // Synchronous: it loads two small Core ML models on the main actor (~100 ms).
+    // Acceptable for a one-time setup call; do not put it in a render path.
     @discardableResult
     func makeSpeakerGateIfNeeded() -> SpeakerGateService? {
         if let speakerGate { return speakerGate }
@@ -328,26 +328,26 @@ final class TranscriptionEngine {
         return service
     }
 
-    /// Enroll from EVERY calibration take of the ACTIVE profile, then cache the
-    /// resulting embeddings and the measured spread on it.
-    ///
-    /// MULTI-CONDITION. Each take is a different acoustic condition — normal
-    /// voice, quiet voice, mask on — and all of them go into one centroid, so the
-    /// gate recognises the clinician however he happens to be speaking. One take
-    /// at one volume is what made a softly-spoken session score 0.806–0.808 and
-    /// get withheld; see CalibrationTake for the measurements.
-    ///
-    /// TEMPLATE BUDGET. `SpeakerGate` evicts FIFO past `maxTemplates` (16), so
-    /// letting take 1 fill all 16 would silently DELETE it again when take 2
-    /// arrives — losing exactly the acoustic diversity this is for. The budget is
-    /// split evenly across the takes that exist.
-    ///
-    /// - Parameters:
-    ///   - reset: clear existing templates first. True whenever re-enrolling, so a
-    ///     re-recorded take does not stack on top of its own older version.
-    ///   - waitForFile: poll until the WAV is readable. AVAudioRecorder finalises
-    ///     ASYNCHRONOUSLY after stop(), so reading immediately can get a truncated
-    ///     file that looks exactly like "no speech".
+    // Enroll from EVERY calibration take of the ACTIVE profile, then cache the
+    // resulting embeddings and the measured spread on it.
+    //
+    // MULTI-CONDITION. Each take is a different acoustic condition — normal
+    // voice, quiet voice, mask on — and all of them go into one centroid, so the
+    // gate recognises the clinician however he happens to be speaking. One take
+    // at one volume is what made a softly-spoken session score 0.806–0.808 and
+    // get withheld; see CalibrationTake for the measurements.
+    //
+    // TEMPLATE BUDGET. `SpeakerGate` evicts FIFO past `maxTemplates` (16), so
+    // letting take 1 fill all 16 would silently DELETE it again when take 2
+    // arrives — losing exactly the acoustic diversity this is for. The budget is
+    // split evenly across the takes that exist.
+    //
+    // - Parameters:
+    //   - reset: clear existing templates first. True whenever re-enrolling, so a
+    //     re-recorded take does not stack on top of its own older version.
+    //   - waitForFile: poll until the WAV is readable. AVAudioRecorder finalises
+    //     ASYNCHRONOUSLY after stop(), so reading immediately can get a truncated
+    //     file that looks exactly like "no speech".
     @discardableResult
     func enrollFromCalibration(
         reset: Bool,
@@ -427,14 +427,14 @@ final class TranscriptionEngine {
                 outcome.totalSpans, outcome.eligibleSpans, outcome.takes)
     }
 
-    /// Switch dentist.
-    ///
-    /// Restores cached embeddings — no audio is read, no ECAPA pass runs — then
-    /// re-conditions the extractor, which CANNOT be restored from the gate's
-    /// embeddings because it uses WeSpeaker ECAPA: same architecture and dimension
-    /// as the gate's SpeechBrain ECAPA, different weights, unrelated embedding
-    /// space. Skipping that step would leave the extractor conditioned on the
-    /// previous clinician — still "working", on the wrong person.
+    // Switch dentist.
+    //
+    // Restores cached embeddings — no audio is read, no ECAPA pass runs — then
+    // re-conditions the extractor, which CANNOT be restored from the gate's
+    // embeddings because it uses WeSpeaker ECAPA: same architecture and dimension
+    // as the gate's SpeechBrain ECAPA, different weights, unrelated embedding
+    // space. Skipping that step would leave the extractor conditioned on the
+    // previous clinician — still "working", on the wrong person.
     func activateProfile(_ id: String) async {
         let store = VoiceProfileStore.shared
         store.setActive(id)
@@ -453,9 +453,9 @@ final class TranscriptionEngine {
         await TSEEngine.shared.reprepare()
     }
 
-    /// Rebuild the centroid at launch. Templates are in memory only, so without
-    /// this the clinician re-calibrates on every cold start. Idempotent and
-    /// coalesced, like `load()`.
+    // Rebuild the centroid at launch. Templates are in memory only, so without
+    // this the clinician re-calibrates on every cold start. Idempotent and
+    // coalesced, like `load()`.
     func restoreEnrollment() async {
         if isSpeakerEnrolled { return }
         if enrollmentTask == nil {

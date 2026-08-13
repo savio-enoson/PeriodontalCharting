@@ -24,20 +24,20 @@
 import SwiftUI
 
 struct ModelLoadingSplash: View {
-    /// @Observable singletons — reading their properties in `body` registers the
-    /// view for updates, so the status line and failure state stay live.
+    // @Observable singletons — reading their properties in `body` registers the
+    // view for updates, so the status line and failure state stay live.
     private let engine = TranscriptionEngine.shared
     private let assets = ChartAssetStore.shared
     private let darkBlue = Color(red: 0.05, green: 0.2, blue: 0.5)
 
-    /// Images gate onboarding, so they are reported first whenever outstanding.
+    // Images gate onboarding, so they are reported first whenever outstanding.
     private var isPreparingAssets: Bool { !assets.isReady }
 
-    /// TranscriptionEngine sets this exact prefix on the failure path.
+    // TranscriptionEngine sets this exact prefix on the failure path.
     private var didFail: Bool { engine.statusMessage.hasPrefix("Failed to load") }
 
-    /// Strictly between 0 and 1 — the engine resets it to 0 once the bytes are in
-    /// and Core ML compilation starts, which has no progress to report.
+    // Strictly between 0 and 1 — the engine resets it to 0 once the bytes are in
+    // and Core ML compilation starts, which has no progress to report.
     private var isDownloading: Bool {
         engine.downloadProgress > 0 && engine.downloadProgress < 1
     }

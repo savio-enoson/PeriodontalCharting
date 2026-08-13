@@ -32,32 +32,32 @@ import OSLog
 final class ChartAssetStore {
     @ObservationIgnored static let shared = ChartAssetStore()
 
-    /// Asset-catalog names, in the order the splash reports them.
+    // Asset-catalog names, in the order the splash reports them.
     static let names = ["Upper-Outer", "Upper-Inner", "Lower-Inner", "Lower-Outer"]
 
-    /// Longest edge to keep, in pixels. A landscape iPad gives the visualizer
-    /// ~1250 pt of width, so 2400 px covers @2x with room to spare and still
-    /// throws away ~65% of each source image's linear resolution.
+    // Longest edge to keep, in pixels. A landscape iPad gives the visualizer
+    // ~1250 pt of width, so 2400 px covers @2x with room to spare and still
+    // throws away ~65% of each source image's linear resolution.
     private static let maxPixelSize: CGFloat = 2400
 
     private(set) var isReady = false
-    /// 0…1 across all four images — real progress, unlike Core ML compilation.
+    // 0…1 across all four images — real progress, unlike Core ML compilation.
     private(set) var progress: Double = 0
     private(set) var statusMessage = "Preparing chart images…"
 
-    /// STRONG references are the point. A weak cache would be purged under the
-    /// model load and re-decoded from the 6800 px original.
+    // STRONG references are the point. A weak cache would be purged under the
+    // model load and re-decoded from the 6800 px original.
     @ObservationIgnored private var decoded: [String: UIImage] = [:]
     @ObservationIgnored private var warmTask: Task<Void, Never>?
 
     private init() {}
 
-    /// The prepared image, or nil if warming has not reached it yet.
+    // The prepared image, or nil if warming has not reached it yet.
     func image(_ name: String) -> Image? {
         decoded[name].map { Image(uiImage: $0) }
     }
 
-    /// Decode all four. Idempotent and coalesced, like `TranscriptionEngine.load()`.
+    // Decode all four. Idempotent and coalesced, like `TranscriptionEngine.load()`.
     func warm() async {
         if isReady { return }
         if warmTask == nil {

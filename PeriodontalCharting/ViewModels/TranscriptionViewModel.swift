@@ -40,14 +40,14 @@ final class TranscriptionViewModel: LiveCaptureDriver {
 
     // MARK: - Observable state (the View binds to these)
 
-    /// Cleaned, display-ready transcript. Includes segments the gate has not
-    /// judged yet — those show but do not reach the chart.
+    // Cleaned, display-ready transcript. Includes segments the gate has not
+    // judged yet — those show but do not reach the chart.
     private(set) var transcript: String = ""
-    /// Human-readable status line.
+    // Human-readable status line.
     private(set) var statusMessage: String = "Loading model…"
     private(set) var isModelReady: Bool = false
-    /// True until the final decode and the final gate pass have both landed —
-    /// stays true for a moment after `isRecording` goes false.
+    // True until the final decode and the final gate pass have both landed —
+    // stays true for a moment after `isRecording` goes false.
     private(set) var isTranscribing: Bool = false
     private(set) var isRecording: Bool = false
 
@@ -60,48 +60,48 @@ final class TranscriptionViewModel: LiveCaptureDriver {
     private var streamTranscriber: AudioStreamTranscriber?
     private var streamTask: Task<Void, Never>?
 
-    /// Gain + speaker gating upstream of Whisper. When present it also fills the
-    /// gate timeline itself, so `startGateMonitor` skips its polling loop.
+    // Gain + speaker gating upstream of Whisper. When present it also fills the
+    // gate timeline itself, so `startGateMonitor` skips its polling loop.
     @ObservationIgnored private var gatedProcessor: GatedAudioProcessor?
 
-    /// Set only in gate-only mode, where WhisperKit is not loaded and something
-    /// still has to own the microphone for the gate to have audio to judge.
+    // Set only in gate-only mode, where WhisperKit is not loaded and something
+    // still has to own the microphone for the gate to have audio to judge.
     @ObservationIgnored private var gateOnlyCapture: GateOnlyCapture?
 
     // RTF tracking for live mode (debug console only).
     private var lastLiveUpdateTime: Date?
     private var lastLiveConfirmedSeconds: Float = 0
 
-    /// Display text confirmed BEFORE the current transcriber was (re)started. A
-    /// route change rebuilds the transcriber, which resets its segment state to
-    /// empty, so this is prepended to keep the note intact.
+    // Display text confirmed BEFORE the current transcriber was (re)started. A
+    // route change rebuilds the transcriber, which resets its segment state to
+    // empty, so this is prepended to keep the note intact.
     private var liveCarryOver = ""
-    /// VERIFIED text from before the restart. Kept separate from `liveCarryOver`,
-    /// which includes unjudged segments — freezing those into the chart's feed
-    /// would make them permanent, because nothing ever re-filters a carry-over.
+    // VERIFIED text from before the restart. Kept separate from `liveCarryOver`,
+    // which includes unjudged segments — freezing those into the chart's feed
+    // would make them permanent, because nothing ever re-filters a carry-over.
     private var verifiedCarryOver = ""
-    /// Last verified text sent to the chart. AI Mode flushes from THIS at stop,
-    /// never from `transcript`.
+    // Last verified text sent to the chart. AI Mode flushes from THIS at stop,
+    // never from `transcript`.
     @ObservationIgnored private(set) var lastVerifiedText = ""
 
     // MARK: - Live event hooks (for AI Mode)
 
-    /// Running display transcript: matched + pending, everything except the other
-    /// speaker. AI Mode mirrors this into its panel for immediate feedback.
+    // Running display transcript: matched + pending, everything except the other
+    // speaker. AI Mode mirrors this into its panel for immediate feedback.
     var onLiveTranscript: ((String) -> Void)?
 
-    /// Text the gate has CONFIRMED came from the enrolled clinician. THIS drives
-    /// the chart. Unjudged text is deliberately absent.
+    // Text the gate has CONFIRMED came from the enrolled clinician. THIS drives
+    // the chart. Unjudged text is deliberately absent.
     var onVerifiedTranscript: ((String) -> Void)?
 
-    /// Fired when Whisper confirms a new chunk, with the cumulative verified-and-
-    /// confirmed text. Drives the solid-vs-ghosted distinction on the chart.
+    // Fired when Whisper confirms a new chunk, with the cumulative verified-and-
+    // confirmed text. Drives the solid-vs-ghosted distinction on the chart.
     var onConfirmedTranscript: ((String) -> Void)?
 
     private var lastConfirmedSegmentCount = 0
     private var lastConfirmedCumulative = ""
     private var liveConfirmedCarryOver = ""
-    /// Speaker gate. ENFORCING — see `speakerVerdict` in the stream callback.
+    // Speaker gate. ENFORCING — see `speakerVerdict` in the stream callback.
     var speakerGate: SpeakerGateService?
 
     // MARK: - Speaker filter status
@@ -113,10 +113,10 @@ final class TranscriptionViewModel: LiveCaptureDriver {
         var rejected = 0
         var routed = 0
         var rescued = 0
-        /// Segments dropped as somebody else.
+        // Segments dropped as somebody else.
         var withheldSegments = 0
-        /// Segments waiting on a verdict. Not withheld — just not on the chart
-        /// yet. A count that climbs and never clears means the gate has stalled.
+        // Segments waiting on a verdict. Not withheld — just not on the chart
+        // yet. A count that climbs and never clears means the gate has stalled.
         var heldSegments = 0
         var lastDistance: Double?
 
@@ -137,16 +137,16 @@ final class TranscriptionViewModel: LiveCaptureDriver {
     @ObservationIgnored private var gateMonitorTask: Task<Void, Never>?
     @ObservationIgnored private var liveStreamStart: Date?
     @ObservationIgnored private var lastGatedAbsoluteSeconds: Double = 0
-    /// Every span judged this session, for the summary printed at stop. Keyed by
-    /// start sample because overlapping windows re-judge the same span.
+    // Every span judged this session, for the summary printed at stop. Keyed by
+    // start sample because overlapping windows re-judge the same span.
     @ObservationIgnored private var sessionSpans: [Int: RescuedSpan] = [:]
 
-    /// WhisperKit decodes a fixed 30 s window; batch speech is packed into chunks
-    /// no larger than this so each decode fills the window.
+    // WhisperKit decodes a fixed 30 s window; batch speech is packed into chunks
+    // no larger than this so each decode fills the window.
     private static let maxChunkSamples = 30 * SileroVADEngine.sampleRate
 
-    /// Concatenate the VAD speech spans (dropping the silence between them) into
-    /// chunks of at most `maxLen` samples; bursts longer than `maxLen` are split.
+    // Concatenate the VAD speech spans (dropping the silence between them) into
+    // chunks of at most `maxLen` samples; bursts longer than `maxLen` are split.
     nonisolated private static func packSpeech(
         _ audio: [Float], _ segments: [SpeechSegment], maxLen: Int
     ) -> [[Float]] {
@@ -194,16 +194,16 @@ final class TranscriptionViewModel: LiveCaptureDriver {
         else { startLiveTranscription() }
     }
 
-    /// State-agnostic start/stop used by callers that drive live mode externally
-    /// (AI Mode), where a plain toggle would be ambiguous.
+    // State-agnostic start/stop used by callers that drive live mode externally
+    // (AI Mode), where a plain toggle would be ambiguous.
     func startLive() { if !isRecording { startLiveTranscription() } }
 
-    /// Stop, and WAIT for the final decode and the final gate pass to land.
-    ///
-    /// AWAITABLE ON PURPOSE. AI Mode must not disconnect its callbacks or run its
-    /// final parse until this returns. It used to call a fire-and-forget stop and
-    /// then nil the callbacks immediately, so the last decode's result fired into
-    /// nothing and the chart was committed from text one decode out of date.
+    // Stop, and WAIT for the final decode and the final gate pass to land.
+    //
+    // AWAITABLE ON PURPOSE. AI Mode must not disconnect its callbacks or run its
+    // final parse until this returns. It used to call a fire-and-forget stop and
+    // then nil the callbacks immediately, so the last decode's result fired into
+    // nothing and the chart was committed from text one decode out of date.
     func stopLive() async { if isRecording { await stopLiveTranscription() } }
 
     private func startLiveTranscription() {
@@ -264,6 +264,16 @@ final class TranscriptionViewModel: LiveCaptureDriver {
             // the moment the transcriber starts.
             self.speakerGate?.resetTimeline()
 
+            // Label the T1 metric rows that follow. Same place and same reason as
+            // the timeline reset: stream time restarts at 0 every session, so
+            // without a label two sessions' rows are indistinguishable in the CSV.
+            //
+            // GIVE AN OVERLAP RECORDING ITS OWN PROFILE NAME. A session with a
+            // second speaker in the room must never pool into the null
+            // distribution, and this string is the only thing separating them.
+            TSEMetricsLog.shared.startSession(
+                profile: VoiceProfileStore.shared.active?.name ?? "none")
+
             if gateOnly {
                 do {
                     let capture = GateOnlyCapture()
@@ -288,9 +298,9 @@ final class TranscriptionViewModel: LiveCaptureDriver {
         }
     }
 
-    /// Build a fresh AudioStreamTranscriber against the *current* audio route and
-    /// start it. Split out so `restartLiveStream` can rebuild the capture graph —
-    /// and WhisperKit's converter — without re-owning the session.
+    // Build a fresh AudioStreamTranscriber against the *current* audio route and
+    // start it. Split out so `restartLiveStream` can rebuild the capture graph —
+    // and WhisperKit's converter — without re-owning the session.
     private func launchStreamTranscriber() {
         guard let whisper = whisperKit, let tokenizer = whisper.tokenizer else { return }
         let options = clinicalOptions(whisper)
@@ -341,16 +351,16 @@ final class TranscriptionViewModel: LiveCaptureDriver {
                     .joined(separator: " ")
             }
 
-            /// THREE-WAY, not two. `pending` is the buffer: text the gate has not
-            /// reached yet. It shows in the transcript so the clinician can see the
-            /// system is listening, but it never reaches a tooth — and it is
-            /// released the moment a verdict arrives, because this runs again on
-            /// every callback.
-            ///
-            /// `nearestSpan`, not `coveringSpan`: energy segmentation leaves gaps
-            /// and Whisper produces text inside them. Inheriting the nearest
-            /// verdict within 1.5 s means a gap during the other speaker is
-            /// withheld too, while a gap mid-dictation still passes.
+            // THREE-WAY, not two. `pending` is the buffer: text the gate has not
+            // reached yet. It shows in the transcript so the clinician can see the
+            // system is listening, but it never reaches a tooth — and it is
+            // released the moment a verdict arrives, because this runs again on
+            // every callback.
+            //
+            // `nearestSpan`, not `coveringSpan`: energy segmentation leaves gaps
+            // and Whisper produces text inside them. Inheriting the nearest
+            // verdict within 1.5 s means a gap during the other speaker is
+            // withheld too, while a gap mid-dictation still passes.
             func speakerVerdict(_ segment: TranscriptionSegment) -> SpeakerVerdict {
                 // No gate at all (not enrolled) = old ungated behaviour.
                 guard let gate else { return .matched }
@@ -488,8 +498,8 @@ final class TranscriptionViewModel: LiveCaptureDriver {
         }
     }
 
-    /// LiveCaptureDriver — AudioManager calls this after it reactivates the session
-    /// on a route/interruption change.
+    // LiveCaptureDriver — AudioManager calls this after it reactivates the session
+    // on a route/interruption change.
     func restartLiveStream() async {
         guard isRecording else { return }
 
@@ -523,14 +533,14 @@ final class TranscriptionViewModel: LiveCaptureDriver {
         launchStreamTranscriber()
     }
 
-    /// Stop capturing, but FINISH what is already in flight.
-    ///
-    /// The old version cancelled three things too early and each one lost work:
-    /// `printGateSummary()` ran before the gate had seen the tail, the gate monitor
-    /// was cancelled immediately, and `streamTask.cancel()` aborted the decode that
-    /// was running. `TranscribeTask` calls `Task.checkCancellation()` before the
-    /// mel, before the encoder and before the decode loop, so cancelling threw away
-    /// exactly the sentence the clinician was part-way through.
+    // Stop capturing, but FINISH what is already in flight.
+    //
+    // The old version cancelled three things too early and each one lost work:
+    // `printGateSummary()` ran before the gate had seen the tail, the gate monitor
+    // was cancelled immediately, and `streamTask.cancel()` aborted the decode that
+    // was running. `TranscribeTask` calls `Task.checkCancellation()` before the
+    // mel, before the encoder and before the decode loop, so cancelling threw away
+    // exactly the sentence the clinician was part-way through.
     private func stopLiveTranscription() async {
         // Microphone off immediately so the button responds, but `isTranscribing`
         // stays true — there is still work to finish and the UI should say so.
@@ -557,6 +567,17 @@ final class TranscriptionViewModel: LiveCaptureDriver {
         liveStreamStart = nil
         printGateSummary()
 
+        // Flush the buffered T1 metric rows, force them to disk, and print the
+        // session table. NOT required for correctness — every `record` schedules
+        // its own drain on the writer queue — but this is where the aligned
+        // per-span table comes from, so a session that ends without it leaves you
+        // reading the CSV instead.
+        //
+        // Deliberately AFTER `flushGateTail`, so the tail pass's spans are counted.
+        TSEMetricsLog.shared.endSession()
+
+        streamTranscriber = nil
+
         streamTranscriber = nil
         streamTask = nil
         gatedProcessor = nil
@@ -569,12 +590,12 @@ final class TranscriptionViewModel: LiveCaptureDriver {
         statusMessage = transcript.isEmpty ? "No speech captured" : "Done"
     }
 
-    /// One final gate pass over whatever has not been judged yet.
-    ///
-    /// With `GatedAudioProcessor` in the path its `stopRecording()` already forces
-    /// a final sweep, so this usually finds nothing there. It still matters for the
-    /// polling paths — gate-only mode, and any session where the gate was not armed
-    /// when the wrapper would have been built.
+    // One final gate pass over whatever has not been judged yet.
+    //
+    // With `GatedAudioProcessor` in the path its `stopRecording()` already forces
+    // a final sweep, so this usually finds nothing there. It still matters for the
+    // polling paths — gate-only mode, and any session where the gate was not armed
+    // when the wrapper would have been built.
     private func flushGateTail() async {
         guard let gate = speakerGate, gate.isEnrolled,
               let streamStart = liveStreamStart else { return }
@@ -612,16 +633,16 @@ final class TranscriptionViewModel: LiveCaptureDriver {
 
     // MARK: - Live speaker gate
 
-    /// Poll the retained audio buffer and judge only the audio that is new.
-    ///
-    /// SKIPPED ENTIRELY when `GatedAudioProcessor` is in the path: it judges every
-    /// chunk at its pause boundaries and fills the same timeline, so polling would
-    /// double the ECAPA work and re-judge spans that already have verdicts. It is
-    /// also faster — it decides at pauses rather than on a 2-second clock.
-    ///
-    /// TIME BASE for the polling path: absolute stream time is reconstructed from
-    /// the wall clock — a live mic produces samples in real time, so
-    /// `now - streamStart` is the stream time of the buffer's last sample.
+    // Poll the retained audio buffer and judge only the audio that is new.
+    //
+    // SKIPPED ENTIRELY when `GatedAudioProcessor` is in the path: it judges every
+    // chunk at its pause boundaries and fills the same timeline, so polling would
+    // double the ECAPA work and re-judge spans that already have verdicts. It is
+    // also faster — it decides at pauses rather than on a 2-second clock.
+    //
+    // TIME BASE for the polling path: absolute stream time is reconstructed from
+    // the wall clock — a live mic produces samples in real time, so
+    // `now - streamStart` is the stream time of the buffer's last sample.
     private func startGateMonitor() {
         gateStatus = GateStatus()
         guard let gate = speakerGate, gate.isEnrolled else {
@@ -712,13 +733,13 @@ final class TranscriptionViewModel: LiveCaptureDriver {
         gateStatus.lastDistance = results.last?.distanceMixed
     }
 
-    /// Printed once per session, AFTER the final tail pass. The distance
-    /// distributions have to stay separable for enforcement to be safe: if the
-    /// worst kept span and the best dropped span overlap, the threshold is wrong
-    /// for this centroid and the fix is a better calibration recording, not code.
-    ///
-    /// Measured 2026-08-06 across two real speakers on two profiles, the gaps were
-    /// +0.161 and +0.151 with 0.775 sitting almost exactly in the middle of both.
+    // Printed once per session, AFTER the final tail pass. The distance
+    // distributions have to stay separable for enforcement to be safe: if the
+    // worst kept span and the best dropped span overlap, the threshold is wrong
+    // for this centroid and the fix is a better calibration recording, not code.
+    //
+    // Measured 2026-08-06 across two real speakers on two profiles, the gaps were
+    // +0.161 and +0.151 with 0.775 sitting almost exactly in the middle of both.
     private func printGateSummary() {
         let spans = sessionSpans.values.sorted { $0.start < $1.start }
         guard !spans.isEmpty else {

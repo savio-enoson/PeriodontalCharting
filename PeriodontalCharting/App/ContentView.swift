@@ -8,15 +8,15 @@ struct ContentView: View {
     @State private var selectedChart: PatientChart?
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
-    /// @Observable singletons — read in `body` so the splash transitions itself.
+    // @Observable singletons — read in `body` so the splash transitions itself.
     private let assets = ChartAssetStore.shared
     private let engine = TranscriptionEngine.shared
 
-    /// Chart images gate ONBOARDING as well as the chart: they are rendered in
-    /// the same `body` as the onboarding name field. A second or two behind a
-    /// determinate bar buys a responsive setup screen.
-    ///
-    /// The model gates only the CHART — and now only STARTS once setup is done.
+    // Chart images gate ONBOARDING as well as the chart: they are rendered in
+    // the same `body` as the onboarding name field. A second or two behind a
+    // determinate bar buys a responsive setup screen.
+    //
+    // The model gates only the CHART — and now only STARTS once setup is done.
     private var needsSplash: Bool {
         !assets.isReady || (hasCompletedOnboarding && !engine.isReady)
     }

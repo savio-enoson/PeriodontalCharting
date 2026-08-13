@@ -23,9 +23,9 @@ import WhisperKit
 
 final class GateOnlyCapture: @unchecked Sendable {
 
-    /// Keep at most this much audio. The gate monitor reconstructs stream time
-    /// from the buffer length, so an unbounded buffer still works — it just wastes
-    /// memory at ~64 KB per second.
+    // Keep at most this much audio. The gate monitor reconstructs stream time
+    // from the buffer length, so an unbounded buffer still works — it just wastes
+    // memory at ~64 KB per second.
     private static let maxRetainedSeconds = 120.0
 
     private let processor = AudioProcessor()
@@ -40,7 +40,7 @@ final class GateOnlyCapture: @unchecked Sendable {
         print("[GateOnly] microphone stopped")
     }
 
-    /// Current buffer, trimmed to the retention window.
+    // Current buffer, trimmed to the retention window.
     var samples: [Float] {
         let cap = Int(Self.maxRetainedSeconds * Double(SpeakerGate.sampleRate))
         if processor.audioSamples.count > cap {

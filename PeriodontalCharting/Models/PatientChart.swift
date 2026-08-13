@@ -1,19 +1,19 @@
 import Foundation
 import SwiftData
 
-/// A persisted periodontal charting session for a single patient exam.
-///
-/// The full-mouth chart is stored as JSON-encoded `Data` rather than as a
-/// SwiftData relationship. `ToothObject` is already `Codable`, and encoding the
-/// whole mouth as one blob keeps the SwiftData schema flat and stable — there is
-/// no per-tooth query surface we need, we always load/save the mouth as a unit.
+// A persisted periodontal charting session for a single patient exam.
+//
+// The full-mouth chart is stored as JSON-encoded `Data` rather than as a
+// SwiftData relationship. `ToothObject` is already `Codable`, and encoding the
+// whole mouth as one blob keeps the SwiftData schema flat and stable — there is
+// no per-tooth query surface we need, we always load/save the mouth as a unit.
 @Model
 final class PatientChart {
     var patientName: String
     var createdAt: Date
     var updatedAt: Date
 
-    /// JSON-encoded `[ToothObject]`. Access through `mouth` rather than directly.
+    // JSON-encoded `[ToothObject]`. Access through `mouth` rather than directly.
     private var teethData: Data
 
     init(patientName: String, mouth: [Int: ToothObject] = ToothObject.fullMouthEmpty()) {
@@ -23,7 +23,7 @@ final class PatientChart {
         self.teethData = Self.encode(mouth)
     }
 
-    /// The full-mouth chart keyed by tooth number. Setting it bumps `updatedAt`.
+    // The full-mouth chart keyed by tooth number. Setting it bumps `updatedAt`.
     var mouth: [Int: ToothObject] {
         get {
             guard let teeth = try? JSONDecoder().decode([ToothObject].self, from: teethData),

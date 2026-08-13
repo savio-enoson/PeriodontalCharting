@@ -36,9 +36,9 @@ import Foundation
 
 // MARK: - Spectrogram
 
-/// A complex spectrogram stored as two frequency-major planes: element (k, t)
-/// lives at `k * frames + t`. That layout is what the BLAS calls in the tfmap
-/// want, so it is used everywhere in this layer.
+// A complex spectrogram stored as two frequency-major planes: element (k, t)
+// lives at `k * frames + t`. That layout is what the BLAS calls in the tfmap
+// want, so it is used everywhere in this layer.
 struct TSEComplexSpectrogram {
     var real: [Float]
     var imag: [Float]
@@ -66,8 +66,8 @@ final class TSESpectrogram {
 
     static func frameCount(samples: Int) -> Int { 1 + samples / TSEConfig.hop }
 
-    /// Reflect padding by nFFT/2 at both ends — torch's `center=True` with the
-    /// default `pad_mode='reflect'`.
+    // Reflect padding by nFFT/2 at both ends — torch's `center=True` with the
+    // default `pad_mode='reflect'`.
     private func centerPad(_ x: [Float]) -> [Float] {
         let p = TSEConfig.nFFT / 2
         var out = [Float](repeating: 0, count: x.count + 2 * p)
@@ -115,9 +115,9 @@ final class TSESpectrogram {
         return TSEComplexSpectrogram(real: real, imag: imag, frames: frames)
     }
 
-    /// Overlap-add inverse, dividing by the summed squared window. Returns
-    /// `hop * (frames - 1)` samples, which is exactly what torch.istft returns
-    /// for a centred transform with `length=None`.
+    // Overlap-add inverse, dividing by the summed squared window. Returns
+    // `hop * (frames - 1)` samples, which is exactly what torch.istft returns
+    // for a centred transform with `length=None`.
     func inverse(_ spec: TSEComplexSpectrogram) -> [Float] {
         let n = TSEConfig.nFFT
         let half = n / 2
@@ -167,7 +167,7 @@ final class TSESpectrogram {
         return out
     }
 
-    /// Per-frame magnitude, same frequency-major layout. Used for the tfmap.
+    // Per-frame magnitude, same frequency-major layout. Used for the tfmap.
     static func magnitude(_ spec: TSEComplexSpectrogram) -> [Float] {
         var mag = [Float](repeating: 0, count: spec.real.count)
         for i in 0..<mag.count {
@@ -179,20 +179,20 @@ final class TSESpectrogram {
 
 // MARK: - Kaldi filterbank
 
-/// 80-bin Kaldi filterbank for the WeSpeaker ECAPA frame encoder that conditions
-/// the extractor. Mirrors `torchaudio.compliance.kaldi.fbank` with the exact
-/// arguments wesep uses (`Fbank_kaldi` in wesep/modules/speaker/encoder.py):
-///
-///     num_mel_bins 80 | frame_length 25 ms | frame_shift 10 ms
-///     dither 0.0      | window "hamming"   | use_energy False
-///     then CMVN: subtract the per-coefficient mean over time (norm_var False)
+// 80-bin Kaldi filterbank for the WeSpeaker ECAPA frame encoder that conditions
+// the extractor. Mirrors `torchaudio.compliance.kaldi.fbank` with the exact
+// arguments wesep uses (`Fbank_kaldi` in wesep/modules/speaker/encoder.py):
+//
+//     num_mel_bins 80 | frame_length 25 ms | frame_shift 10 ms
+//     dither 0.0      | window "hamming"   | use_energy False
+//     then CMVN: subtract the per-coefficient mean over time (norm_var False)
 final class TSEKaldiFbank {
 
     static let numMel = 80
     static let windowSize = 400        // 25 ms @ 16 kHz
     static let windowShift = 160       // 10 ms
     static let paddedSize = 512        // round_to_power_of_two
-    /// torch.finfo(torch.float32).eps — the floor Kaldi's log uses.
+    // torch.finfo(torch.float32).eps — the floor Kaldi's log uses.
     static let epsilon: Float = 1.1920928955078125e-07
 
     private let window: [Float]
@@ -219,8 +219,8 @@ final class TSEKaldiFbank {
 
     private static func melScale(_ f: Float) -> Float { 1127.0 * log(1.0 + f / 700.0) }
 
-    /// Kaldi's triangular mel banks over the first `paddedSize/2` FFT bins; the
-    /// Nyquist bin is left at zero, exactly as `get_mel_banks` + its right-pad.
+    // Kaldi's triangular mel banks over the first `paddedSize/2` FFT bins; the
+    // Nyquist bin is left at zero, exactly as `get_mel_banks` + its right-pad.
     private static func makeMelBanks() -> [Float] {
         let numFFTBins = paddedSize / 2                      // 256
         let sampleRate = Float(TSEConfig.sampleRate)
@@ -246,9 +246,9 @@ final class TSEKaldiFbank {
         return banks
     }
 
-    /// - Parameter waveform: mono 16 kHz in [-1, 1].
-    /// - Returns: `(frames * 80)` row-major log-mel with CMVN applied, and the
-    ///   frame count. Empty when the input is shorter than one window.
+    // - Parameter waveform: mono 16 kHz in [-1, 1].
+    // - Returns: `(frames * 80)` row-major log-mel with CMVN applied, and the
+    //   frame count. Empty when the input is shorter than one window.
     func compute(_ waveform: [Float]) -> (features: [Float], frames: Int) {
         let frames = Self.frameCount(samples: waveform.count)
         guard frames > 0 else { return ([], 0) }

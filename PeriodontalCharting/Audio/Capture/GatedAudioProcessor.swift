@@ -56,20 +56,20 @@ final class GatedAudioProcessor: AudioProcessing, @unchecked Sendable {
 
     // MARK: Tuning
 
-    /// Don't judge the newest audio — a span there may still be growing.
+    // Don't judge the newest audio — a span there may still be growing.
     private static let tailGuardSeconds = 1.0
-    /// Smallest region worth a pass.
+    // Smallest region worth a pass.
     private static let minChunkSeconds = 2.0
-    /// Cut even without a pause after this much pending audio, so continuous
-    /// speech cannot stall the transcriber indefinitely.
+    // Cut even without a pause after this much pending audio, so continuous
+    // speech cannot stall the transcriber indefinitely.
     private static let maxHoldSeconds = 6.0
-    /// A 30 ms frame quieter than this counts as a pause.
+    // A 30 ms frame quieter than this counts as a pause.
     private static let quietRMS: Float = 0.01
-    /// How often to look for work.
+    // How often to look for work.
     private static let pumpIntervalNanos: UInt64 = 400_000_000
 
-    /// Run the target-speaker extractor on routed spans. SEE THE HEADER — false on
-    /// purpose, and it should stay false without new evidence.
+    // Run the target-speaker extractor on routed spans. SEE THE HEADER — false on
+    // purpose, and it should stay false without new evidence.
     static var useExtractor = false
 
     // MARK: Collaborators
@@ -80,22 +80,22 @@ final class GatedAudioProcessor: AudioProcessing, @unchecked Sendable {
     // MARK: State (all behind `lock`)
 
     private let lock = NSLock()
-    /// Everything the microphone produced, AFTER gain, from the current origin.
+    // Everything the microphone produced, AFTER gain, from the current origin.
     private var raw: [Float] = []
-    /// Judged audio: `raw[0..<judgedCount]` with rejected regions silenced.
+    // Judged audio: `raw[0..<judgedCount]` with rejected regions silenced.
     private var processed: ContiguousArray<Float> = []
-    /// Per-100 ms energy over `processed`, kept in lockstep so `isVoiceDetected`
-    /// indexes the same audio Whisper is about to see.
+    // Per-100 ms energy over `processed`, kept in lockstep so `isVoiceDetected`
+    // indexes the same audio Whisper is about to see.
     private var energy: [Float] = []
-    /// How much of `raw` has been decided.
+    // How much of `raw` has been decided.
     private var judgedCount = 0
-    /// Samples dropped off the front by `purgeAudioSamples`, so absolute stream
-    /// time survives trimming.
+    // Samples dropped off the front by `purgeAudioSamples`, so absolute stream
+    // time survives trimming.
     private var droppedSamples = 0
     private var downstream: (([Float]) -> Void)?
     private var autoGain = AutoGain()
     
-    /// One instance per stream; IIR state must not be shared.
+    // One instance per stream; IIR state must not be shared.
     private var highPass = HighPassFilter()
 
     private var pump: Task<Void, Never>?
@@ -104,13 +104,13 @@ final class GatedAudioProcessor: AudioProcessing, @unchecked Sendable {
         self.gate = gate
     }
 
-    /// Gain-corrected microphone audio, before gating. What the gate itself judges.
+    // Gain-corrected microphone audio, before gating. What the gate itself judges.
     var rawSamples: [Float] {
         lock.lock(); defer { lock.unlock() }
         return raw
     }
 
-    /// Current auto-gain multiplier, for the logs.
+    // Current auto-gain multiplier, for the logs.
     var currentGain: Float {
         lock.lock(); defer { lock.unlock() }
         return autoGain.gain
@@ -206,7 +206,7 @@ final class GatedAudioProcessor: AudioProcessing, @unchecked Sendable {
         }
     }
 
-    /// Judge as much pending audio as is safe, and publish the result.
+    // Judge as much pending audio as is safe, and publish the result.
     private func judgePending(force: Bool) {
         let sr = SpeakerGate.sampleRate
 
@@ -255,7 +255,7 @@ final class GatedAudioProcessor: AudioProcessing, @unchecked Sendable {
         notify?(cleaned)
     }
 
-    /// Index of the start of the last run of quiet frames, or nil if none.
+    // Index of the start of the last run of quiet frames, or nil if none.
     private static func lastQuietBoundary(in audio: [Float]) -> Int? {
         let frame = SpeakerGate.sampleRate / 100 * 3        // 30 ms
         guard audio.count >= frame * 4 else { return nil }
@@ -271,14 +271,14 @@ final class GatedAudioProcessor: AudioProcessing, @unchecked Sendable {
         return nil
     }
 
-    /// Silence the regions the gate confirmed belong to somebody else.
-    /// SAME LENGTH, SAME POSITIONS — always.
-    ///
-    /// Only `.reject` is silenced. Gaps, thin spans and anything the gate had no
-    /// opinion on pass through untouched: they are mostly silence, and silencing
-    /// them on a guess would delete the clinician's own words. Whatever slips
-    /// through is caught downstream by the text buffer, which holds anything
-    /// without a verdict off the chart.
+    // Silence the regions the gate confirmed belong to somebody else.
+    // SAME LENGTH, SAME POSITIONS — always.
+    //
+    // Only `.reject` is silenced. Gaps, thin spans and anything the gate had no
+    // opinion on pass through untouched: they are mostly silence, and silencing
+    // them on a guess would delete the clinician's own words. Whatever slips
+    // through is caught downstream by the text buffer, which holds anything
+    // without a verdict off the chart.
     private static func silenceRejected(in chunk: [Float],
                                         results: [RescuedSpan],
                                         baseSample: Int) -> [Float] {
@@ -295,8 +295,8 @@ final class GatedAudioProcessor: AudioProcessing, @unchecked Sendable {
         return out
     }
 
-    /// Keep `relativeEnergy` aligned with `processed`, using the same formula the
-    /// real processor uses, so `AudioProcessor.isVoiceDetected` behaves normally.
+    // Keep `relativeEnergy` aligned with `processed`, using the same formula the
+    // real processor uses, so `AudioProcessor.isVoiceDetected` behaves normally.
     private func appendEnergyLocked(for buffer: [Float]) {
         let step = inner.minBufferLength                 // 100 ms
         var i = 0

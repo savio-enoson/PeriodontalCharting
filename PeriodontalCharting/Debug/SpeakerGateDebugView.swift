@@ -89,9 +89,9 @@ struct SpeakerGateDebugView: View {
 
     // MARK: - Setup
 
-    /// Uses the APP-WIDE gate from TranscriptionEngine, so this view reflects the
-    /// enrollment onboarding actually made. Building a private SpeakerGateService
-    /// here would show an empty one and hide whether calibration worked.
+    // Uses the APP-WIDE gate from TranscriptionEngine, so this view reflects the
+    // enrollment onboarding actually made. Building a private SpeakerGateService
+    // here would show an empty one and hide whether calibration worked.
     private func initializeIfNeeded() {
         guard service == nil else { return }
         guard let shared = TranscriptionEngine.shared.makeSpeakerGateIfNeeded() else {

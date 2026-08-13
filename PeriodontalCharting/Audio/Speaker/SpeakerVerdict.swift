@@ -17,28 +17,28 @@
 import Foundation
 
 enum SpeakerVerdict {
-    /// Nothing usable has judged this yet. HOLD — text may show, the chart waits.
+    // Nothing usable has judged this yet. HOLD — text may show, the chart waits.
     case pending
-    /// The enrolled clinician. RELEASE.
+    // The enrolled clinician. RELEASE.
     case matched
-    /// Somebody else. DROP.
+    // Somebody else. DROP.
     case notMatched
 }
 
 extension GatedSpan {
-    /// Maps the measured three-band verdict onto the buffer's decision.
-    ///
-    /// `accept` and `confirm` both count as the clinician — the measured rule
-    /// (journal.md §9). Accept-only was tried and withheld his own dictation,
-    /// because his quieter spans reach 0.730 while the other speaker's floor is
-    /// 0.811.
-    ///
-    /// `fromFallback` overrides everything. journal.md §12: distances from blind
-    /// fixed-window spans are NOT measurements — the window may be pure silence. A
-    /// buffer that releases on those is a gate that opens on a coin flip.
-    ///
-    /// `tooShort` is unjudgeable, not verified. It passes today only because the
-    /// live rule is `!= .reject`; here it waits.
+    // Maps the measured three-band verdict onto the buffer's decision.
+    //
+    // `accept` and `confirm` both count as the clinician — the measured rule
+    // (journal.md §9). Accept-only was tried and withheld his own dictation,
+    // because his quieter spans reach 0.730 while the other speaker's floor is
+    // 0.811.
+    //
+    // `fromFallback` overrides everything. journal.md §12: distances from blind
+    // fixed-window spans are NOT measurements — the window may be pure silence. A
+    // buffer that releases on those is a gate that opens on a coin flip.
+    //
+    // `tooShort` is unjudgeable, not verified. It passes today only because the
+    // live rule is `!= .reject`; here it waits.
     var speakerVerdict: SpeakerVerdict {
         if fromFallback { return .pending }
         switch verdict {

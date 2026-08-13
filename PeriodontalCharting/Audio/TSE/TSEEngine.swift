@@ -32,28 +32,28 @@ final class TSEEngine {
     private(set) var status = "Extractor not loaded"
     private(set) var isReady = false
 
-    /// Non-isolated mirror of `extractor`, for the audio pump in
-    /// `GatedAudioProcessor`, which runs off the main actor and cannot await.
-    /// `TargetSpeakerExtractor` is `@unchecked Sendable` with lock-guarded
-    /// enrollment state, so reading it from another thread is safe.
-    ///
-    /// Only ever read when `GatedAudioProcessor.useExtractor` is true — which it
-    /// is not, see the header.
+    // Non-isolated mirror of `extractor`, for the audio pump in
+    // `GatedAudioProcessor`, which runs off the main actor and cannot await.
+    // `TargetSpeakerExtractor` is `@unchecked Sendable` with lock-guarded
+    // enrollment state, so reading it from another thread is safe.
+    //
+    // Only ever read when `GatedAudioProcessor.useExtractor` is true — which it
+    // is not, see the header.
     nonisolated(unsafe) private(set) static var extractorUnsafe: TargetSpeakerExtractor?
 
     @ObservationIgnored private var prepareTask: Task<Void, Never>?
 
-    /// 1024 keys at a 10 ms fbank hop. Enrollment shorter than this cannot fill
-    /// the exported conditioning graph.
+    // 1024 keys at a 10 ms fbank hop. Enrollment shorter than this cannot fill
+    // the exported conditioning graph.
     nonisolated static var requiredEnrollmentSeconds: Double {
         Double(TSEConfig.enrollKeys) * 0.01
     }
 
     private init() {}
 
-    /// Load the six Core ML models and build the conditioning tensors from the
-    /// ACTIVE profile's calibration recordings. Idempotent and coalesced, like
-    /// `TranscriptionEngine.load()`.
+    // Load the six Core ML models and build the conditioning tensors from the
+    // ACTIVE profile's calibration recordings. Idempotent and coalesced, like
+    // `TranscriptionEngine.load()`.
     func prepare() async {
         if isReady { return }
         if prepareTask == nil { prepareTask = Task { await self.performPrepare() } }
@@ -98,13 +98,13 @@ final class TSEEngine {
         }
     }
 
-    /// Re-run after the clinician re-records a take, or after switching profile.
-    ///
-    /// MANDATORY on a profile switch. `enroll_kv` comes from WeSpeaker ECAPA —
-    /// same architecture and dimension as the gate's SpeechBrain ECAPA, different
-    /// weights, unrelated embedding space — so it CANNOT be restored from the
-    /// gate's cached templates. Skipping this leaves the extractor conditioned on
-    /// the previous clinician: still "working", on the wrong person.
+    // Re-run after the clinician re-records a take, or after switching profile.
+    //
+    // MANDATORY on a profile switch. `enroll_kv` comes from WeSpeaker ECAPA —
+    // same architecture and dimension as the gate's SpeechBrain ECAPA, different
+    // weights, unrelated embedding space — so it CANNOT be restored from the
+    // gate's cached templates. Skipping this leaves the extractor conditioned on
+    // the previous clinician: still "working", on the wrong person.
     func reprepare() async {
         extractor = nil
         Self.extractorUnsafe = nil
@@ -113,25 +113,25 @@ final class TSEEngine {
         await prepare()
     }
 
-    /// Concatenated SPEECH from every calibration take of the active profile —
-    /// the extractor's enrollment, not the gate's templates.
-    ///
-    /// MULTI-TAKE HELPS THE EXTRACTOR TOO, for a different reason than the gate.
-    /// The gate wants acoustic DIVERSITY across takes so its centroid covers every
-    /// condition. The extractor just wants MORE frames: it needs >= 10.24 s of
-    /// speech to fill its 1024 conditioning keys, and below that
-    /// `prepareEnrollment` refuses outright. Concatenating takes clears that
-    /// easily — measured 26.3 s from two, 34.4 s from a longer pair.
-    ///
-    /// Concatenated rather than "best 4 spans" on purpose: the gate wants a
-    /// centroid over a few clean spans, the extractor wants as many frame-level
-    /// keys as it can get. Different mechanisms; the "enroll generously" finding
-    /// belongs to the GATE's centroid and does not transfer.
-    ///
-    /// Silero at 0.3, not its 0.5 default: measured max probability on a healthy
-    /// calibration recording through this mic was 0.409, so the default found
-    /// nothing. On this device it usually finds nothing regardless (journal.md
-    /// §10), hence the whole-file fallback.
+    // Concatenated SPEECH from every calibration take of the active profile —
+    // the extractor's enrollment, not the gate's templates.
+    //
+    // MULTI-TAKE HELPS THE EXTRACTOR TOO, for a different reason than the gate.
+    // The gate wants acoustic DIVERSITY across takes so its centroid covers every
+    // condition. The extractor just wants MORE frames: it needs >= 10.24 s of
+    // speech to fill its 1024 conditioning keys, and below that
+    // `prepareEnrollment` refuses outright. Concatenating takes clears that
+    // easily — measured 26.3 s from two, 34.4 s from a longer pair.
+    //
+    // Concatenated rather than "best 4 spans" on purpose: the gate wants a
+    // centroid over a few clean spans, the extractor wants as many frame-level
+    // keys as it can get. Different mechanisms; the "enroll generously" finding
+    // belongs to the GATE's centroid and does not transfer.
+    //
+    // Silero at 0.3, not its 0.5 default: measured max probability on a healthy
+    // calibration recording through this mic was 0.409, so the default found
+    // nothing. On this device it usually finds nothing regardless (journal.md
+    // §10), hence the whole-file fallback.
     nonisolated static func enrollmentAudio(from urls: [URL]) throws -> [Float] {
         guard !urls.isEmpty else { return [] }
         let vad = try? SileroVADEngine()

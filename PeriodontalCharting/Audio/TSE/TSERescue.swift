@@ -15,12 +15,21 @@
 //  ONE ROUTING ROUTINE, TWO ENTRY POINTS. `route(slice:)` is the only place a
 //  routing decision is made, so the file and live paths cannot drift apart.
 //
+//  T1 — MEASUREMENT RUNS HERE, AND CHANGES NOTHING. `route` measures a battery of
+//  candidate overlap metrics on every span and records them, but `shouldRoute` is
+//  byte-for-byte the condition it always was. That separation is the point: the
+//  metrics are being characterised on single-speaker sessions, and a metric wired
+//  into a decision before its null distribution exists is how the current trigger
+//  ended up firing mostly on quiet spans of the enrolled speaker. See
+//  TSEOverlapMetrics.swift.
+//
 
 import Accelerate
 import Foundation
+import OSLog
 
-/// One span's journey through the rescue path. `distanceSeparated` is nil when
-/// the span was bypassed — that is the normal case, not a failure.
+// One span's journey through the rescue path. `distanceSeparated` is nil when
+// the span was bypassed — that is the normal case, not a failure.
 struct RescuedSpan {
     let start: Int
     let end: Int
@@ -30,24 +39,28 @@ struct RescuedSpan {
     let distanceSeparated: Double?
     let routed: Bool
     let extractionSeconds: Double
-    /// RMS of the span. Distinguishes real speech from a fallback window that
-    /// tiled silence — a distance measured on near-silence is meaningless.
+    // RMS of the span. Distinguishes real speech from a fallback window that
+    // tiled silence — a distance measured on near-silence is meaningless.
     let level: Float
-    /// Only populated when `keepAudio` was requested.
+    // Only populated when `keepAudio` was requested.
     var extractedAudio: [Float]?
+    // T1 candidate overlap metrics. Nil when measurement is disabled or the span
+    // was too short to analyse. NOTHING READS THIS TO MAKE A DECISION — it is
+    // carried so the logger and the CSV can see it.
+    var metrics: OverlapMetrics?
 
     var startSeconds: Double { Double(start) / Double(SpeakerGate.sampleRate) }
     var endSeconds: Double { Double(end) / Double(SpeakerGate.sampleRate) }
     var durationSeconds: Double { endSeconds - startSeconds }
 
-    /// The verdict the chart should act on once the mode is `.enforce`.
+    // The verdict the chart should act on once the mode is `.enforce`.
     var effectiveVerdict: Verdict { verdictSeparated ?? verdictMixed }
 
-    /// A span the extractor pulled back over the line.
+    // A span the extractor pulled back over the line.
     var rescued: Bool { routed && effectiveVerdict != .reject }
 
-    /// Cosine SIMILARITY to the centroid — the complement of the distance the
-    /// thresholds use. 1.0 is identical, 0.0 is orthogonal.
+    // Cosine SIMILARITY to the centroid — the complement of the distance the
+    // thresholds use. 1.0 is identical, 0.0 is orthogonal.
     var similarity: Double? { distanceMixed.map { 1.0 - $0 } }
 }
 
@@ -56,79 +69,85 @@ extension SpeakerGateService {
     // MARK: - Tuning
 
     enum RescueTuning {
-        /// Frames below `noiseFloor * speechFloorMultiple` are silence. RELATIVE,
-        /// because the microphone level swings widely between sessions AND between
-        /// PEOPLE — a softly-spoken clinician sits far below whatever the first
-        /// tester happened to measure.
+        // Frames below `noiseFloor * speechFloorMultiple` are silence. RELATIVE,
+        // because the microphone level swings widely between sessions AND between
+        // PEOPLE — a softly-spoken clinician sits far below whatever the first
+        // tester happened to measure.
         static let speechFloorMultiple: Float = 3.0
 
-        /// Absolute minimum, so a dead-quiet room cannot promote its own hiss.
-        /// WAS 0.01, which sat ABOVE `noiseFloor * 3` on every real recording
-        /// (floors measure 0.003–0.006), so the adaptive threshold never actually
-        /// adapted downward — the only direction a quiet voice needs.
+        // Absolute minimum, so a dead-quiet room cannot promote its own hiss.
+        // WAS 0.01, which sat ABOVE `noiseFloor * 3` on every real recording
+        // (floors measure 0.003–0.006), so the adaptive threshold never actually
+        // adapted downward — the only direction a quiet voice needs.
         static let absoluteFloor: Float = 0.003
 
-        /// Loud frames must be at least this many times the noise floor before we
-        /// believe there is speech at all. Room hiss has almost no contrast; speech
-        /// has a lot. This is the "don't promote hiss" guard done by CONTRAST, so
-        /// it cannot exclude someone merely for being quiet. Healthy sessions
-        /// measure 14–50x; a soft calibration take measured 5.4x.
+        // Loud frames must be at least this many times the noise floor before we
+        // believe there is speech at all. Room hiss has almost no contrast; speech
+        // has a lot. This is the "don't promote hiss" guard done by CONTRAST, so
+        // it cannot exclude someone merely for being quiet. Healthy sessions
+        // measure 14–50x; a soft calibration take measured 5.4x.
         static let minDynamicRange: Float = 3.0
 
-        /// Gap that still counts as one span. 0.35 s was shorter than the pause
-        /// inside ordinary dictation ("dua … dua … dua"), so every number became
-        /// its own sub-second span.
-        ///
-        /// HOW TO SPOT IT GOING WRONG: a long `accept` span in `[Gate/live]`
-        /// sitting exactly where you know two people were talking.
+        // Gap that still counts as one span. 0.35 s was shorter than the pause
+        // inside ordinary dictation ("dua … dua … dua"), so every number became
+        // its own sub-second span.
+        //
+        // HOW TO SPOT IT GOING WRONG: a long `accept` span in `[Gate/live]`
+        // sitting exactly where you know two people were talking.
         static let maxGapSeconds = 0.6
 
-        /// Matches `SpeakerGate.inputSamples` (3.0 s). Longer input is
-        /// CENTRE-CROPPED by the embedder, so joining past this loses the edges —
-        /// and `speechSeconds` would then be measuring audio the embedder never
-        /// sees.
+        // Matches `SpeakerGate.inputSamples` (3.0 s). Longer input is
+        // CENTRE-CROPPED by the embedder, so joining past this loses the edges —
+        // and `speechSeconds` would then be measuring audio the embedder never
+        // sees.
         static let maxSpanSeconds = 3.0
 
-        /// SECONDS OF ACTUAL VOICE a span must contain to be worth judging.
-        ///
-        /// THIS IS THE QUALIFICATION, and measuring it in VOICE rather than in
-        /// span-seconds is what makes it safe. Three earlier rules — 1.0 s of span,
-        /// then 1.5 s, then a 30% speech-fraction floor — could all be satisfied by
-        /// padding a short utterance out with silence, which is exactly what
-        /// growing does for free.
-        ///
-        /// 0.9 s, DOWN from 1.2. The higher value was set while distance still
-        /// tracked speech content steeply (1.7 s -> 0.72, 2.4 s -> 0.39), so short
-        /// spans genuinely could not be trusted. Matching enrollment segmentation
-        /// to this segmenter flattened that curve: measured 2026-08-06 after the
-        /// change, 1.2 s -> 0.579 and 2.8 s -> 0.430, with everything between
-        /// sitting inside 0.32–0.58. The bias 1.2 was protecting against is gone.
-        ///
-        /// What 1.2 WAS costing: dictated numbers. "dua … dua … dua" is three
-        /// ~0.3 s bursts separated by pauses — about 1.0–1.2 s of voice in total,
-        /// landing just under the bar. Every number run in that session went thin,
-        /// fell through to a blind window, and was held off the chart permanently
-        /// while the surrounding sentences went through. The app lost exactly the
-        /// values it exists to record.
+        // SECONDS OF ACTUAL VOICE a span must contain to be worth judging.
+        //
+        // THIS IS THE QUALIFICATION, and measuring it in VOICE rather than in
+        // span-seconds is what makes it safe. Three earlier rules — 1.0 s of span,
+        // then 1.5 s, then a 30% speech-fraction floor — could all be satisfied by
+        // padding a short utterance out with silence, which is exactly what
+        // growing does for free.
+        //
+        // 0.9 s, DOWN from 1.2. The higher value was set while distance still
+        // tracked speech content steeply (1.7 s -> 0.72, 2.4 s -> 0.39), so short
+        // spans genuinely could not be trusted. Matching enrollment segmentation
+        // to this segmenter flattened that curve: measured 2026-08-06 after the
+        // change, 1.2 s -> 0.579 and 2.8 s -> 0.430, with everything between
+        // sitting inside 0.32–0.58. The bias 1.2 was protecting against is gone.
+        //
+        // What 1.2 WAS costing: dictated numbers. "dua … dua … dua" is three
+        // ~0.3 s bursts separated by pauses — about 1.0–1.2 s of voice in total,
+        // landing just under the bar. Every number run in that session went thin,
+        // fell through to a blind window, and was held off the chart permanently
+        // while the surrounding sentences went through. The app lost exactly the
+        // values it exists to record.
+        //
+        // 0.9 HERE AND 1.5 ON `nearestSpan` ARE THE UN-CONFOUNDED PAIR. Another
+        // branch briefly carried 0.7 / 2.5, moved at the same time as the AutoGain
+        // fix so nobody could say which change bought what (FIXES, Tier 0). This
+        // branch has the values Tier 0 asks to run one clean session against —
+        // do not "restore" 0.7 / 2.5 without deciding to.
         static let minSpeechSeconds = 0.9
 
-        /// The EMBEDDER's own floor — `SpeakerGate.classify` returns `.tooShort`
-        /// below this, so a span must reach it just to be evaluated at all.
-        ///
-        /// Deliberately NOT the qualification. Its only job is to stop a span that
-        /// already has enough voice from being rejected on a technicality: 1.0 s of
-        /// dense dictation is fine, 1.0 s of padding is not, and only
-        /// `minSpeechSeconds` can tell those apart.
+        // The EMBEDDER's own floor — `SpeakerGate.classify` returns `.tooShort`
+        // below this, so a span must reach it just to be evaluated at all.
+        //
+        // Deliberately NOT the qualification. Its only job is to stop a span that
+        // already has enough voice from being rejected on a technicality: 1.0 s of
+        // dense dictation is fine, 1.0 s of padding is not, and only
+        // `minSpeechSeconds` can tell those apart.
         static let embedderMinSeconds = SpeakerGate.minDurationSeconds
     }
 
     // MARK: - The routing decision (the one that must exist once)
 
-    /// Classify one span, and extract + re-gate it when the gate does not accept.
-    ///
-    /// Re-embedding uses the GATE's encoder (SpeechBrain ECAPA). The extractor's
-    /// own WeSpeaker ECAPA lives in a different embedding space and its distances
-    /// are not comparable to these thresholds.
+    // Classify one span, and extract + re-gate it when the gate does not accept.
+    //
+    // Re-embedding uses the GATE's encoder (SpeechBrain ECAPA). The extractor's
+    // own WeSpeaker ECAPA lives in a different embedding space and its distances
+    // are not comparable to these thresholds.
     private func route(slice: [Float],
                        start: Int,
                        end: Int,
@@ -141,6 +160,15 @@ extension SpeakerGateService {
         let mixed = (try? gate.classify(slice))
             ?? GateResult(verdict: .tooShort, distance: nil)
         let duration = Double(slice.count) / Double(SpeakerGate.sampleRate)
+
+        // T1 — MEASURE EVERYTHING, DECIDE ON NOTHING.
+        //
+        // Deliberately NOT guarded by `TSEConfig.mode`. The extractor is `.off` and
+        // stays off; the whole value of these sessions is that they are
+        // single-speaker, so they give the null distribution for free — including on
+        // the quiet spans that are exactly where the present trigger misfires.
+        // Nothing below this line reads `metrics`.
+        let metrics = measure(slice: slice, mixed: mixed)
 
         let shouldRoute =
             TSEConfig.mode != .off
@@ -155,7 +183,8 @@ extension SpeakerGateService {
                                distanceMixed: mixed.distance,
                                verdictSeparated: nil, distanceSeparated: nil,
                                routed: false, extractionSeconds: 0,
-                               level: level, extractedAudio: nil)
+                               level: level, extractedAudio: nil,
+                               metrics: metrics)
         }
 
         let began = CFAbsoluteTimeGetCurrent()
@@ -179,34 +208,96 @@ extension SpeakerGateService {
                            distanceSeparated: separated.distance,
                            routed: true, extractionSeconds: elapsed,
                            level: level,
-                           extractedAudio: keepAudio ? extracted : nil)
+                           extractedAudio: keepAudio ? extracted : nil,
+                           metrics: metrics)
     }
 
-    /// Speech spans to judge — segmented on ENERGY, not Silero.
-    ///
-    /// Silero is non-functional on this device (`journal.md` §10: peak probability
-    /// 0.005 on speech at amplitude 0.597). Its probability is still logged on the
-    /// no-verdict path so a future fix, or a regression, is visible.
-    ///
-    /// INTERNAL, not private: `enrollmentSelection` calls this too. Templates and
-    /// the spans measured against them MUST come out of the same segmenter, or the
-    /// embedder's duration artefact turns the difference into apparent distance.
-    ///
-    /// THE PIPELINE, and what each stage is for:
-    ///
-    ///     frames above threshold      raw candidate spans
-    ///       -> mergeSpans             bridge normal dictation pauses
-    ///       -> coalesceThinSpeech     JOIN until each holds enough VOICE
-    ///       -> growToEmbedderFloor    reach the embedder's 1.0 s hard minimum
-    ///       -> speech-content filter  DROP anything still short on voice
-    ///
-    /// EVERY STAGE MEASURES VOICE, NOT DURATION. That distinction is the whole
-    /// lesson of this file: growing can manufacture length out of silence for
-    /// free, so any rule phrased in seconds-of-span can be satisfied by padding.
-    ///
-    /// - Parameter allowBlindWindows: fall back to fixed 3 s blocks when energy
-    ///   segmentation finds nothing. ENROLLMENT ONLY — on the live path they are
-    ///   actively harmful, see the fallback block below.
+    // The T1 battery for one span. Signal families always; the embedding-domain
+    // families when there is an enrollment to measure against.
+    //
+    // COST, and where it lands: families A and B are ~2–4 ms of Accelerate on the
+    // CPU. Family C is FREE — it reuses the embedding `gate.classify` already
+    // computed a few lines up, rather than running ECAPA over the same samples a
+    // second time. Family E is the only remaining Core ML cost, and it sits inside
+    // `judgePending`, before `notify?(cleaned)` publishes audio to Whisper, on an
+    // ANE that WhisperKit's encoder occupies for ~442 ms a window — requests
+    // serialise, so its real cost is far above its isolated latency.
+    private func measure(slice: [Float], mixed: GateResult) -> OverlapMetrics? {
+        guard TSEMetricsConfig.enabled else { return nil }
+        guard let signal = TSEOverlapAnalyzer.shared.analyze(slice) else { return nil }
+
+        var metrics = OverlapMetrics(signal: signal)
+        guard gate.isEnrolled else { return metrics }
+
+        // Nil only when the span was too short for the embedder to answer, which is
+        // also when family C would have had nothing to measure.
+        if let embedding = mixed.embedding {
+            metrics.subspace = gate.probe(embedding: embedding)
+        }
+
+        // FAMILY E — the literal statement of the trigger to build: is the target
+        // present SOMEWHERE in this span without being dominant ACROSS it?
+        //
+        // The sub-windows are FIXED-LENGTH and identical, which is what makes this
+        // usable despite the 3.0 s zero-padding trap: every sub-window is padded by
+        // the same amount, so the padding bias is common-mode and cancels in the
+        // SPREAD. The absolute min and max still carry it — read the spread, and
+        // treat the endpoints as context.
+        if TSEMetricsConfig.probeSubwindows, mixed.verdict != .tooShort {
+            metrics.subwindows = subwindowDistances(slice)
+        }
+        return metrics
+    }
+
+    private func subwindowDistances(_ slice: [Float]) -> SubwindowMetrics? {
+        let sr = Double(SpeakerGate.sampleRate)
+        let width = Int(TSEMetricsConfig.subwindowSeconds * sr)
+        let stride = max(1, Int(TSEMetricsConfig.subwindowStrideSeconds * sr))
+        guard slice.count >= width + stride else { return nil }   // need >= 2 windows
+
+        var distances: [Double] = []
+        var offset = 0
+        while offset + width <= slice.count {
+            let window = Array(slice[offset..<(offset + width)])
+            if let d = (try? gate.classify(window))?.distance { distances.append(d) }
+            offset += stride
+        }
+        guard distances.count >= 2 else { return nil }
+
+        var metrics = SubwindowMetrics()
+        metrics.count = distances.count
+        metrics.minDistance = distances.min() ?? .nan
+        metrics.maxDistance = distances.max() ?? .nan
+        metrics.spread = metrics.maxDistance - metrics.minDistance
+        metrics.meanDistance = distances.reduce(0, +) / Double(distances.count)
+        return metrics
+    }
+
+    // Speech spans to judge — segmented on ENERGY, not Silero.
+    //
+    // Silero is non-functional on this device (`journal.md` §10: peak probability
+    // 0.005 on speech at amplitude 0.597). Its probability is still logged on the
+    // no-verdict path so a future fix, or a regression, is visible.
+    //
+    // INTERNAL, not private: `enrollmentSelection` calls this too. Templates and
+    // the spans measured against them MUST come out of the same segmenter, or the
+    // embedder's duration artefact turns the difference into apparent distance.
+    //
+    // THE PIPELINE, and what each stage is for:
+    //
+    //     frames above threshold      raw candidate spans
+    //       -> mergeSpans             bridge normal dictation pauses
+    //       -> coalesceThinSpeech     JOIN until each holds enough VOICE
+    //       -> growToEmbedderFloor    reach the embedder's 1.0 s hard minimum
+    //       -> speech-content filter  DROP anything still short on voice
+    //
+    // EVERY STAGE MEASURES VOICE, NOT DURATION. That distinction is the whole
+    // lesson of this file: growing can manufacture length out of silence for
+    // free, so any rule phrased in seconds-of-span can be satisfied by padding.
+    //
+    // - Parameter allowBlindWindows: fall back to fixed 3 s blocks when energy
+    //   segmentation finds nothing. ENROLLMENT ONLY — on the live path they are
+    //   actively harmful, see the fallback block below.
     func rescueSpans(in audio: [Float],
                      allowBlindWindows: Bool = false) -> (spans: [SpeechSegment], fromFallback: Bool) {
         let sr = SpeakerGate.sampleRate
@@ -380,12 +471,12 @@ extension SpeakerGateService {
         return (windows, true)
     }
 
-    /// Seconds of ABOVE-THRESHOLD audio inside a span.
-    ///
-    /// The only honest answer to "is there enough here to identify someone?".
-    /// Span LENGTH cannot answer it — growing manufactures length out of silence
-    /// for free, which is how three successive duration-based rules (1.0 s, then
-    /// 1.5 s, then a 30% fraction floor) all let padding through.
+    // Seconds of ABOVE-THRESHOLD audio inside a span.
+    //
+    // The only honest answer to "is there enough here to identify someone?".
+    // Span LENGTH cannot answer it — growing manufactures length out of silence
+    // for free, which is how three successive duration-based rules (1.0 s, then
+    // 1.5 s, then a 30% fraction floor) all let padding through.
     private static func speechSeconds(of span: SpeechSegment,
                                       frameLevels: [Float],
                                       frameSamples: Int,
@@ -398,16 +489,16 @@ extension SpeakerGateService {
         return Double(above) * Double(frameSamples) / Double(SpeakerGate.sampleRate)
     }
 
-    /// Join neighbouring spans until each holds `minSpeechSeconds` of VOICE, as
-    /// long as the result still fits the embedder's 3 s window.
-    ///
-    /// The test is speech content, not duration — joining a thin span to its
-    /// neighbour adds real voice, whereas growing it adds only the silence in
-    /// between. Repeats until nothing more can be joined, so a run of dictated
-    /// numbers collapses into one judgeable span rather than several thin ones.
-    ///
-    /// Capped at `maxSpanSeconds` because `SpeakerGate` centre-crops longer input:
-    /// past 3 s the embedder would see less than `speechSeconds` measured.
+    // Join neighbouring spans until each holds `minSpeechSeconds` of VOICE, as
+    // long as the result still fits the embedder's 3 s window.
+    //
+    // The test is speech content, not duration — joining a thin span to its
+    // neighbour adds real voice, whereas growing it adds only the silence in
+    // between. Repeats until nothing more can be joined, so a run of dictated
+    // numbers collapses into one judgeable span rather than several thin ones.
+    //
+    // Capped at `maxSpanSeconds` because `SpeakerGate` centre-crops longer input:
+    // past 3 s the embedder would see less than `speechSeconds` measured.
     private static func coalesceThinSpeech(_ spans: [SpeechSegment],
                                            frameLevels: [Float],
                                            frameSamples: Int,
@@ -442,16 +533,16 @@ extension SpeakerGateService {
         return out
     }
 
-    /// Stretch a span to the embedder's hard 1.0 s minimum, below which
-    /// `SpeakerGate.classify` returns `.tooShort` and refuses to answer.
-    ///
-    /// PURELY A TECHNICALITY. This does not make a span worth judging — the
-    /// speech-content filter decides that, afterwards. Its only job is to stop
-    /// 0.9 s of dense dictation being discarded for being compact.
-    ///
-    /// Growth is symmetric where there is room and stops at the audio bounds and
-    /// at the neighbouring span, so two separate spans can never be grown into
-    /// each other.
+    // Stretch a span to the embedder's hard 1.0 s minimum, below which
+    // `SpeakerGate.classify` returns `.tooShort` and refuses to answer.
+    //
+    // PURELY A TECHNICALITY. This does not make a span worth judging — the
+    // speech-content filter decides that, afterwards. Its only job is to stop
+    // 0.9 s of dense dictation being discarded for being compact.
+    //
+    // Growth is symmetric where there is room and stops at the audio bounds and
+    // at the neighbouring span, so two separate spans can never be grown into
+    // each other.
     private static func growToEmbedderFloor(_ spans: [SpeechSegment],
                                             totalSamples: Int,
                                             minSeconds: Double) -> [SpeechSegment] {
@@ -488,13 +579,13 @@ extension SpeakerGateService {
         return out
     }
 
-    /// Verdict to install in the timeline. Only `.enforce` lets an extraction
-    /// change it; observe records the counterfactual and leaves the gate's own
-    /// decision in place.
-    ///
-    /// `fromFallback` rides along so `SpeakerVerdict` can map blind-window spans to
-    /// `pending`. On the live path there are no longer any such spans, but the
-    /// batch and enrollment paths can still produce them.
+    // Verdict to install in the timeline. Only `.enforce` lets an extraction
+    // change it; observe records the counterfactual and leaves the gate's own
+    // decision in place.
+    //
+    // `fromFallback` rides along so `SpeakerVerdict` can map blind-window spans to
+    // `pending`. On the live path there are no longer any such spans, but the
+    // batch and enrollment paths can still produce them.
     private static func timelineSpan(_ r: RescuedSpan,
                                      enforcing: Bool,
                                      fromFallback: Bool) -> GatedSpan {
@@ -532,7 +623,7 @@ extension SpeakerGateService {
         return results
     }
 
-    /// Splice extracted audio back over the routed spans — for a BATCH path only.
+    // Splice extracted audio back over the routed spans — for a BATCH path only.
     static func rebuild(audio: [Float], with results: [RescuedSpan]) -> [Float] {
         var out = audio
         for r in results where r.routed {
@@ -545,13 +636,13 @@ extension SpeakerGateService {
 
     // MARK: - Entry point 2: a live window (streaming)
 
-    /// Judge a window of live audio and merge the verdicts into the timeline.
-    ///
-    /// OVERLAPPING WINDOWS, not disjoint slices: short adjacent chunks destroy
-    /// exactly the spans they are meant to judge.
-    ///
-    /// Windows with no judgeable speech contribute NOTHING to the timeline — no
-    /// blind windows — so the gap stays open for `nearestSpan` to bridge.
+    // Judge a window of live audio and merge the verdicts into the timeline.
+    //
+    // OVERLAPPING WINDOWS, not disjoint slices: short adjacent chunks destroy
+    // exactly the spans they are meant to judge.
+    //
+    // Windows with no judgeable speech contribute NOTHING to the timeline — no
+    // blind windows — so the gap stays open for `nearestSpan` to bridge.
     @discardableResult
     func appendEvaluation(audio: [Float],
                           absoluteOffsetSeconds: Double,
@@ -594,24 +685,25 @@ extension SpeakerGateService {
         return results
     }
 
-    /// The span covering a timestamp, or nil when the gate has not reached it.
+    // The span covering a timestamp, or nil when the gate has not reached it.
     func coveringSpan(atSeconds t: Double) -> GatedSpan? {
         currentTimeline.first { t >= $0.startSeconds && t < $0.endSeconds }
     }
 
-    /// The span covering a timestamp, or the nearest one within `tolerance`.
-    ///
-    /// Energy segmentation leaves gaps — between spans, and where one was dropped
-    /// for being thin on voice — and Whisper happily produces text inside them.
-    /// Inheriting the nearest verdict means mid-utterance gaps take the verdict of
-    /// the speech around them; only text with no real span within `tolerance` is
-    /// left `pending`, and under the buffer that holds it off the chart rather
-    /// than failing open.
-    ///
-    /// THIS TOLERANCE IS NOW LOad-BEARING. With blind windows gone, it is the only
-    /// thing bridging a dictated number burst to the sentence either side of it.
-    /// Raise it if numbers are still being held; lower it if a verdict is carrying
-    /// across a speaker change.
+    // The span covering a timestamp, or the nearest one within `tolerance`.
+    //
+    // Energy segmentation leaves gaps — between spans, and where one was dropped
+    // for being thin on voice — and Whisper happily produces text inside them.
+    // Inheriting the nearest verdict means mid-utterance gaps take the verdict of
+    // the speech around them; only text with no real span within `tolerance` is
+    // left `pending`, and under the buffer that holds it off the chart rather
+    // than failing open.
+    //
+    // THIS TOLERANCE IS NOW LOAD-BEARING. With blind windows gone, it is the only
+    // thing bridging a dictated number burst to the sentence either side of it.
+    // Raise it if numbers are still being held; lower it if a verdict is carrying
+    // across a speaker change. Pairs with `minSpeechSeconds` 0.9 — see the note
+    // there about the 0.7 / 2.5 pair on the other branch.
     func nearestSpan(toSeconds t: Double, within tolerance: Double = 1.5) -> GatedSpan? {
         let spans = currentTimeline
         if let hit = spans.first(where: { t >= $0.startSeconds && t < $0.endSeconds }) {
@@ -627,9 +719,12 @@ extension SpeakerGateService {
 
     // MARK: - Logging
 
-    /// One line per span. Reading order: does the LEVEL look like speech, is the
-    /// SOURCE nrg (energy-segmented, trustworthy) or win (blind fallback — only
-    /// possible on the enrollment path now), then the distance and its margin.
+    // One line per span. Reading order: does the LEVEL look like speech, is the
+    // SOURCE nrg (energy-segmented, trustworthy) or win (blind fallback — only
+    // possible on the enrollment path now), then the distance and its margin.
+    //
+    // The `[TSE/m]` line underneath is T1 measurement and carries NO verdict.
+    // Nothing on it changed any decision above it.
     private static func log(_ results: [RescuedSpan],
                             tag: String,
                             enforcing: Bool,
@@ -656,6 +751,14 @@ extension SpeakerGateService {
                              source, r.level, dText, cosText, marginText,
                              r.verdictMixed.rawValue))
             }
+
+            guard let metrics = r.metrics else { continue }
+            if TSEMetricsConfig.logToConsole {
+                let line = metrics.consoleLine(startSeconds: r.startSeconds,
+                                               endSeconds: r.endSeconds)
+                AppLog.tse.info("\(line, privacy: .public)")
+            }
+            TSEMetricsLog.shared.record(r, tag: tag)
         }
     }
 }

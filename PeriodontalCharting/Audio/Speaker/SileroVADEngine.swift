@@ -27,22 +27,22 @@
 import Foundation
 import CoreML
 
-/// Half-open speech span in *sample* indices (matches Python's {"start","end"}).
+// Half-open speech span in *sample* indices (matches Python's {"start","end"}).
 struct SpeechSegment: Equatable {
     var start: Int
     var end: Int
 }
 
-/// Streaming Silero VAD, wrapped for Core ML. Not an actor: predictions are
-/// synchronous CPU/ANE calls; callers hop it onto a background task as needed.
-/// `@unchecked Sendable`: after init the config fields are read-only and MLModel
-/// prediction is thread-safe, so it can be handed to a detached VAD task.
+// Streaming Silero VAD, wrapped for Core ML. Not an actor: predictions are
+// synchronous CPU/ANE calls; callers hop it onto a background task as needed.
+// `@unchecked Sendable`: after init the config fields are read-only and MLModel
+// prediction is thread-safe, so it can be handed to a detached VAD task.
 final class SileroVADEngine: @unchecked Sendable {
 
     enum VADError: Error { case modelNotFound }
 
     static let sampleRate = 16_000
-    /// Samples per VAD hop @16 kHz (32 ms) — must match the converted model.
+    // Samples per VAD hop @16 kHz (32 ms) — must match the converted model.
     static let windowSamples = 512
     private static let stateShape: [NSNumber] = [2, 1, 128]
 
@@ -54,7 +54,7 @@ final class SileroVADEngine: @unchecked Sendable {
     private var probOut = "prob"
     private var stateOut = "hc_stateN"
 
-    /// Loads SileroVAD.mlmodelc from the app bundle root.
+    // Loads SileroVAD.mlmodelc from the app bundle root.
     init() throws {
         guard let url = Self.locateModel() else { throw VADError.modelNotFound }
         let cfg = MLModelConfiguration()
@@ -81,7 +81,7 @@ final class SileroVADEngine: @unchecked Sendable {
         return Bundle.main.url(forResource: "SileroVAD", withExtension: "mlmodelc")
     }
 
-    /// Match the graph's real output names to prob (scalar) and state ([2,1,128]).
+    // Match the graph's real output names to prob (scalar) and state ([2,1,128]).
     private func resolveOutputNames() {
         let outputs = model.modelDescription.outputDescriptionsByName
         let stateCount = Self.stateShape.map(\.intValue).reduce(1, *)
@@ -95,13 +95,13 @@ final class SileroVADEngine: @unchecked Sendable {
 
     // MARK: - Streaming inference
 
-    /// Speech probability for every 512-sample hop across `audio`, threading the
-    /// LSTM state exactly as the Python model does (state reset to zeros up front).
-    ///
-    /// NOTE: a failed prediction contributes 0, not an error. That keeps the loop
-    /// robust to a single bad hop, but means a wholly broken model returns all
-    /// zeros and looks like silence. Callers that get no spans should check
-    /// `max()` of this before concluding the audio was silent.
+    // Speech probability for every 512-sample hop across `audio`, threading the
+    // LSTM state exactly as the Python model does (state reset to zeros up front).
+    //
+    // NOTE: a failed prediction contributes 0, not an error. That keeps the loop
+    // robust to a single bad hop, but means a wholly broken model returns all
+    // zeros and looks like silence. Callers that get no spans should check
+    // `max()` of this before concluding the audio was silent.
     func speechProbabilities(_ audio: [Float]) -> [Float] {
         let n = audio.count
         guard n > 0, let state = try? MLMultiArray(shape: Self.stateShape, dataType: .float32),
@@ -147,9 +147,9 @@ final class SileroVADEngine: @unchecked Sendable {
 
     // MARK: - get_speech_timestamps port
 
-    /// Faithful Swift port of silero-vad's `get_speech_timestamps`. Returns speech
-    /// spans (in samples) with the same defaults app.py relies on. `maxSpeechDurationS`
-    /// defaults to ∞ (app.py never splits long bursts).
+    // Faithful Swift port of silero-vad's `get_speech_timestamps`. Returns speech
+    // spans (in samples) with the same defaults app.py relies on. `maxSpeechDurationS`
+    // defaults to ∞ (app.py never splits long bursts).
     func speechTimestamps(
         _ audio: [Float],
         threshold: Float = 0.5,

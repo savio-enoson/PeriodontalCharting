@@ -22,28 +22,28 @@ struct VoiceProfile: Codable, Identifiable, Equatable {
     var name: String
     var createdAt: Date
 
-    /// Cached gate embeddings, already unit-normalised. Restored straight into
-    /// `SpeakerGate` on a profile switch — no audio is read.
+    // Cached gate embeddings, already unit-normalised. Restored straight into
+    // `SpeakerGate` on a profile switch — no audio is read.
     var templates: [[Double]]
 
-    /// How far this speaker's own calibration clips sit from each other, measured
-    /// leave-one-out at enrollment.
-    ///
-    /// THIS IS THE ONLY THRESHOLD EVIDENCE CALIBRATION CAN PRODUCE. A reject
-    /// threshold separates this person from SOMEBODY ELSE, and calibration has no
-    /// somebody else in it. What it does show is whether the global 0.675 has room
-    /// for this particular voice: a speaker whose own clips sit at 0.30–0.45 is
-    /// comfortable, one whose clips reach 0.60+ will be rejected while speaking
-    /// normally and should re-record before that happens mid-patient.
+    // How far this speaker's own calibration clips sit from each other, measured
+    // leave-one-out at enrollment.
+    //
+    // THIS IS THE ONLY THRESHOLD EVIDENCE CALIBRATION CAN PRODUCE. A reject
+    // threshold separates this person from SOMEBODY ELSE, and calibration has no
+    // somebody else in it. What it does show is whether the global 0.675 has room
+    // for this particular voice: a speaker whose own clips sit at 0.30–0.45 is
+    // comfortable, one whose clips reach 0.60+ will be rejected while speaking
+    // normally and should re-record before that happens mid-patient.
     var selfDistanceMedian: Double?
     var selfDistanceMax: Double?
 
-    /// Per-profile overrides. `nil` means use the measured global defaults.
-    ///
-    /// Deliberately allowed to move DOWN only in practice — handoff.md: a false
-    /// accept puts a wrong number on a chart and nobody notices, a false reject
-    /// costs one repeat. `VoiceProfileStore.suggestedAcceptThreshold` never
-    /// proposes raising it; a wide spread produces a warning to re-record instead.
+    // Per-profile overrides. `nil` means use the measured global defaults.
+    //
+    // Deliberately allowed to move DOWN only in practice — handoff.md: a false
+    // accept puts a wrong number on a chart and nobody notices, a false reject
+    // costs one repeat. `VoiceProfileStore.suggestedAcceptThreshold` never
+    // proposes raising it; a wide spread produces a warning to re-record instead.
     var acceptThreshold: Double?
     var rejectThreshold: Double?
 
@@ -65,16 +65,16 @@ struct VoiceProfile: Codable, Identifiable, Equatable {
         self.rejectThreshold = rejectThreshold
     }
 
-    /// True when this speaker's own clips scatter far enough that the accept line
-    /// is inside their normal range. Their own dictation will be withheld.
+    // True when this speaker's own clips scatter far enough that the accept line
+    // is inside their normal range. Their own dictation will be withheld.
     var spreadIsRisky: Bool {
         guard let max = selfDistanceMax else { return false }
         return max >= (acceptThreshold ?? SpeakerGate.defaultAcceptThreshold) * 0.85
     }
 }
 
-/// What the index file holds. Separate from the array so the active selection
-/// survives a relaunch.
+// What the index file holds. Separate from the array so the active selection
+// survives a relaunch.
 struct VoiceProfileIndex: Codable {
     var profiles: [VoiceProfile]
     var activeID: String?

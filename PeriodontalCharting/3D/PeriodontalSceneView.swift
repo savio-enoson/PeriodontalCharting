@@ -16,8 +16,8 @@ import RealityKit
 import UIKit
 import simd
 
-/// Holds the long-lived RealityKit entities so gestures and the update closure
-/// can reach them across SwiftUI view updates.
+// Holds the long-lived RealityKit entities so gestures and the update closure
+// can reach them across SwiftUI view updates.
 @MainActor
 final class PeriodontalSceneHolder {
     let root = Entity()
@@ -26,9 +26,9 @@ final class PeriodontalSceneHolder {
 
     var loaded: LoadedTeeth?
     var anatomy: GingivalAnatomyGenerator.Anatomy?
-    /// A translucent glowing shell parented to the selected tooth. Selection is
-    /// shown by adding/removing this overlay — the tooth's own material is never
-    /// modified, so a deselected tooth is always its original colour.
+    // A translucent glowing shell parented to the selected tooth. Selection is
+    // shown by adding/removing this overlay — the tooth's own material is never
+    // modified, so a deselected tooth is always its original colour.
     var highlight: Entity?
     var selectedFDI: Int?
 
@@ -41,9 +41,9 @@ final class PeriodontalSceneHolder {
     var appliedArches: Set<DentalArch>?
 }
 
-/// Which arch(es) the 3-D view shows: the whole dentition, or one arch in
-/// isolation so the occlusal surfaces and palatal/lingual sites aren't hidden
-/// behind the opposing teeth.
+// Which arch(es) the 3-D view shows: the whole dentition, or one arch in
+// isolation so the occlusal surfaces and palatal/lingual sites aren't hidden
+// behind the opposing teeth.
 enum ArchFilter: String, CaseIterable, Identifiable {
     case both, upper, lower
     var id: String { rawValue }
@@ -66,7 +66,7 @@ enum ArchFilter: String, CaseIterable, Identifiable {
 }
 
 struct PeriodontalSceneView: View {
-    /// The chart being visualised — same shape as `PatientChart.mouth`.
+    // The chart being visualised — same shape as `PatientChart.mouth`.
     var mouth: [Int: ToothObject]
 
     @State private var holder = PeriodontalSceneHolder()
@@ -80,10 +80,10 @@ struct PeriodontalSceneView: View {
 
     @State private var status: LoadStatus = .loading
     @State private var selectedFDI: Int?
-    /// Whole dentition, or a single arch shown in isolation.
+    // Whole dentition, or a single arch shown in isolation.
     @State private var archFilter: ArchFilter = .both
-    /// 0 = fully see-through, 1 = opaque. Purely a material property, so
-    /// dragging this never regenerates the gum/bone mesh.
+    // 0 = fully see-through, 1 = opaque. Purely a material property, so
+    // dragging this never regenerates the gum/bone mesh.
     @State private var gumOpacity: Double = Double(GingivalAnatomyGenerator.defaultGumOpacity)
 
     enum LoadStatus: Equatable { case loading, ready, failed(String) }
@@ -147,7 +147,7 @@ struct PeriodontalSceneView: View {
         }
     }
 
-    /// (Re)generate the gum + bone layer from the current chart data.
+    // (Re)generate the gum + bone layer from the current chart data.
     private func rebuildAnatomy(_ loaded: LoadedTeeth) {
         holder.anatomy.map { [$0.gum, $0.bone].forEach { $0.removeFromParent() } }
         let anatomy = GingivalAnatomyGenerator.build(from: loaded, mouth: mouth,
@@ -212,10 +212,10 @@ struct PeriodontalSceneView: View {
         updateSelectionHighlight(loaded)
     }
 
-    /// Show the selected tooth by parenting a translucent glowing shell to it —
-    /// added on select, removed on deselect. Exactly one shell ever exists, and
-    /// the tooth's own material is untouched, so deselecting always leaves it in
-    /// its normal colour.
+    // Show the selected tooth by parenting a translucent glowing shell to it —
+    // added on select, removed on deselect. Exactly one shell ever exists, and
+    // the tooth's own material is untouched, so deselecting always leaves it in
+    // its normal colour.
     private func updateSelectionHighlight(_ loaded: LoadedTeeth) {
         holder.highlight?.removeFromParent()
         holder.highlight = nil
@@ -344,7 +344,7 @@ struct PeriodontalSceneView: View {
         }
     }
 
-    /// The tapped tooth's chart status, drawn from the same cells as the 2-D chart.
+    // The tapped tooth's chart status, drawn from the same cells as the 2-D chart.
     @ViewBuilder private var selectedToothPanel: some View {
         if let fdi = selectedFDI, let tooth = mouth[fdi] {
             ToothStatusPanel(tooth: tooth)
@@ -354,7 +354,7 @@ struct PeriodontalSceneView: View {
         }
     }
 
-    /// The app's brand navy (matches the chart's buttons and segmented tints).
+    // The app's brand navy (matches the chart's buttons and segmented tints).
     fileprivate static let controlAccent = Color(red: 0.05, green: 0.2, blue: 0.5)
 
     private var archControl: some View {
@@ -396,8 +396,8 @@ struct PeriodontalSceneView: View {
 
 // MARK: - Presentation chrome
 
-/// Full-screen wrapper: the 3-D view plus a "this patient / healthy control"
-/// toggle and bone visibility switch, presented from `ChartDashboard`.
+// Full-screen wrapper: the 3-D view plus a "this patient / healthy control"
+// toggle and bone visibility switch, presented from `ChartDashboard`.
 struct PeriodontalAnatomyPresenter: View {
     var mouth: [Int: ToothObject]
     @Environment(\.dismiss) private var dismiss
@@ -431,9 +431,9 @@ struct PeriodontalAnatomyPresenter: View {
 }
 
 extension Dictionary where Key == Int, Value == ToothObject {
-    /// An idealised, disease-free version of this mouth — same present teeth,
-    /// but every site healthy (shallow sulcus, margin at the CEJ, no
-    /// bleeding/mobility). Used as a side-by-side control in the 3-D view.
+    // An idealised, disease-free version of this mouth — same present teeth,
+    // but every site healthy (shallow sulcus, margin at the CEJ, no
+    // bleeding/mobility). Used as a side-by-side control in the 3-D view.
     func healthyControl() -> [Int: ToothObject] {
         mapValues { tooth in
             guard !tooth.missing else { return tooth }

@@ -21,8 +21,8 @@ struct ChartSectionVisualizer: View {
     let label: String
     let config: ChartingConfiguration
 
-    /// @Observable singleton — reading `image(_:)` in `body` registers this view
-    /// for updates, so each diagram appears as warming reaches it.
+    // @Observable singleton — reading `image(_:)` in `body` registers this view
+    // for updates, so each diagram appears as warming reaches it.
     private let assets = ChartAssetStore.shared
 
     var body: some View {
@@ -34,12 +34,12 @@ struct ChartSectionVisualizer: View {
         }
     }
 
-    /// The pre-decoded image when the store has it.
-    ///
-    /// The `Image(imageName)` fallback is for previews and any path that reaches
-    /// this before warming — correct, but it decodes the full ~6800 px original,
-    /// which is exactly what ChartAssetStore exists to avoid. It should not be
-    /// hit in the app: ContentView holds the splash until `assets.isReady`.
+    // The pre-decoded image when the store has it.
+    //
+    // The `Image(imageName)` fallback is for previews and any path that reaches
+    // this before warming — correct, but it decodes the full ~6800 px original,
+    // which is exactly what ChartAssetStore exists to avoid. It should not be
+    // hit in the app: ContentView holds the splash until `assets.isReady`.
     @ViewBuilder
     private var diagram: some View {
         if let prepared = assets.image(imageName) {

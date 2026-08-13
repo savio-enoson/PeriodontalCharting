@@ -31,16 +31,16 @@ final class VoiceProfileStore {
     private(set) var profiles: [VoiceProfile] = []
     private(set) var activeID: String?
 
-    /// Set when the last enrollment produced a spread wide enough that the
-    /// clinician's own dictation is likely to be withheld. Cleared on re-enroll.
+    // Set when the last enrollment produced a spread wide enough that the
+    // clinician's own dictation is likely to be withheld. Cleared on re-enroll.
     private(set) var spreadWarning: String?
 
-    /// Set when `profiles.json` EXISTS but could not be read — corrupt, or
-    /// protected and the device was locked when we tried.
-    ///
-    /// While this is set the store REFUSES TO WRITE. The only thing it could
-    /// write is an empty index over the top of a real one, which is exactly how
-    /// every calibration in a clinic used to disappear without a message.
+    // Set when `profiles.json` EXISTS but could not be read — corrupt, or
+    // protected and the device was locked when we tried.
+    //
+    // While this is set the store REFUSES TO WRITE. The only thing it could
+    // write is an empty index over the top of a real one, which is exactly how
+    // every calibration in a clinic used to disappear without a message.
     private(set) var loadError: String?
 
     private static let indexFilename = "profiles.json"
@@ -58,11 +58,11 @@ final class VoiceProfileStore {
 
     var active: VoiceProfile? { profiles.first { $0.id == activeID } }
 
-    /// Directory for a profile, created on demand.
-    ///
-    /// Secured on every call, not only on creation: a directory that predates
-    /// this code, or one restored from a backup taken before it, would otherwise
-    /// keep the Documents default forever.
+    // Directory for a profile, created on demand.
+    //
+    // Secured on every call, not only on creation: a directory that predates
+    // this code, or one restored from a backup taken before it, would otherwise
+    // keep the Documents default forever.
     func directory(for id: String) -> URL {
         let url = Self.root.appendingPathComponent(id, isDirectory: true)
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
@@ -72,9 +72,9 @@ final class VoiceProfileStore {
 
     var activeDirectory: URL? { activeID.map { directory(for: $0) } }
 
-    /// Path relative to Documents, for `AudioManager.startRecording(filename:)`.
-    /// AudioManager appends whatever it is given to the Documents root, so a
-    /// relative path with slashes works and no change is needed there.
+    // Path relative to Documents, for `AudioManager.startRecording(filename:)`.
+    // AudioManager appends whatever it is given to the Documents root, so a
+    // relative path with slashes works and no change is needed there.
     func relativePath(_ take: CalibrationTake, for id: String) -> String {
         "VoiceProfiles/\(id)/\(take.rawValue)"
     }
@@ -105,10 +105,10 @@ final class VoiceProfileStore {
         save()
     }
 
-    /// Delete a profile and its recordings.
-    ///
-    /// Refuses to delete the last one — an app with no profile has nowhere to put
-    /// a calibration and would silently stop gating.
+    // Delete a profile and its recordings.
+    //
+    // Refuses to delete the last one — an app with no profile has nowhere to put
+    // a calibration and would silently stop gating.
     @discardableResult
     func delete(_ id: String) -> Bool {
         guard profiles.count > 1, let i = profiles.firstIndex(where: { $0.id == id }) else {
@@ -130,7 +130,7 @@ final class VoiceProfileStore {
         AppLog.profiles.info("active -> '\(self.active?.name ?? id, privacy: .private)'")
     }
 
-    /// Store the embeddings and the measured spread after an enrollment.
+    // Store the embeddings and the measured spread after an enrollment.
     func updateAfterEnrollment(id: String,
                                templates: [[Double]],
                                selfDistances: [Double]) {
@@ -186,8 +186,8 @@ final class VoiceProfileStore {
 
     private static let protection: FileProtectionType = .completeUnlessOpen
 
-    /// Apply the protection class and keep the item out of iCloud/iTunes
-    /// backups. Both are idempotent — safe to call on every access.
+    // Apply the protection class and keep the item out of iCloud/iTunes
+    // backups. Both are idempotent — safe to call on every access.
     private static func secure(_ url: URL) {
         try? FileManager.default.setAttributes(
             [.protectionKey: protection], ofItemAtPath: url.path)
@@ -198,11 +198,11 @@ final class VoiceProfileStore {
         try? url.setResourceValues(values)
     }
 
-    /// Retrofit every profile directory, every recording and the index.
-    ///
-    /// Setting the class on a DIRECTORY only governs files created after that
-    /// point, so without this sweep an already-calibrated iPad keeps its
-    /// cleartext voiceprints for the life of the install.
+    // Retrofit every profile directory, every recording and the index.
+    //
+    // Setting the class on a DIRECTORY only governs files created after that
+    // point, so without this sweep an already-calibrated iPad keeps its
+    // cleartext voiceprints for the life of the install.
     private static func secureExisting() {
         let fm = FileManager.default
         secure(root)
@@ -295,12 +295,12 @@ final class VoiceProfileStore {
         }
     }
 
-    /// Adopt calibration takes from before profiles existed.
-    ///
-    /// They sit at the Documents root (`voice_sample.wav`, `voice_sample_soft.wav`)
-    /// because that is where `AudioManager` wrote them. MOVED rather than copied:
-    /// nothing reads the old location any more, and leaving duplicates would mean
-    /// a future bug could silently enroll from the stale pair.
+    // Adopt calibration takes from before profiles existed.
+    //
+    // They sit at the Documents root (`voice_sample.wav`, `voice_sample_soft.wav`)
+    // because that is where `AudioManager` wrote them. MOVED rather than copied:
+    // nothing reads the old location any more, and leaving duplicates would mean
+    // a future bug could silently enroll from the stale pair.
     private func migrateLegacyIfNeeded() {
         guard profiles.isEmpty else { return }
         let fm = FileManager.default

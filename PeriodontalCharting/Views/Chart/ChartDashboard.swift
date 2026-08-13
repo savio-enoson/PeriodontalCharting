@@ -44,7 +44,7 @@ struct ChartContentView: View, Equatable {
 }
 
 struct ChartDashboard: View {
-    /// The persisted chart being edited. `nil` when no record is selected.
+    // The persisted chart being edited. `nil` when no record is selected.
     var chart: PatientChart?
     @Environment(\.modelContext) private var modelContext
 
@@ -245,9 +245,9 @@ struct ChartDashboard: View {
         .onAppear { loadChart() }
     }
 
-    /// Load the selected chart's stored mouth into local editing state. The
-    /// parent re-inits this view via `.id(...)` whenever the selection changes,
-    /// so `.onAppear` fires for each distinct chart.
+    // Load the selected chart's stored mouth into local editing state. The
+    // parent re-inits this view via `.id(...)` whenever the selection changes,
+    // so `.onAppear` fires for each distinct chart.
     private func loadChart() {
         if let chart {
             mouth = chart.mouth

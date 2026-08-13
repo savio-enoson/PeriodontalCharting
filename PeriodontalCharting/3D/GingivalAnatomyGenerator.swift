@@ -104,28 +104,28 @@ enum GingivalAnatomyGenerator {
     private enum Layer { case gum, bone }
     private enum Level { case marginTop, boneCrest, base }
 
-    /// A knot at one arch position: everything the ribbon needs, per side.
+    // A knot at one arch position: everything the ribbon needs, per side.
     private struct Knot {
         var centre2: SIMD2<Float>
         var outward: SIMD2<Float>
         var cejY: Float
         var apexY: Float
-        /// Flat, arch-wide floor level — the same value on every knot (see
-        /// `knots(for:...)`) so the bone's underside is one solid, closed plate
-        /// instead of a ragged edge that tracks each tooth's own root depth.
+        // Flat, arch-wide floor level — the same value on every knot (see
+        // `knots(for:...)`) so the bone's underside is one solid, closed plate
+        // instead of a ragged edge that tracks each tooth's own root depth.
         var baseY: Float
         var marginB, marginL: Float     // mm, + coronal
         var boneB, boneL: Float         // mm of bone loss
         var surfB, surfL: Float         // cervical surface offset (gum hugs here)
         var surfBoneB, surfBoneL: Float // widest root offset (+margin) — bone housing
         var isInterproximal: Bool
-        /// This is an interproximal knot next to an extracted tooth — the papilla
-        /// peak is suppressed so the gum heals across the gap instead of spiking
-        /// up into empty space.
+        // This is an interproximal knot next to an extracted tooth — the papilla
+        // peak is suppressed so the gum heals across the gap instead of spiking
+        // up into empty space.
         var adjacentToMissing: Bool = false
     }
 
-    /// A resampled cross-section ready to emit geometry.
+    // A resampled cross-section ready to emit geometry.
     private struct Column {
         var centre2: SIMD2<Float>
         var outward: SIMD2<Float>
@@ -158,8 +158,8 @@ enum GingivalAnatomyGenerator {
             case .base:      return baseY
             }
         }
-        /// A ribbon point. `onBone` places it on the bone housing (widest-root
-        /// offset); otherwise it hugs the cervical tooth surface (the gum margin).
+        // A ribbon point. `onBone` places it on the bone housing (widest-root
+        // offset); otherwise it hugs the cervical tooth surface (the gum margin).
         func point(_ side: Side, _ level: Level, onBone: Bool) -> SIMD3<Float> {
             let s: Float
             switch (side, onBone) {
@@ -233,15 +233,15 @@ enum GingivalAnatomyGenerator {
         return knots
     }
 
-    /// A copy of `base` pushed distally beyond the terminal tooth by `by` tooth spacings,
-    /// continuing the arch's curve rather than running off in a straight line. A
-    /// straight extrapolation from just the last two knots visibly kinks away from
-    /// the arch as soon as it leaves the last real tooth — the wall behind the
-    /// terminal molar reads as a separate flat slab bolted onto the curve instead
-    /// of a smooth taper. Rotating around the arch centre by the same angular step
-    /// observed between `other` and `base` keeps position *and* the outward-facing
-    /// direction following that same curvature, so the extension — and the cap
-    /// that closes it — blends into the rest of the arch instead of seaming.
+    // A copy of `base` pushed distally beyond the terminal tooth by `by` tooth spacings,
+    // continuing the arch's curve rather than running off in a straight line. A
+    // straight extrapolation from just the last two knots visibly kinks away from
+    // the arch as soon as it leaves the last real tooth — the wall behind the
+    // terminal molar reads as a separate flat slab bolted onto the curve instead
+    // of a smooth taper. Rotating around the arch centre by the same angular step
+    // observed between `other` and `base` keeps position *and* the outward-facing
+    // direction following that same curvature, so the extension — and the cap
+    // that closes it — blends into the rest of the arch instead of seaming.
     private static func extended(_ base: Knot, from other: Knot, by: Float, archCentre: SIMD2<Float>) -> Knot {
         var e = base
         let baseVec = base.centre2 - archCentre
@@ -272,10 +272,10 @@ enum GingivalAnatomyGenerator {
         return e
     }
 
-    /// A missing tooth heals to an edentulous ridge: the gum crest drops ~1.5 mm
-    /// below the CEJ (so it dips into a saddle between the neighbours instead of
-    /// standing at crown height) and the ridge necks in to a rounded ~0.6× width
-    /// rather than tracing the extracted crown's full bulge.
+    // A missing tooth heals to an edentulous ridge: the gum crest drops ~1.5 mm
+    // below the CEJ (so it dips into a saddle between the neighbours instead of
+    // standing at crown height) and the ridge necks in to a rounded ~0.6× width
+    // rather than tracing the extracted crown's full bulge.
     private static let healedRidgeMarginMM: Float = -1.5
     private static let healedRidgeWidthScale: Float = 0.6
 
@@ -352,9 +352,9 @@ enum GingivalAnatomyGenerator {
                     adjacentToMissing: adjacentToMissing)
     }
 
-    /// Measure the tooth surface offset (buccal & lingual) in the cervical band by
-    /// projecting vertices onto the outward direction — the runtime stand-in for
-    /// the plan's baked surface-distance table.
+    // Measure the tooth surface offset (buccal & lingual) in the cervical band by
+    // projecting vertices onto the outward direction — the runtime stand-in for
+    // the plan's baked surface-distance table.
     private static func surfaceOffset(_ vertices: [SIMD3<Float>], centre2: SIMD2<Float>,
                                       outward: SIMD2<Float>, cejY: Float, band: Float,
                                       fallback: Float) -> (buccal: Float, lingual: Float) {
@@ -370,9 +370,9 @@ enum GingivalAnatomyGenerator {
         return (buccal, lingual)
     }
 
-    /// Measure the *widest* buccal/lingual extent over the whole root (apical of
-    /// the CEJ) and add a bone-thickness margin, so the alveolar housing fully
-    /// encloses even the splayed roots of the molars.
+    // Measure the *widest* buccal/lingual extent over the whole root (apical of
+    // the CEJ) and add a bone-thickness margin, so the alveolar housing fully
+    // encloses even the splayed roots of the molars.
     private static func rootSurfaceOffset(_ vertices: [SIMD3<Float>], centre2: SIMD2<Float>,
                                           outward: SIMD2<Float>, cejY: Float, coronalDir: Float,
                                           modelPerMM: Float, minimum: (buccal: Float, lingual: Float),
@@ -466,8 +466,8 @@ enum GingivalAnatomyGenerator {
 
     // MARK: - Data → millimetres
 
-    /// `outer` = buccal/labial, `inner` = lingual/palatal — same convention as
-    /// `ToothObject`. `site` is 0/1/2 along `DentalArch.fdiOrder`.
+    // `outer` = buccal/labial, `inner` = lingual/palatal — same convention as
+    // `ToothObject`. `site` is 0/1/2 along `DentalArch.fdiOrder`.
     private static func margin(_ mouth: [Int: ToothObject], _ fdi: Int, outer: Bool, site: Int) -> Float {
         guard let tooth = mouth[fdi], !tooth.missing else { return 1 }
         let arr = outer ? tooth.gingivalMargin.outer : tooth.gingivalMargin.inner
@@ -502,9 +502,9 @@ enum GingivalAnatomyGenerator {
         return theirs.y >= mine.y ? 1 : -1
     }
 
-    /// Translucent coral gum, so the bone crest and buried roots read through it
-    /// — the look of the reference CBCT rendering. `opacity` is exposed so the
-    /// scene view can drive it live from a slider without rebuilding the mesh.
+    // Translucent coral gum, so the bone crest and buried roots read through it
+    // — the look of the reference CBCT rendering. `opacity` is exposed so the
+    // scene view can drive it live from a slider without rebuilding the mesh.
     private static func gumMaterial(opacity: Float) -> PhysicallyBasedMaterial {
         var m = PhysicallyBasedMaterial()
         m.baseColor = .init(tint: UIColor(red: 0.87, green: 0.40, blue: 0.45, alpha: 1))
@@ -515,8 +515,8 @@ enum GingivalAnatomyGenerator {
         return m
     }
 
-    /// Re-tint the gum entity's existing material in place — a cheap,
-    /// geometry-free update for live slider dragging.
+    // Re-tint the gum entity's existing material in place — a cheap,
+    // geometry-free update for live slider dragging.
     static func setGumOpacity(_ opacity: Float, on gum: ModelEntity) {
         guard var material = gum.model?.materials.first as? PhysicallyBasedMaterial else { return }
         material.blending = .transparent(opacity: .init(floatLiteral: opacity))
@@ -534,7 +534,7 @@ enum GingivalAnatomyGenerator {
 
     // MARK: - Ribbon emission
 
-    /// Cap a terminal column's distal face so the ribbons don't end in open flaps.
+    // Cap a terminal column's distal face so the ribbons don't end in open flaps.
     private static func capEnd(_ c: Column, into gum: inout MeshBuilder, bone: inout MeshBuilder) {
         gum.addQuadAutoNormal(c.point(.buccal, .marginTop, onBone: false),
                               c.point(.lingual, .marginTop, onBone: false),
@@ -546,12 +546,12 @@ enum GingivalAnatomyGenerator {
                                c.point(.buccal, .base, onBone: true))
     }
 
-    /// Seal the buccal and lingual walls together at one level, bridging them
-    /// into a closed, solid cross-section instead of two open sheets with
-    /// nothing between them. Used for the bone's base (the alveolar housing
-    /// becomes a solid mass with the roots buried inside) and for the gum's
-    /// crest (so the gum band itself is a solid collar around the root, not
-    /// just two thin translucent walls with an empty gap between them).
+    // Seal the buccal and lingual walls together at one level, bridging them
+    // into a closed, solid cross-section instead of two open sheets with
+    // nothing between them. Used for the bone's base (the alveolar housing
+    // becomes a solid mass with the roots buried inside) and for the gum's
+    // crest (so the gum band itself is a solid collar around the root, not
+    // just two thin translucent walls with an empty gap between them).
     private static func floor(_ columns: [Column], level: Level, onBone: Bool,
                               into builder: inout MeshBuilder) {
         for i in 0..<(columns.count - 1) {

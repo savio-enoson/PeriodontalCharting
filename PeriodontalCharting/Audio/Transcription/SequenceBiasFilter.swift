@@ -30,35 +30,35 @@ import WhisperKit
 final class SequenceBiasFilter: LogitsFiltering {
 
     struct BiasedSequence {
-        /// Token IDs for one surface form of a boosted word (e.g. " bukal").
+        // Token IDs for one surface form of a boosted word (e.g. " bukal").
         let tokens: [Int]
-        /// Added to the logit of `tokens[k]` once the previous `k` generated
-        /// tokens exactly match `tokens[0..<k]`. Positive boosts, negative
-        /// suppresses (finite, unlike `DecodingOptions.suppressTokens`'s -inf).
+        // Added to the logit of `tokens[k]` once the previous `k` generated
+        // tokens exactly match `tokens[0..<k]`. Positive boosts, negative
+        // suppresses (finite, unlike `DecodingOptions.suppressTokens`'s -inf).
         let bias: Float
     }
 
     private let sequences: [BiasedSequence]
 
-    /// - Parameter maxLogitMagnitude: clamp applied to the post-bias logit
-    ///   before it's written back. `FloatType` is `Float16` on-device (see
-    ///   ArgmaxCore/FloatType.swift); Float16's max finite value is ~65504,
-    ///   and an already-high logit plus a careless bias can otherwise round
-    ///   to +inf and poison the softmax. 65000 leaves headroom either side.
-    /// - Parameter maxImmediateRepeats: anti-runaway guard. A biased word's
-    ///   *first* token is boosted regardless of preceding context (that's the
-    ///   point — nudge the vocabulary when acoustics are ambiguous). But in a
-    ///   silence / low-confidence stretch the true logit spread is tiny, so a
-    ///   flat boost on a short boosted word (e.g. single-token "plaque") wins,
-    ///   the emitted token conditions the next step, and the model detonates
-    ///   into "plaque plaque plaque …" — measured on both the live path and the
-    ///   un-VAD'd probe_doc benchmark (142 spurious "plaque" @ 6.5% precision).
-    ///   Once a boosted sequence has already been emitted back-to-back this many
-    ///   times ending at the current position, we STOP boosting its first token,
-    ///   so the loop can't be self-sustained by the bias. A normal repeat the
-    ///   speaker actually said ("bukal … bukal") is unaffected up to the limit,
-    ///   and is still selectable past it on acoustics alone — we only remove the
-    ///   *thumb on the scale*, we don't suppress the token.
+    // - Parameter maxLogitMagnitude: clamp applied to the post-bias logit
+    //   before it's written back. `FloatType` is `Float16` on-device (see
+    //   ArgmaxCore/FloatType.swift); Float16's max finite value is ~65504,
+    //   and an already-high logit plus a careless bias can otherwise round
+    //   to +inf and poison the softmax. 65000 leaves headroom either side.
+    // - Parameter maxImmediateRepeats: anti-runaway guard. A biased word's
+    //   *first* token is boosted regardless of preceding context (that's the
+    //   point — nudge the vocabulary when acoustics are ambiguous). But in a
+    //   silence / low-confidence stretch the true logit spread is tiny, so a
+    //   flat boost on a short boosted word (e.g. single-token "plaque") wins,
+    //   the emitted token conditions the next step, and the model detonates
+    //   into "plaque plaque plaque …" — measured on both the live path and the
+    //   un-VAD'd probe_doc benchmark (142 spurious "plaque" @ 6.5% precision).
+    //   Once a boosted sequence has already been emitted back-to-back this many
+    //   times ending at the current position, we STOP boosting its first token,
+    //   so the loop can't be self-sustained by the bias. A normal repeat the
+    //   speaker actually said ("bukal … bukal") is unaffected up to the limit,
+    //   and is still selectable past it on acoustics alone — we only remove the
+    //   *thumb on the scale*, we don't suppress the token.
     init(sequences: [BiasedSequence], maxLogitMagnitude: Float = 65000, maxImmediateRepeats: Int = 2) {
         // Drop empty token sequences defensively; they'd otherwise bias
         // index 0 unconditionally (prefixLen would be 0 with no tokens[0]).
@@ -70,10 +70,10 @@ final class SequenceBiasFilter: LogitsFiltering {
     private let maxLogitMagnitude: Float
     private let maxImmediateRepeats: Int
 
-    /// How many times `seq.tokens` appears as an immediate, back-to-back suffix
-    /// of `tokens` (the already-generated context). 0 if the tail isn't a whole
-    /// copy of the sequence. Used to detect a bias-driven runaway before we add
-    /// yet another boost that would extend it.
+    // How many times `seq.tokens` appears as an immediate, back-to-back suffix
+    // of `tokens` (the already-generated context). 0 if the tail isn't a whole
+    // copy of the sequence. Used to detect a bias-driven runaway before we add
+    // yet another boost that would extend it.
     private func immediateRepeatCount(of seq: [Int], in tokens: [Int]) -> Int {
         let n = seq.count
         guard n > 0, tokens.count >= n else { return 0 }

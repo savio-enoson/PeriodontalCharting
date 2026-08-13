@@ -12,42 +12,42 @@ import Foundation
 import RealityKit
 import simd
 
-/// Tags a RealityKit entity (a tooth mesh or its marker) with the FDI number it
-/// represents, so a tap can be resolved back to a chart record.
+// Tags a RealityKit entity (a tooth mesh or its marker) with the FDI number it
+// represents, so a tap can be resolved back to a chart record.
 struct ToothID: Component {
     let fdi: Int
 }
 
-/// The result of loading and identifying the dentition.
+// The result of loading and identifying the dentition.
 @MainActor
 struct LoadedTeeth {
-    /// Frame in which tooth centroids are expressed and markers are added.
-    /// The caller parents this under a pivot for orbiting.
+    // Frame in which tooth centroids are expressed and markers are added.
+    // The caller parents this under a pivot for orbiting.
     let modelRoot: Entity
-    /// FDI -> the tooth's mesh entity.
+    // FDI -> the tooth's mesh entity.
     let toothEntity: [Int: Entity]
-    /// FDI -> centroid in `modelRoot` space.
+    // FDI -> centroid in `modelRoot` space.
     let centroid: [Int: SIMD3<Float>]
-    /// FDI -> that tooth's mesh vertices in `modelRoot` space (for surface hugging).
+    // FDI -> that tooth's mesh vertices in `modelRoot` space (for surface hugging).
     let vertices: [Int: [SIMD3<Float>]]
-    /// FDI -> the tooth's true CEJ height (Y in `modelRoot` space), taken from the
-    /// asset's baked `CEJ_*` markers. The keystone landmark for every measurement.
+    // FDI -> the tooth's true CEJ height (Y in `modelRoot` space), taken from the
+    // asset's baked `CEJ_*` markers. The keystone landmark for every measurement.
     let cejY: [Int: Float]
-    /// Arch -> horizontal centre of that arch's centroids (for outward offsets).
+    // Arch -> horizontal centre of that arch's centroids (for outward offsets).
     let archCentre: [DentalArch: SIMD3<Float>]
-    /// Half the model's largest dimension — a good camera framing distance base.
+    // Half the model's largest dimension — a good camera framing distance base.
     let boundingRadius: Float
 }
 
 @MainActor
 enum ToothMeshLoader {
 
-    /// Target size of the model's largest dimension, in metres.
+    // Target size of the model's largest dimension, in metres.
     private static let targetSize: Float = 0.16
 
-    /// Correction applied to the imported asset to stand it upright.
-    /// `baked_teeth.usdc` is authored Z-up; RealityKit is Y-up. Tuned against the
-    /// simulator — kept as one constant so it is trivial to re-tune.
+    // Correction applied to the imported asset to stand it upright.
+    // `baked_teeth.usdc` is authored Z-up; RealityKit is Y-up. Tuned against the
+    // simulator — kept as one constant so it is trivial to re-tune.
     private static let uprightRotation = simd_quatf(angle: -.pi / 2, axis: [1, 0, 0])
 
     static func load() async throws -> LoadedTeeth {
@@ -129,7 +129,7 @@ enum ToothMeshLoader {
 
     // MARK: - Geometry helpers
 
-    /// Pull a mesh's vertex positions into `root` space, for surface measurement.
+    // Pull a mesh's vertex positions into `root` space, for surface measurement.
     private static func extractVertices(_ entity: Entity, relativeTo root: Entity) -> [SIMD3<Float>] {
         guard let mesh = entity.components[ModelComponent.self]?.mesh else { return [] }
         let m = entity.transformMatrix(relativeTo: root)
@@ -145,7 +145,7 @@ enum ToothMeshLoader {
         return out
     }
 
-    /// Gather the positions of the asset's `CEJ_*` marker Xforms in `root` space.
+    // Gather the positions of the asset's `CEJ_*` marker Xforms in `root` space.
     private static func collectCEJMarkers(_ entity: Entity, relativeTo root: Entity,
                                           into out: inout [SIMD3<Float>]) {
         if entity.name.hasPrefix("CEJ_") {
@@ -161,8 +161,8 @@ enum ToothMeshLoader {
         for child in entity.children { collectModelEntities(child, into: &out) }
     }
 
-    /// Mandibular teeth live under a `Mandible_group…` node in this asset; fall
-    /// back to a vertical (median-Y) split if that structure is ever missing.
+    // Mandibular teeth live under a `Mandible_group…` node in this asset; fall
+    // back to a vertical (median-Y) split if that structure is ever missing.
     private static func splitArches(_ meshes: [Entity], in root: Entity) -> (maxilla: [Entity], mandible: [Entity]) {
         var maxilla: [Entity] = []
         var mandible: [Entity] = []
@@ -191,13 +191,13 @@ enum ToothMeshLoader {
 
     // MARK: - Tooth identification
 
-    /// Assign an FDI number to every mesh in one arch. Prefers the asset's baked
-    /// names (each tooth type is encoded in a `UL#`/`LL#` xform or a per-type
-    /// material, reliably even though left/right is not), and only falls back to
-    /// the fragile geometric arch-walk when those names don't yield a clean set.
-    /// The name path fixes the mislabelling the pure walk produced at some
-    /// positions — which showed up as a tooth flagged "missing" in the chart
-    /// staying visible in 3-D because the wrong mesh was being hidden.
+    // Assign an FDI number to every mesh in one arch. Prefers the asset's baked
+    // names (each tooth type is encoded in a `UL#`/`LL#` xform or a per-type
+    // material, reliably even though left/right is not), and only falls back to
+    // the fragile geometric arch-walk when those names don't yield a clean set.
+    // The name path fixes the mislabelling the pure walk produced at some
+    // positions — which showed up as a tooth flagged "missing" in the chart
+    // staying visible in 3-D because the wrong mesh was being hidden.
     private static func identifyTeeth(_ meshes: [Entity], arch: DentalArch, in root: Entity) -> [Int: Entity] {
         if let byName = assignByName(meshes, arch: arch, in: root) {
             #if DEBUG
@@ -215,12 +215,12 @@ enum ToothMeshLoader {
         return out
     }
 
-    /// Name-anchored assignment: group meshes by tooth *type* (1 = central incisor
-    /// … 8 = 2nd/3rd molar), then split each type's two mirrored copies by their X
-    /// position into the arch's two quadrants. The lower-X copy takes the quadrant
-    /// that leads `DentalArch.fdiOrder` (18/48 side), matching the 2-D chart's
-    /// handedness. Returns `nil` — so the caller falls back to geometry — unless
-    /// every type resolves to exactly two meshes.
+    // Name-anchored assignment: group meshes by tooth *type* (1 = central incisor
+    // … 8 = 2nd/3rd molar), then split each type's two mirrored copies by their X
+    // position into the arch's two quadrants. The lower-X copy takes the quadrant
+    // that leads `DentalArch.fdiOrder` (18/48 side), matching the 2-D chart's
+    // handedness. Returns `nil` — so the caller falls back to geometry — unless
+    // every type resolves to exactly two meshes.
     private static func assignByName(_ meshes: [Entity], arch: DentalArch, in root: Entity) -> [Int: Entity]? {
         var byType: [Int: [Entity]] = [:]
         for m in meshes {
@@ -242,10 +242,10 @@ enum ToothMeshLoader {
         return out
     }
 
-    /// The tooth type (1…8, incisor→molar) baked into a mesh's name/ancestors.
-    /// Maxilla: a `UL#` seam-xform ancestor, or the per-type `blinn##` material
-    /// (`blinn14`→2 … `blinn20`→8, with `UL1`→1). Mandible: an `LL#`/`ll#` tag,
-    /// with the untagged 1st molar carrying `blinn10`.
+    // The tooth type (1…8, incisor→molar) baked into a mesh's name/ancestors.
+    // Maxilla: a `UL#` seam-xform ancestor, or the per-type `blinn##` material
+    // (`blinn14`→2 … `blinn20`→8, with `UL1`→1). Mandible: an `LL#`/`ll#` tag,
+    // with the untagged 1st molar carrying `blinn10`.
     private static func toothType(_ entity: Entity, arch: DentalArch) -> Int? {
         var names = ""
         var node: Entity? = entity
@@ -264,7 +264,7 @@ enum ToothMeshLoader {
         }
     }
 
-    /// First single digit immediately following `tag` in `haystack` (1…8), if any.
+    // First single digit immediately following `tag` in `haystack` (1…8), if any.
     private static func digit(after tag: String, in haystack: String) -> Int? {
         var search = haystack.startIndex
         while let r = haystack.range(of: tag, range: search..<haystack.endIndex) {
@@ -277,7 +277,7 @@ enum ToothMeshLoader {
         return nil
     }
 
-    /// The integer immediately following `tag` in `haystack` (e.g. "blinn14" → 14).
+    // The integer immediately following `tag` in `haystack` (e.g. "blinn14" → 14).
     private static func number(after tag: String, in haystack: String) -> Int? {
         guard let r = haystack.range(of: tag) else { return nil }
         var i = r.upperBound
@@ -286,10 +286,10 @@ enum ToothMeshLoader {
         return Int(digits)
     }
 
-    /// Walk the horseshoe: sort teeth by angle about the arch centre, then break
-    /// the ring at its widest angular gap (the open posterior end between the two
-    /// rearmost molars). Orientation is normalised so the sequence always begins
-    /// on the −X side, giving a stable FDI assignment across both arches.
+    // Walk the horseshoe: sort teeth by angle about the arch centre, then break
+    // the ring at its widest angular gap (the open posterior end between the two
+    // rearmost molars). Orientation is normalised so the sequence always begins
+    // on the −X side, giving a stable FDI assignment across both arches.
     private static func orderAroundArch(_ meshes: [Entity], in root: Entity) -> [Entity] {
         guard meshes.count > 2 else { return meshes }
 

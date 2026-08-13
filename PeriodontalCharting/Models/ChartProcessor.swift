@@ -315,11 +315,11 @@ struct ChartProcessor {
 }
 
 extension ChartProcessor {
-    /// Cells where the live *preview* mouth (full confirmed+unconfirmed text)
-    /// differs from the *committed* mouth (confirmed text only) — i.e. the
-    /// tentative, not-yet-confirmed values. Used to ghost those cells in the chart.
-    /// A value that legitimately equals the committed default (e.g. 0) can't be
-    /// distinguished from "unset", so it won't ghost — acceptable for a tentative cue.
+    // Cells where the live *preview* mouth (full confirmed+unconfirmed text)
+    // differs from the *committed* mouth (confirmed text only) — i.e. the
+    // tentative, not-yet-confirmed values. Used to ghost those cells in the chart.
+    // A value that legitimately equals the committed default (e.g. 0) can't be
+    // distinguished from "unset", so it won't ghost — acceptable for a tentative cue.
     static func differingCells(
         preview: [Int: ToothObject], committed: [Int: ToothObject]
     ) -> Set<ChartCellCoordinate> {
