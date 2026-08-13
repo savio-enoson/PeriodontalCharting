@@ -10,4 +10,4 @@ AI/*.mlpackage
 *.xcuserstate
 .DS_STORE
 *.DS_STORE
-.swiftmodulecache
+.swiftmodulecache*.profraw

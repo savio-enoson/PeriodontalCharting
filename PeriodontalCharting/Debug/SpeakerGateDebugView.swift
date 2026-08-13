@@ -8,9 +8,17 @@
 //  and no WhisperKit dependency. This is deliberate — it isolates the TSE layer
 //  from STT so a failure here is unambiguously the gate's.
 //
+//  TWO EVALUATION PATHS, and the difference matters. `service.evaluate` is the
+//  original span route and produces NO metrics. `service.evaluateWithRescue` is
+//  the batch entry point that goes through `route()`, so it computes the full T1
+//  overlap battery per span and prints the `[TSE/m]` table. Use the second one
+//  against a recording whose overlap regions are known — that is the labelled
+//  positive set every metric conclusion so far has lacked.
+//
 
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
 struct SpeakerGateDebugView: View {
 
@@ -20,6 +28,8 @@ struct SpeakerGateDebugView: View {
     @State private var spans: [GatedSpan] = []
     @State private var isWorking = false
     @State private var adaptive = false
+    @State private var showImporter = false
+    @State private var localFiles: [URL] = []
 
     var body: some View {
         List {
@@ -62,6 +72,40 @@ struct SpeakerGateDebugView: View {
                 .disabled(isWorking || !(service?.isEnrolled ?? false))
             }
 
+            Section("T1 Metrics — labelled ground truth") {
+                // FILES FROM THE APP'S OWN Documents FOLDER. On Simulator this is
+                // the only friction-free route: dragging onto the window makes iOS
+                // try to OPEN the file, nothing declares .wav, and it fails with
+                // "simulator device failed to open". The Files picker cannot see
+                // Documents either without UIFileSharingEnabled — which should not
+                // be on in a shipping build whose Documents may hold voiceprints.
+                // Reading our own container needs neither.
+                //
+                //   xcrun simctl get_app_container booted \
+                //       SavioEnoson.PeriodontalCharting data
+                //   cp take.wav "<that path>/Documents/"
+                ForEach(localFiles, id: \.self) { url in
+                    Button(url.lastPathComponent) {
+                        measure(url, label: url.lastPathComponent)
+                    }
+                    .disabled(isWorking || !(service?.isEnrolled ?? false))
+                }
+                if localFiles.isEmpty {
+                    Text("No audio in Documents/ — copy one in with simctl")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+                Button("Refresh") { refreshLocalFiles() }
+
+                Button("Or pick from Files…") { showImporter = true }
+                    .disabled(isWorking || !(service?.isEnrolled ?? false))
+
+                Text("Runs `evaluateWithRescue`, so every span gets the full T1 "
+                     + "battery and the `[TSE/m]` table prints to the console. "
+                     + "Compare each row's time range against the overlap regions "
+                     + "you already know for that file.")
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
+
             if !spans.isEmpty {
                 Section("Summary") {
                     ForEach(summary, id: \.0) { LabeledContent($0.0, value: $0.1) }
@@ -84,7 +128,21 @@ struct SpeakerGateDebugView: View {
             }
         }
         .navigationTitle("Speaker Gate (TSE)")
-        .task { initializeIfNeeded() }
+        .task {
+            initializeIfNeeded()
+            refreshLocalFiles()
+        }
+        .fileImporter(isPresented: $showImporter,
+                      allowedContentTypes: [.audio, .wav, .mpeg4Audio],
+                      allowsMultipleSelection: false) { result in
+            switch result {
+            case .success(let urls):
+                guard let picked = urls.first else { return }
+                importAndMeasure(picked)
+            case .failure(let error):
+                status = "Pick failed: \(error.localizedDescription)"
+            }
+        }
     }
 
     // MARK: - Setup
@@ -103,6 +161,18 @@ struct SpeakerGateDebugView: View {
         status = shared.isEnrolled
             ? "Ready — \(shared.templateCount) template(s) enrolled"
             : "Ready — enroll to begin"
+    }
+
+    // Audio sitting in the app's own Documents directory. No entitlement, no
+    // picker, no Files-app involvement — the sandbox always grants this.
+    private func refreshLocalFiles() {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let audio: Set<String> = ["wav", "m4a", "mp3", "caf", "aiff"]
+        let found = (try? FileManager.default.contentsOfDirectory(
+            at: docs, includingPropertiesForKeys: nil)) ?? []
+        localFiles = found
+            .filter { audio.contains($0.pathExtension.lowercased()) }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
     }
 
     // MARK: - Actions
@@ -144,6 +214,64 @@ struct SpeakerGateDebugView: View {
 
     private func evaluateCalibration() {
         run(calibrationURL, label: "voice_sample.wav")
+    }
+
+    // COPY FIRST, THEN MEASURE. A picked URL is security-scoped and its access is
+    // only valid between start/stopAccessingSecurityScopedResource on THIS actor —
+    // handing it to a detached task is how you get an intermittent read failure
+    // that looks like a corrupt file. Copying into tmp while the scope is open
+    // removes the lifetime question entirely.
+    private func importAndMeasure(_ picked: URL) {
+        let scoped = picked.startAccessingSecurityScopedResource()
+        defer { if scoped { picked.stopAccessingSecurityScopedResource() } }
+
+        let destination = FileManager.default.temporaryDirectory
+            .appendingPathComponent(picked.lastPathComponent)
+        do {
+            try? FileManager.default.removeItem(at: destination)
+            try FileManager.default.copyItem(at: picked, to: destination)
+        } catch {
+            status = "Could not read picked file: \(error.localizedDescription)"
+            return
+        }
+        measure(destination, label: picked.lastPathComponent)
+    }
+
+    // THE METRICS PATH. `evaluateWithRescue` routes every span through `route()`,
+    // which calls `measure()` — so the console gets one `[TSE/m]` row per span,
+    // under the same code path the live session uses.
+    //
+    // `extractor: nil` because TSEConfig.mode is `.off`; this is measurement only
+    // and no audio is modified.
+    private func measure(_ url: URL, label: String) {
+        guard let service else { return }
+        isWorking = true
+        status = "Measuring \(label)…"
+        Task.detached {
+            do {
+                let audio = try SpeakerGate.loadSamples(from: url)
+                TSEMetricsLog.shared.startSession(profile: label)
+                let results = try service.evaluateWithRescue(audio: audio, extractor: nil)
+                TSEMetricsLog.shared.endSession()
+                let display = results.map {
+                    GatedSpan(start: $0.start, end: $0.end,
+                              verdict: $0.verdictMixed, distance: $0.distanceMixed)
+                }
+                await MainActor.run {
+                    spans = display
+                    templateCount = service.templateCount
+                    let secs = Double(audio.count) / Double(SpeakerGate.sampleRate)
+                    status = String(format: "%@ — %.1fs, %d spans (table in console)",
+                                    label, secs, results.count)
+                    isWorking = false
+                }
+            } catch {
+                await MainActor.run {
+                    status = "Measure failed: \(error)"
+                    isWorking = false
+                }
+            }
+        }
     }
 
     private func run(_ url: URL, label: String) {

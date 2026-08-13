@@ -723,8 +723,9 @@ extension SpeakerGateService {
     // SOURCE nrg (energy-segmented, trustworthy) or win (blind fallback — only
     // possible on the enrollment path now), then the distance and its margin.
     //
-    // The `[TSE/m]` line underneath is T1 measurement and carries NO verdict.
-    // Nothing on it changed any decision above it.
+    // The aligned `[TSE/m]` row prints from `TSEMetricsLog.record`, immediately
+    // under this line, so the console reads as one table. It is T1 measurement and
+    // carries NO verdict — nothing on it changed any decision above it.
     private static func log(_ results: [RescuedSpan],
                             tag: String,
                             enforcing: Bool,
@@ -752,12 +753,6 @@ extension SpeakerGateService {
                              r.verdictMixed.rawValue))
             }
 
-            guard let metrics = r.metrics else { continue }
-            if TSEMetricsConfig.logToConsole {
-                let line = metrics.consoleLine(startSeconds: r.startSeconds,
-                                               endSeconds: r.endSeconds)
-                AppLog.tse.info("\(line, privacy: .public)")
-            }
             TSEMetricsLog.shared.record(r, tag: tag)
         }
     }

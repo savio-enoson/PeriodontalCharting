@@ -9,10 +9,6 @@ struct SelectionDebugMenu: View {
     @State private var showAlert = false
     @State private var alertMessage = ""
     @AppStorage("useMLTokenizer") var useMLTokenizer: Bool = true
-
-    // Refreshed on appear rather than read in `body`, which would enumerate the
-    // directory on every render pass.
-    @State private var metricFiles: [URL] = []
     
     var body: some View {
         NavigationStack {
@@ -34,12 +30,6 @@ struct SelectionDebugMenu: View {
                     }
                 }
 
-                // T1 — the overlap-metric collection layer. Nothing here changes a
-                // verdict; it measures and records, and the switches exist so a
-                // latency problem can be bisected WITHOUT a rebuild. That matters
-                // more than it looks: a rebuild costs a ~190 s ANE recompile of the
-                // Whisper encoder before a session can start, so a four-way bisect
-                // by editing constants is most of an hour.
                 Section("TSE Metrics (T1)") {
                     Toggle("Measure spans", isOn: Binding(
                         get: { TSEMetricsConfig.enabled },
@@ -48,58 +38,28 @@ struct SelectionDebugMenu: View {
 
                     // FAMILY E — the only part that calls Core ML. 2–3 ECAPA calls
                     // per span on the ANE that WhisperKit's encoder already occupies
-                    // for ~442 ms a window, and it runs inside `judgePending` before
-                    // cleaned audio is handed to Whisper. FIRST SWITCH TO TRY when
-                    // the live path stalls.
+                    // for ~442 ms a window, inside `judgePending` before cleaned
+                    // audio reaches Whisper. FIRST SWITCH TO TRY if the live path
+                    // stalls.
                     Toggle("Family E (sub-window probe)", isOn: Binding(
                         get: { TSEMetricsConfig.probeSubwindows },
                         set: { TSEMetricsConfig.probeSubwindows = $0 }
                     ))
 
-                    // Writes are buffered and drained on a background queue, so this
-                    // should no longer cost the audio pump anything. It is still a
-                    // switch because the first version fsynced per span on that pump,
-                    // and being able to rule it out by hand is worth one row.
-                    Toggle("Write CSV", isOn: Binding(
-                        get: { TSEMetricsConfig.writeCSV },
-                        set: { TSEMetricsConfig.writeCSV = $0 }
-                    ))
-
-                    Toggle("Console line per span", isOn: Binding(
+                    Toggle("Console table", isOn: Binding(
                         get: { TSEMetricsConfig.logToConsole },
                         set: { TSEMetricsConfig.logToConsole = $0 }
                     ))
 
                     // PROOF, NOT PLAUSIBILITY. Every metric returns a well-formed
-                    // number whether or not the code behind it is right; kurtosis and
-                    // crest factor are the only ones with exact analytic references
-                    // (-1.5 and sqrt(2) for a sine, 0 for Gaussian noise), and they
-                    // exercise the frame extraction every other metric sits on.
-                    // RUN THIS AFTER ANY CHANGE TO `analyze`.
+                    // number whether or not the code behind it is right; kurtosis
+                    // and crest factor are the only ones with exact analytic
+                    // references (-1.5 and sqrt(2) for a sine, 0 for Gaussian), and
+                    // they exercise the frame extraction every other metric sits on.
+                    // RUN AFTER ANY CHANGE TO `analyze`.
                     NavigationLink("Run metric self-test") {
                         TSEMetricsReportView(title: "Self-test",
                                              generate: { TSEMetricsSelfTest.run() })
-                    }
-
-                    // Percentiles per column, split by schema and then by the gate's
-                    // own verdict. Reading `accept` against `confirm`/`reject`
-                    // separately is the point: the second group is mostly quiet-you,
-                    // which is the population the current trigger misclassifies.
-                    NavigationLink("Null distribution summary") {
-                        TSEMetricsReportView(title: "Summary",
-                                             generate: { TSEMetricsLog.summarise() })
-                    }
-
-                    if metricFiles.isEmpty {
-                        Text("No metric CSVs collected yet")
-                            .foregroundStyle(.secondary)
-                    } else {
-                        // Filter on the `schema` column before pooling anything, and
-                        // remember which sessions had a second speaker in the room —
-                        // those must never enter the null distribution.
-                        ShareLink(item: metricFiles.last!) {
-                            Text("Export latest CSV (\(metricFiles.count) file(s))")
-                        }
                     }
                 }
                 
@@ -224,7 +184,6 @@ struct SelectionDebugMenu: View {
             }
             .navigationTitle("Debug Selection")
             .navigationBarTitleDisplayMode(.inline)
-            .onAppear { metricFiles = TSEMetricsLog.files }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") {
@@ -243,20 +202,20 @@ struct SelectionDebugMenu: View {
 
 // Scrollable, SELECTABLE, monospaced report.
 //
-// Selectable is the point: both reports exist to be copied out and read
-// elsewhere, and the console is not reachable from a home-screen launch — which
-// is exactly the configuration the per-launch ANE recompile needs to be tested
-// in. Monospaced because both reports are column-aligned and unreadable
+// Selectable is the point: the self-test output exists to be copied out and read
+// elsewhere, and the Xcode console is not reachable from a home-screen launch —
+// which is exactly the configuration the per-launch ANE recompile needs to be
+// tested in. Monospaced because the report is column-aligned and unreadable
 // proportionally.
 //
-// Horizontal scrolling as well as vertical: `summarise()` emits lines around 90
-// characters, and wrapping them destroys the column alignment that makes the
-// percentile table readable at a glance.
+// Horizontal scrolling as well as vertical: the self-test emits lines around 70
+// characters, and wrapping them destroys the alignment that makes a column of
+// PASS/FAIL readable at a glance.
 struct TSEMetricsReportView: View {
     let title: String
-    // @Sendable so the work can leave the main actor. Both callers pass a static
+    // @Sendable so the work can leave the main actor. The caller passes a static
     // function with no captured state: `TSEMetricsSelfTest.run` touches only the
-    // lock-guarded shared analyzer, `TSEMetricsLog.summarise` only reads files.
+    // lock-guarded shared analyzer.
     let generate: @Sendable () -> String
 
     @State private var report = "Running…"
@@ -274,8 +233,7 @@ struct TSEMetricsReportView: View {
         .task {
             // OFF THE MAIN ACTOR. The self-test synthesises several 3-second signals
             // and runs the full analyzer over each — a few hundred milliseconds of
-            // Accelerate — and `summarise` reads and parses every collected CSV.
-            // Either would visibly hitch the push animation on the main actor.
+            // Accelerate — which would visibly hitch the push animation.
             let work = generate
             report = await Task.detached(priority: .userInitiated) { work() }.value
         }

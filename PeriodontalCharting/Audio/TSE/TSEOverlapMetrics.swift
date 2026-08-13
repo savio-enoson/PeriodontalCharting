@@ -136,7 +136,7 @@ enum TSEMetricsConfig {
     // 1.1 s overlapping span that family E should have caught. 1.2 s still clears
     // the embedder's 1.0 s hard floor, and covers spans from 1.7 s up.
     static let subwindowSeconds: Double = 1.2
-    static let subwindowStrideSeconds: Double = 0.5
+    static let subwindowStrideSeconds: Double = 0.4
 
     // 1024 = 64 ms @ 16 kHz. MUST stay 1024: the FFT setup is built at log2n = 10
     // and the split-complex packing assumes n/2 = 512.
@@ -173,7 +173,7 @@ enum TSEMetricsConfig {
     // Speech activity, second term: a fraction of the loud part (90th percentile).
     // Correct on spans that do NOT contain silence, where the floor term inverts.
     // The threshold takes the SMALLER of the two — see the schema-3 note.
-    static let loudFraction: Float = 0.30
+    static let loudFraction: Float = 0.35
     // Absolute minimum, so a dead-quiet span cannot promote its own hiss.
     static let absoluteFloor: Float = 0.003
 
@@ -325,42 +325,18 @@ struct SubwindowMetrics {
     var meanDistance: Double = .nan
 }
 
+// The three families as one value, carried on `RescuedSpan.metrics`.
+//
+// NO RENDERING HERE. Row formatting lives in `TSEMetricsLog.columns`, which
+// declares the title, width and value extractor for every column in one array, so
+// the header and the rows are generated from the same source and cannot drift.
+// This struct used to carry its own `consoleLine`, which meant two renderers for
+// the same data — and after the CSV came out they both printed, giving two lines
+// per span.
 struct OverlapMetrics {
     var signal = SignalMetrics()
     var subspace: SubspaceMetrics?
     var subwindows: SubwindowMetrics?
-
-    // The one extra console line. Deliberately compact — it sits under an existing
-    // `[Gate/live]` line, not instead of it.
-    //
-    // `v/a/f` rather than `voiced/active`: the middle and right numbers are what
-    // exposed the schema-2 activity inversion, and having both on screen means a
-    // repeat is visible without opening the CSV.
-    func consoleLine(startSeconds: Double, endSeconds: Double) -> String {
-        let s = signal
-        var text = String(format: "[TSE/m] %6.2f–%6.2fs  kurt %5.2f|%5.2f/%5.2f/%5.2f  "
-                          + "crest %4.1f clip %.3f  gini %.3f hoyer %.3f flat %5.1f  "
-                          + "cpp %5.2f hnr %5.1f ac %.2f  peaks %.2f/%d  "
-                          + "f0 %5.1f±%.1f  v%d/a%d/f%d",
-                          startSeconds, endSeconds,
-                          s.kurtosisSpan, s.kurtosisActive, s.kurtosisMedian, s.kurtosisP10,
-                          s.crestFactor, s.clippedFraction,
-                          s.tfGini, s.tfHoyer, s.flatnessMedian,
-                          s.cppMedian, s.hnrMedian, s.autocorrMedian,
-                          s.competingPeaksMean, s.competingPeaksMax,
-                          s.f0Median, s.f0IQR,
-                          s.voicedFrames, s.activeFrames, s.frames)
-        if let c = subspace {
-            text += String(format: "  off %.3f/%.3f=%.2fx rank %d near %.3f",
-                           c.tangentialOffRatio, c.chanceRatio,
-                           c.offSubspaceNormalised, c.subspaceRank, c.nearestTemplate)
-        }
-        if let e = subwindows, e.count > 0 {
-            text += String(format: "  sub %.3f→%.3f (Δ%.3f, n%d)",
-                           e.minDistance, e.maxDistance, e.spread, e.count)
-        }
-        return text
-    }
 }
 
 // MARK: - Analyzer
