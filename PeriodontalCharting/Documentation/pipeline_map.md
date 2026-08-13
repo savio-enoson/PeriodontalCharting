@@ -4,7 +4,9 @@ A navigation aid, not a replacement for the deep-dive guides. Read this first to
 understand **which of the three greater pipelines a file belongs to and what it
 talks to**, then jump into [system_guide.md](system_guide.md) /
 [frontend_guide.md](frontend_guide.md) / [ml_tokenizer_guide.md](ml_tokenizer_guide.md)
-for the internals of any one box.
+for the internals of any one box. For architectural deep-dives with flow diagrams,
+see [arch_wav2vec_trie.md](arch_wav2vec_trie.md) (STT engine) and
+[arch_statefulparser.md](arch_statefulparser.md) (NLP parser).
 
 > [!NOTE]
 > This file documents the **3D visualization pipeline** and the **SwiftData
@@ -80,22 +82,22 @@ exact same `@State private var mouth`. There is no cross-pipeline API beyond
 machine, targeting modes, worked examples). This section is only the map.
 
 ```
-Mic audio ──▶ Audio/ (speaker isolation + WhisperKit STT) ──▶ text
+Mic audio ──▶ Audio/ (speaker isolation + Wav2Vec2 STT [default] / WhisperKit [alt]) ──▶ text
    text ──▶ NLP/Tokenizer/ (TokenizerManager: ML or rule-based) ──▶ [VoiceToken]
-   tokens ──▶ NLP/Parser/VoiceCommandParser ──▶ [AnnotationCommand]
+   tokens ──▶ NLP/Parser/StatefulParser ──▶ [AnnotationCommand]
    commands ──▶ Models/ChartProcessor.apply(command:to:) ──▶ mutates mouth
 ```
 
 | Stage | Owner file(s) | Entry point |
 |---|---|---|
-| Recording / speaker isolation | `Audio/AudioManager.swift`, `Audio/SpeakerGate*.swift`, `Audio/TSE/*` | consumed internally by `TranscriptionEngine` |
-| Speech-to-text | `Audio/TranscriptionEngine.swift`, `Audio/SileroVADEngine.swift` | `ViewModels/TranscriptionViewModel.swift` |
+| Recording / speaker isolation | `Audio/AudioManager.swift`, `Audio/SpeakerGate*.swift`, `Audio/TSE/*` | consumed internally by `TranscriptionEngine` (Whisper path) or `Wav2VecAudioCapture` (Wav2Vec2 path) |
+| Speech-to-text | `Audio/Wav2Vec/` (default) or `Audio/TranscriptionEngine.swift` + `Audio/SileroVADEngine.swift` (alt) | `Wav2VecViewModel` / `TranscriptionViewModel` |
 | Tokenization | `NLP/Tokenizer/TokenizerManager.swift` (+ `MLVoiceTokenizer`/`VoiceTokenizer` beneath it) | `TokenizerManager.shared.tokenize(text:isFinal:)` |
-| Parsing | `NLP/Parser/VoiceCommandParser*.swift` | `VoiceCommandParser(configuration:).parse(text:isFinal:)` |
+| Parsing | `NLP/Parser/StatefulParser.swift` (+ `+Flush`, `+Lookahead`) | `StatefulParser.consume(tokens:isFinal:)` |
 | Application | `Models/ChartProcessor.swift` | `ChartProcessor.apply(command:to:)` (static, headless) |
 | Orchestration | `ViewModels/AIVoiceViewModel.swift` | owns `commandHistory`, wires everything above together, feeds `ChartDashboard` |
 | UI surface | `Views/Voice/AIListeningView.swift`, `Views/Chart/ChartDashboard.swift` (AI Mode panel) | user-facing |
-| Config that steers the parser | `Configuration/ChartingConfiguration.swift`, `Configuration/ChartingCursor.swift` (set in `Views/Onboarding/OnboardingView.swift`) | consumed by `VoiceCommandParser` |
+| Config that steers the parser | `Configuration/ChartingConfiguration.swift`, `Configuration/ChartingCursor.swift` (set in `Views/Onboarding/OnboardingView.swift`) | consumed by `StatefulParser` |
 
 **Where it plugs into `mouth`:** `ChartDashboard.recomputeChart()` (called on
 `aiViewModel.commandHistory`/`committedCommands` change) rebuilds `mouth` from
@@ -213,7 +215,7 @@ copy, toolbar icons, debug menu labels, etc.) and doesn't cross pipelines.
 | Type | Defined in | Read by | Written by |
 |---|---|---|---|
 | `ToothObject` / `mouth: [Int: ToothObject]` | `Models/Models.swift` | Pipelines B & C (rendering), `PatientChart.mouth` (persistence) | Pipeline A via `ChartProcessor.apply`; Pipeline B via direct tap-edit (`updateTooth`); Pipeline C never writes it (read-only 3-D view) |
-| `AnnotationCommand` | `Models/Models.swift` | `ChartProcessor.apply`, `AIVoiceViewModel.commandHistory` (for the ghosted-preview diff in Pipeline B) | `NLP/Parser/VoiceCommandParser*` only |
+| `AnnotationCommand` | `Models/Models.swift` | `ChartProcessor.apply`, `AIVoiceViewModel.commandHistory` (for the ghosted-preview diff in Pipeline B) | `NLP/Parser/StatefulParser*` only |
 | `PatientChart` | `Models/PatientChart.swift` | `ContentView` (sidebar list), `ChartDashboard.loadChart()` | `ContentView.addChart()`, `ChartDashboard.saveChart()` |
 
 ---
@@ -240,12 +242,13 @@ which guide) a new feature belongs to:
 
 | You want to... | Primary pipeline | Start reading |
 |---|---|---|
-| Add a new voice command / metric / clinical shorthand | A | [system_guide.md](system_guide.md) §3–4, `NLP/Parser/VoiceCommandParser+Parse.swift` |
+| Add a new voice command / metric / clinical shorthand | A | [system_guide.md](system_guide.md) §3–4, `NLP/Parser/StatefulParser.swift` |
 | Change how a cell looks/is laid out in the grid | B | [frontend_guide.md](frontend_guide.md) §3.2, `Views/Chart/ToothRowViews.swift` |
 | Add a manual-edit interaction (new popover, new gesture) | B | `Views/Chart/ToothColumnView.swift`, `NumberPadPopoverView.swift` |
 | Change 3-D tooth/gum appearance or add a new visualization mode | C (3D) | §4a above, `3D/GingivalAnatomyGenerator.swift` |
 | Add a field to what's saved per patient, or add multi-exam history | C (persistence) | §4b above, `Models/PatientChart.swift` |
-| Change STT accuracy / vocabulary bias / speaker isolation | A (upstream) | `Audio/Domain/ClinicalConfig.swift`, `Audio/TranscriptionEngine.swift` — see also [[stt-priority-accuracy]] |
+| Change STT accuracy / vocabulary bias / speaker isolation | A (upstream) | [arch_wav2vec_trie.md](arch_wav2vec_trie.md), `Audio/Domain/ClinicalConfig.swift` |
+| Understand the StatefulParser state machine in detail | A | [arch_statefulparser.md](arch_statefulparser.md) |
 | Change ML tokenizer behavior specifically | A | [ml_tokenizer_guide.md](ml_tokenizer_guide.md) |
 
 ---

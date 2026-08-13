@@ -261,7 +261,17 @@ class CTCDecoder {
         let sortedKeys = dynamicMapping.keys.sorted { $0.count > $1.count }
         for key in sortedKeys {
             if finalString.contains(key) {
-                finalString = finalString.replacingOccurrences(of: key, with: dynamicMapping[key]!)
+                let escapedKey = NSRegularExpression.escapedPattern(for: key)
+                let pattern = "\\b\(escapedKey)\\b"
+                if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
+                    let range = NSRange(location: 0, length: finalString.utf16.count)
+                    finalString = regex.stringByReplacingMatches(
+                        in: finalString,
+                        options: [],
+                        range: range,
+                        withTemplate: dynamicMapping[key]!
+                    )
+                }
             }
         }
         

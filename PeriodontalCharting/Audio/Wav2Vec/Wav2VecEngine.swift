@@ -129,12 +129,7 @@ class Wav2VecEngine: ObservableObject {
                 
                 // 3. Decode
                 let rawResult = decoder.decode(logits: logits2D, beamWidth: 10, isLivePreview: isLivePreview)
-                
-                // 4. Apply Canonical Mappings
-                let words = rawResult.split(separator: " ").map { String($0) }
-                let mappedWords = words.map { decoder.dynamicMapping[$0] ?? $0 }
-                let mappedText = mappedWords.joined(separator: " ")
-                return mappedText
+                return rawResult
                 
             } catch {
                 print("Inference error: \(error)")
