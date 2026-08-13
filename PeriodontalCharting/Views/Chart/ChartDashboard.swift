@@ -235,7 +235,7 @@ struct ChartDashboard: View {
                 .environmentObject(selectionModel)
                 .environmentObject(aiViewModel)
         }
-        .sheet(isPresented: $showSettings) {
+        .fullScreenCover(isPresented: $showSettings) {
             OnboardingView(hasCompletedOnboarding: .constant(true), isSettingsMode: true)
         }
         .sheet(item: $exportURL) { url in
