@@ -13,8 +13,8 @@
 //  quiet voice is what fixed that (see CalibrationTake).
 //
 //  It DOES fix two other things:
-//    * Whisper transcribes normalised speech better. Its mel is log-scaled and
-//      very quiet input compresses into fewer distinguishable bins.
+//    * Wav2Vec2 sees a consistent level. Its input is Z-score normalised per
+//      chunk, so a chunk that is uniformly quiet normalises up its own noise.
 //    * The energy thresholds stop varying by person. Measured across takes from
 //      the same speaker, `[Gate] energy:` reported floors from 0.0027 to 0.0444
 //      and thresholds from 0.0080 to 0.1332 — a 16x spread, purely from level.

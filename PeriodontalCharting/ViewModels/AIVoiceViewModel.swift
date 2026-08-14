@@ -6,22 +6,21 @@ class AIVoiceViewModel: ObservableObject {
     @Published var committedTranscription: String = ""
     @Published var uncommittedTranscription: String = ""
     @Published var isListening: Bool = false
-    /// True while real Whisper dictation is feeding the parser (vs. the debug
-    /// simulation, which sets `isListening`). Kept separate so both controls can
-    /// show independent state; the two are mutually exclusive at runtime.
+    // True while real Wav2Vec dictation is feeding the parser (vs. the debug
+    // simulation, which sets `isListening`). Kept separate so both controls can
+    // show independent state; the two are mutually exclusive at runtime.
     @Published var isDictating: Bool = false
-    /// True after the mic is turned off but while the last decode and the final
-    /// speaker-gate pass are still landing (the async `transcriber.stopLive()` and
-    /// the final parse). The chart is not final yet, so the mic button shows a
-    /// "still working" state and stays disabled until this flips back to false.
+    // True after the mic is turned off but while the tail chunk's gate pass and
+    // decode are still landing. The chart is not final yet, so the mic button
+    // shows a "still working" state and stays disabled until this flips back.
     @Published var isFinishing: Bool = false
 
     var currentStatusMessage: String {
         wav2VecTranscriber.statusMessage
     }
 
-    /// Real on-device transcription (Wav2Vec2). AI Mode drives it and consumes its
-    /// confirmed chunks.
+    // Real on-device transcription (Wav2Vec2), already speaker-gated. AI Mode
+    // drives it and consumes its confirmed chunks.
     private let wav2VecTranscriber = Wav2VecViewModel()
 
     /// Speaker-filter state for the AI Mode header. Reading it inside a SwiftUI
@@ -125,18 +124,22 @@ resesi 18, 17, 16, -1 -1
         stopSimulation()
     }
 
-    // MARK: - Live dictation (real Whisper transcription → annotation parser)
+    // MARK: - Live dictation (gated Wav2Vec transcription → annotation parser)
 
     func toggleLiveDictation() {
         if isDictating { stopLiveDictation() } else { startLiveDictation() }
     }
 
-    /// Begin real on-device dictation. Tier 3 "optimistic preview + confirmed
-    /// commit": the chart is driven by the FULL running transcript (preview) so it
-    /// tracks the voice as accurately as the Transcribe sheet, while a separate
-    /// confirmed-only pass (`committedCommands`) marks which cells are finalized —
-    /// the rest render ghosted. The parser re-derives the whole chart from the full
-    /// text each call, so a revised hypothesis self-corrects; nothing sticks wrong.
+    // Begin real on-device dictation. "Optimistic preview + confirmed commit":
+    // the chart is driven by the full running transcript (preview) so it tracks
+    // the voice closely, while a separate confirmed-only pass
+    // (`committedCommands`) marks which cells are finalized — the rest render
+    // ghosted.
+    //
+    // ONLY THE CONFIRMED STREAM IS SPEAKER-GATED. `onLiveTranscript` is preview
+    // text from an ungated buffer and never reaches the parser;
+    // `onConfirmedTranscript` carries chunks that have already been through the
+    // gate and the extractor. Do not wire the parser to the live hook.
     func startLiveDictation() {
         stopSimulation()          // the two feeds are mutually exclusive
         isDictating = true
@@ -176,16 +179,19 @@ resesi 18, 17, 16, -1 -1
     func stopLiveDictation() {
         guard isDictating else { return }
         isDictating = false
-        // Mic is off, but the last decode and the final gate pass are still
-        // landing. `transcriber.stopLive()` is async, so the teardown and final
-        // parse run in a Task; `isFinishing` gates the mic button until they
-        // finish. The class is @MainActor, so every mutation below stays on the
-        // main actor. Callers stay synchronous and untouched.
+        // Mic is off, but the tail chunk still has a gate pass and a decode ahead
+        // of it. `isFinishing` holds the mic button until both land. The class is
+        // @MainActor, so every mutation below stays on the main actor; callers
+        // stay synchronous and untouched.
         isFinishing = true
         Task {
             defer { isFinishing = false }
 
-            wav2VecTranscriber.stopLive()
+            // AWAITED. `stopLive` returns only once the final chunk has reached
+            // `onConfirmedTranscript`, so the leftover text below is genuinely
+            // leftover. Firing and forgetting dropped whatever was said last,
+            // because the parser was consumed and nil'd before the tail arrived.
+            await wav2VecTranscriber.stopLive()
             wav2VecTranscriber.onLiveTranscript = nil
             wav2VecTranscriber.onConfirmedTranscript = nil
 

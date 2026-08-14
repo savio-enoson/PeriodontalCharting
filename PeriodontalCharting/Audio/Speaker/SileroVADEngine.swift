@@ -16,8 +16,8 @@
 //    → hc_stateN[2, 1, 128]     (thread back in as hc_state for the next hop)
 //
 //  We load the compiled model by name from the bundle root — Xcode's synchronized
-//  file group flattens Models/ so SileroVAD.mlmodelc lands alongside the WhisperKit
-//  *.mlmodelc bundles (same mechanism ContentView/VM rely on for AudioEncoder).
+//  file group flattens Models/ so SileroVAD.mlmodelc lands there, alongside every
+//  other compiled model (the gate's ECAPA, the six TSE packages, Wav2Vec2).
 //
 //  RUNS ON CPU ONLY — see the note in init(). Prediction failures are swallowed as
 //  prob 0 in speechProbabilities, so anything that breaks inference surfaces as
@@ -60,12 +60,11 @@ final class SileroVADEngine: @unchecked Sendable {
         let cfg = MLModelConfiguration()
         // CPU ONLY, deliberately. This graph takes 512 samples per call — the ANE
         // buys nothing at that size, and asking for it puts this model in
-        // contention with WhisperKit's encoder compile, which runs for MINUTES on
-        // first launch (see [ModelLoad] in TranscriptionEngine). During onboarding
-        // a second SileroVADEngine is built while that compile is still in flight;
-        // when its predictions fail, speechProbabilities appends 0 for every hop
-        // and returns all zeros, which reads downstream as "no speech detected"
-        // with no error anywhere. CPU is fast enough: ~31 hops per second of audio.
+        // contention with whatever else is compiling on first launch. A second
+        // SileroVADEngine is built during onboarding; when its predictions fail,
+        // speechProbabilities appends 0 for every hop and returns all zeros, which
+        // reads downstream as "no speech detected" with no error anywhere. CPU is
+        // fast enough: ~31 hops per second of audio.
         cfg.computeUnits = .cpuOnly
         self.model = try MLModel(contentsOf: url, configuration: cfg)
         resolveOutputNames()

@@ -49,7 +49,7 @@ enum CalibrationTake: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .normal: return "Normal voice"
-        case .soft:   return "Quiet voice"
+        case .soft:   return "Quiet voice (optional) "
         case .mask:   return "Mask on (optional)"
         }
     }

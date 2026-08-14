@@ -63,7 +63,7 @@ extension VoiceTokenizer {
         }
         
         // ---- Fused directional-compound splitter ------------------------------------
-        // Whisper sometimes GLUES the stem and site into a single token, with the site
+        // The STT sometimes GLUES the stem and site into a single token, with the site
         // half itself fuzzed ("mesiyobukal", "distobuqal"). The positional recovery
         // below only fires when the site is a SEPARATE token, so peel a (fuzzy) trailing
         // site suffix off any m/d-initial token first — restoring the canonical site and
@@ -87,7 +87,7 @@ extension VoiceTokenizer {
         }
 
         // ---- Directional-stem recovery (generalized, position-based) ----------------
-        // Whisper mangles the directional STEM ("disto"/"mesio") into an open-ended,
+        // The STT mangles the directional STEM ("disto"/"mesio") into an open-ended,
         // un-enumerable set of junk ("di situ"/"justru"/"stok"/"di slow"/"misi"/"mili"/…)
         // while the SITE word after it ("bukal"/"lingual"/"palatal") stays reliable.
         // Rather than chase every variant with a ClinicalConfig regex, use POSITION: a
@@ -267,7 +267,7 @@ extension VoiceTokenizer {
             }
             
             if let num = parseIntOrWord(w) {
-                // Whisper often concatenates a spoken run of single-digit values
+                // The STT often concatenates a spoken run of single-digit values
                 // ("3 3 3") into one number ("333"). No valid tooth id (11–48) or
                 // per-site metric value is ≥ 100, so a 3+ digit number here is
                 // unambiguously a run of individual values — split it back into
