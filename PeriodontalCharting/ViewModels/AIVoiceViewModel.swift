@@ -6,14 +6,14 @@ class AIVoiceViewModel: ObservableObject {
     @Published var committedTranscription: String = ""
     @Published var uncommittedTranscription: String = ""
     @Published var isListening: Bool = false
-    /// True while real Whisper dictation is feeding the parser (vs. the debug
+    /// True while real Wav2Vec2 dictation is feeding the parser (vs. the debug
     /// simulation, which sets `isListening`). Kept separate so both controls can
     /// show independent state; the two are mutually exclusive at runtime.
     @Published var isDictating: Bool = false
     /// True after the mic is turned off but while the last decode and the final
-    /// speaker-gate pass are still landing (the async `transcriber.stopLive()` and
-    /// the final parse). The chart is not final yet, so the mic button shows a
-    /// "still working" state and stays disabled until this flips back to false.
+    /// parse are still landing. The chart is not final yet, so the mic button
+    /// shows a "still working" state and stays disabled until this flips back
+    /// to false.
     @Published var isFinishing: Bool = false
 
     var currentStatusMessage: String {
@@ -125,7 +125,7 @@ resesi 18, 17, 16, -1 -1
         stopSimulation()
     }
 
-    // MARK: - Live dictation (real Whisper transcription → annotation parser)
+    // MARK: - Live dictation (real Wav2Vec2 transcription → annotation parser)
 
     func toggleLiveDictation() {
         if isDictating { stopLiveDictation() } else { startLiveDictation() }

@@ -2,31 +2,17 @@
 //  TranscriptionEngine.swift
 //  PeriodontalCharting
 //
-//  Single, app-wide WhisperKit model + Silero VAD, loaded once at launch and
-//  shared by every TranscriptionViewModel. The model is ~600 MB; loading a copy
-//  per view-model would blow memory (the full turbo build already got the app
-//  SIGKILL'd), so all live/batch transcription draws from this one instance.
+//  App-wide host for the speaker-gate infrastructure: Silero VAD plus the
+//  SpeakerGateService (ECAPA embedder + enrollment) and, on demand, the TSE
+//  extractor. Loaded once at launch and shared everywhere.
 //
-//  MODEL SOURCING, in order: bundled at the app root -> previously downloaded and
-//  remembered in UserDefaults -> downloaded from HuggingFace with progress and
-//  retry. The model folders are gitignored, so a fresh clone has no bundled copy
-//  and the download path is the normal one.
-//
-//  Also owns the app-wide SpeakerGateService. That is DELIBERATELY independent of
-//  the WhisperKit load: enrollment needs only the small ECAPA embedder and Silero
-//  VAD, and gating it behind a ~600 MB model meant onboarding always found `vad`
-//  still nil and silently skipped calibration.
+//  Transcription itself no longer lives here — the Whisper model was removed and
+//  Wav2Vec2 is the STT engine now (see Wav2VecEngine). What remains is small and
+//  cheap: `load()` builds Silero VAD, and the gate / extractor build lazily via
+//  `makeSpeakerGateIfNeeded()` / TSEEngine.
 //
 //  ENROLLMENT READS THE ACTIVE VoiceProfile. Switching dentist restores cached
 //  embeddings rather than re-running ECAPA over every take.
-//
-//  TWO DEV FLAGS, both set in the scheme (Run -> Arguments Passed On Launch), so
-//  switching costs a tick-box rather than a rebuild — which matters because a
-//  rebuild is a reinstall and a reinstall re-pays the ~180 s encoder compile:
-//
-//      -GateOnlyMode  YES   skip WhisperKit entirely (~2 s launch, no transcription)
-//      -FastModelLoad YES   encoder on the GPU (seconds to load, more memory,
-//                           and it competes with the chart for the GPU)
 //
 
 import Foundation
@@ -70,7 +56,7 @@ final class TranscriptionEngine {
     /// Megabytes this process may still allocate before jetsam kills it.
     ///
     /// This is the number that actually matters — not "memory used". The app holds
-    /// WhisperKit (~600 MB), eight Core ML packages for the gate and TSE, and
+    /// the Wav2Vec2 STT model, eight Core ML packages for the gate and TSE, and
     /// TSE's 16 MB enroll_kv, and it has been SIGKILL'd before. Print it after each
     /// subsystem loads so a regression shows up as a shrinking number rather than
     /// as a crash with no stack trace.
@@ -123,11 +109,10 @@ final class TranscriptionEngine {
     /// True once a centroid exists. Read this rather than tracking a separate flag.
     var isSpeakerEnrolled: Bool { speakerGate?.isEnrolled ?? false }
 
-    /// Build the app-wide gate on first use, independent of the WhisperKit load.
+    /// Build the app-wide gate on first use.
     ///
     /// Falls back to its own SileroVADEngine when `vad` is not set yet — during
-    /// onboarding it usually is not, because `performLoad` assigns it only AFTER
-    /// the WhisperKit load completes.
+    /// onboarding it usually is not, because `performLoad` runs slightly later.
     ///
     /// Synchronous: it loads two small Core ML models on the main actor (~100 ms).
     /// Acceptable for a one-time setup call; do not put it in a render path.

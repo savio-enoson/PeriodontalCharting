@@ -22,10 +22,10 @@ struct AIListeningView: View {
                     
                     Spacer()
 
-                    // Real live dictation (Whisper → annotation parser per chunk).
-                    // Gated on the shared model: a spinner shows until it's ready
-                    // (TranscriptionEngine is @Observable, so this flips automatically),
-                    // then the mic becomes tappable. This is the model-ready indicator.
+                    // Real live dictation (Wav2Vec2 → annotation parser per chunk).
+                    // Gated on the STT model: a spinner shows until it's loaded
+                    // (the splash loads it before the chart appears, so by here it
+                    // is normally ready), then the mic becomes tappable.
                     let modelReady = Wav2VecEngine.shared.isModelLoaded
                     Button(action: { viewModel.toggleLiveDictation() }) {
                         if viewModel.isFinishing {

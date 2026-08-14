@@ -10,9 +10,10 @@ struct ContentView: View {
 
     /// @Observable singleton — read in `body` so the splash transitions itself.
     private let assets = ChartAssetStore.shared
-    /// The Wav2Vec2 STT model. Loaded during the splash so live/AI-Mode dictation
-    /// is ready the moment the chart appears. ObservableObject, so observe it.
-    @StateObject private var wav2vec = Wav2VecEngine.shared
+    /// Flips true once the Wav2Vec2 STT model finishes loading. Driven explicitly
+    /// from the load `.task` (below) rather than by observing the engine, so the
+    /// splash gate does not depend on ObservableObject propagation timing.
+    @State private var modelReady = false
 
     /// Chart images gate ONBOARDING as well as the chart: they are rendered in
     /// the same `body` as the onboarding name field. A second or two behind a
@@ -20,7 +21,7 @@ struct ContentView: View {
     ///
     /// The STT model gates only the CHART — and now only STARTS once setup is done.
     private var needsSplash: Bool {
-        !assets.isReady || (hasCompletedOnboarding && !wav2vec.isModelLoaded)
+        !assets.isReady || (hasCompletedOnboarding && !modelReady)
     }
 
     var body: some View {
@@ -34,18 +35,18 @@ struct ContentView: View {
             .animation(.easeInOut(duration: 0.35), value: needsSplash)
             // Decode the chart diagrams once, downscaled, and hold them.
             .task { await assets.warm() }
-            // WhisperKit, deferred until setup is finished.
-            //
-            // It used to start at launch, which meant a ~180 s Core ML compile
-            // ran underneath onboarding — the first keyboard presentation, the
-            // audio-session activation and the image decode all queued behind it.
-            // Nothing in onboarding needs the model; the gate uses its own small
-            // packages. `task(id:)` fires again when the flag flips, so the load
-            // begins the moment "Complete Setup" is tapped and the splash covers
-            // it exactly as it does on every later launch.
+            // The Wav2Vec2 STT model, deferred until setup is finished. Nothing in
+            // onboarding needs it, so loading it under the splash after "Complete
+            // Setup" keeps setup responsive. `task(id:)` fires again when the flag
+            // flips, so the load begins the moment onboarding completes and the
+            // splash covers it exactly as it does on every later launch.
             .task(id: hasCompletedOnboarding) {
                 guard hasCompletedOnboarding else { return }
+                // `loadModel()` returns only after `isModelLoaded` is set on the
+                // main actor, so flipping `modelReady` here is exact — the splash
+                // stays up for the whole load and drops the instant it completes.
                 await Wav2VecEngine.shared.loadModel()
+                modelReady = Wav2VecEngine.shared.isModelLoaded
             }
     }
 

@@ -20,9 +20,8 @@
 import SwiftUI
 
 struct ModelLoadingSplash: View {
-    /// ObservableObject singleton — reading `isModelLoaded` in `body` (via the
-    /// wrapper) registers the view for updates so the splash transitions itself.
-    @StateObject private var wav2vec = Wav2VecEngine.shared
+    /// @Observable singleton — reading its properties in `body` registers the view
+    /// for updates so the asset-progress line stays live.
     private let assets = ChartAssetStore.shared
     private let darkBlue = Color(red: 0.05, green: 0.2, blue: 0.5)
 

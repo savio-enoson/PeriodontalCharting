@@ -18,13 +18,12 @@ struct PeriodontalChartingApp: App {
     
     var body: some Scene {
         WindowGroup {
-            // The WhisperKit warm-up USED TO LIVE HERE and started at launch,
-            // unconditionally. On a first run that put a ~180 s Core ML encoder
-            // compile alongside onboarding, and everything the setup screen does
-            // — presenting the keyboard, decoding the chart diagrams, activating
-            // the audio session — queued behind it. It has moved into ContentView
-            // and now waits for setup to finish, where the splash already exists
-            // to cover it.
+            // The STT model warm-up USED TO LIVE HERE and started at launch,
+            // unconditionally, which put its compile alongside onboarding and made
+            // everything the setup screen does — presenting the keyboard, decoding
+            // the chart diagrams, activating the audio session — queue behind it.
+            // It has moved into ContentView and now waits for setup to finish,
+            // where the splash already exists to cover it.
             ContentView()
                 // Persist patient charts with SwiftData. The container is created
                 // once and injected into the environment for @Query / modelContext.
