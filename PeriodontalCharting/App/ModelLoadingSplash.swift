@@ -29,11 +29,13 @@ struct ModelLoadingSplash: View {
     private var isPreparingAssets: Bool { !assets.isReady }
 
     private var headline: String {
-        isPreparingAssets ? "Preparing chart images" : "Preparing dictation model"
+        isPreparingAssets
+            ? String(localized: "Preparing chart")
+            : String(localized: "Preparing voice dictation")
     }
 
     private var detail: String {
-        isPreparingAssets ? assets.statusMessage : "Loading Wav2Vec2 model…"
+        isPreparingAssets ? assets.statusMessage : String(localized: "Loading the speech model…")
     }
 
     private var icon: String {

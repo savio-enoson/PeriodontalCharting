@@ -8,7 +8,7 @@ final class Wav2VecViewModel {
     
     // MARK: - Observable state (the View binds to these)
     private(set) var transcript: String = ""
-    private(set) var statusMessage: String = "Loading model…"
+    private(set) var statusMessage: String = String(localized: "Loading the speech model…")
     private(set) var isModelReady: Bool = false
     private(set) var isTranscribing: Bool = false
     private(set) var isRecording: Bool = false
@@ -40,13 +40,13 @@ final class Wav2VecViewModel {
     private(set) var gateStatus = GateStatus()
 
     func loadModel() async {
-        statusMessage = "Loading Wav2Vec2 model..."
+        statusMessage = String(localized: "Loading the speech model…")
         await Wav2VecEngine.shared.loadModel()
         isModelReady = Wav2VecEngine.shared.isModelLoaded
         if isModelReady {
-            statusMessage = "Model ready (Wav2Vec2)"
+            statusMessage = String(localized: "Voice dictation ready")
         } else {
-            statusMessage = "Error: Model/Vocab failed to load."
+            statusMessage = String(localized: "Couldn’t load the speech model")
         }
     }
 
@@ -58,7 +58,7 @@ final class Wav2VecViewModel {
     func startLive() {
         guard !isRecording else { return }
         guard isModelReady else {
-            statusMessage = "Model not ready. (Check logs)"
+            statusMessage = String(localized: "Voice dictation isn’t ready yet")
             return
         }
 
@@ -72,7 +72,7 @@ final class Wav2VecViewModel {
         
         isRecording = true
         isTranscribing = true
-        statusMessage = "Listening..."
+        statusMessage = String(localized: "Listening…")
         
         do {
             try Wav2VecAudioCapture.shared.startStreamingRecording { [weak self] buffer in
@@ -92,7 +92,7 @@ final class Wav2VecViewModel {
         Wav2VecAudioCapture.shared.stopRecording()
         isRecording = false
         isTranscribing = false
-        statusMessage = transcript.isEmpty ? "No speech captured" : "Done"
+        statusMessage = transcript.isEmpty ? String(localized: "No speech captured") : String(localized: "Done")
         
         // Final flush
         let chunkToProcess = streamingBuffer
