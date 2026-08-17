@@ -8,17 +8,20 @@ struct ContentView: View {
     @State private var selectedChart: PatientChart?
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
-    /// @Observable singletons — read in `body` so the splash transitions itself.
+    /// @Observable singleton — read in `body` so the splash transitions itself.
     private let assets = ChartAssetStore.shared
-    private let engine = TranscriptionEngine.shared
+    /// Flips true once the Wav2Vec2 STT model finishes loading. Driven explicitly
+    /// from the load `.task` (below) rather than by observing the engine, so the
+    /// splash gate does not depend on ObservableObject propagation timing.
+    @State private var modelReady = false
 
     /// Chart images gate ONBOARDING as well as the chart: they are rendered in
     /// the same `body` as the onboarding name field. A second or two behind a
     /// determinate bar buys a responsive setup screen.
     ///
-    /// The model gates only the CHART — and now only STARTS once setup is done.
+    /// The STT model gates only the CHART — and now only STARTS once setup is done.
     private var needsSplash: Bool {
-        !assets.isReady || (hasCompletedOnboarding && !engine.isReady)
+        !assets.isReady || (hasCompletedOnboarding && !modelReady)
     }
 
     var body: some View {
@@ -32,18 +35,25 @@ struct ContentView: View {
             .animation(.easeInOut(duration: 0.35), value: needsSplash)
             // Decode the chart diagrams once, downscaled, and hold them.
             .task { await assets.warm() }
-            // WhisperKit, deferred until setup is finished.
+            // The two heavy subsystems, deferred until setup is finished. Nothing
+            // in onboarding needs either — the gate uses its own small packages.
+            // `task(id:)` fires again when the flag flips, so loading begins the
+            // moment "Complete Setup" is tapped, behind the same splash that
+            // covers every later launch.
             //
-            // It used to start at launch, which meant a ~180 s Core ML compile
-            // ran underneath onboarding — the first keyboard presentation, the
-            // audio-session activation and the image decode all queued behind it.
-            // Nothing in onboarding needs the model; the gate uses its own small
-            // packages. `task(id:)` fires again when the flag flips, so the load
-            // begins the moment "Complete Setup" is tapped and the splash covers
-            // it exactly as it does on every later launch.
+            // STT FIRST, EXTRACTOR SECOND. The mic button unlocks on
+            // `isModelLoaded`, so making the clinician wait for six extra Core ML
+            // packages before they can dictate would be the wrong trade — the
+            // extractor catching up late costs at most the first chunk, which
+            // falls back to the gate's own verdict.
             .task(id: hasCompletedOnboarding) {
                 guard hasCompletedOnboarding else { return }
-                await engine.load()
+                // `loadModel()` returns only after `isModelLoaded` is set on the
+                // main actor, so flipping `modelReady` here is exact — the splash
+                // stays up for the whole load and drops the instant it completes.
+                await Wav2VecEngine.shared.loadModel()
+                modelReady = Wav2VecEngine.shared.isModelLoaded
+                await TSEEngine.shared.prepare()
             }
     }
 

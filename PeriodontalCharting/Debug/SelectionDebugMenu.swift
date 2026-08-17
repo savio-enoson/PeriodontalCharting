@@ -8,8 +8,6 @@ struct SelectionDebugMenu: View {
     
     @State private var showAlert = false
     @State private var alertMessage = ""
-    @AppStorage("useMLTokenizer") var useMLTokenizer: Bool = false
-    @AppStorage("useOfflineWav2Vec") var useOfflineWav2Vec: Bool = true
     @AppStorage("useStatefulParser") var useStatefulParser: Bool = true
     
     var body: some View {
@@ -35,26 +33,6 @@ struct SelectionDebugMenu: View {
                     NavigationLink("Open gate test harness") {
                         SpeakerGateDebugView()
                     }
-                }
-                
-                Section("Parser Engine") {
-                    Picker("Parser", selection: Binding(
-                        get: { useMLTokenizer ? "CoreML Parser" : "StatefulParser" },
-                        set: { useMLTokenizer = ($0 == "CoreML Parser") }
-                    )) {
-                        Text("StatefulParser").tag("StatefulParser")
-                        Text("CoreML Parser").tag("CoreML Parser")
-                    }.pickerStyle(.segmented)
-                }
-                
-                Section("Speech-to-Text Engine") {
-                    Picker("STT Engine", selection: Binding(
-                        get: { useOfflineWav2Vec ? "Wav2Vec2 STT" : "Whisper STT" },
-                        set: { useOfflineWav2Vec = ($0 == "Wav2Vec2 STT") }
-                    )) {
-                        Text("Whisper STT").tag("Whisper STT")
-                        Text("Wav2Vec2 STT").tag("Wav2Vec2 STT")
-                    }.pickerStyle(.segmented)
                 }
                 
                 Section("AI Simulation") {

@@ -22,16 +22,15 @@ struct AIListeningView: View {
                     
                     Spacer()
 
-                    // Real live dictation (Whisper → annotation parser per chunk).
-                    // Gated on the shared model: a spinner shows until it's ready
-                    // (TranscriptionEngine is @Observable, so this flips automatically),
-                    // then the mic becomes tappable. This is the model-ready indicator.
-                    let modelReady = TranscriptionEngine.shared.isReady
+                    // Real live dictation: mic -> speaker gate -> Wav2Vec2 ->
+                    // annotation parser, per committed chunk. A spinner shows
+                    // until the STT model is ready, then the mic becomes tappable.
+                    let modelReady = Wav2VecEngine.shared.isModelLoaded
                     Button(action: { viewModel.toggleLiveDictation() }) {
                         if viewModel.isFinishing {
-                            // The mic is already off, but the last decode and the
-                            // final speaker-gate pass are still landing — the chart
-                            // is not final yet, so the button must not look ready.
+                            // The mic is off, but the tail chunk's gate pass and
+                            // decode are still landing — the chart is not final
+                            // yet, so the button must not look ready.
                             //
                             // Deliberately NOT a bare ProgressView: inside a
                             // DISABLED button it renders dimmed and small next to a
@@ -55,13 +54,13 @@ struct AIListeningView: View {
                     .disabled(viewModel.isFinishing || (!modelReady && !viewModel.isDictating))
 
                     // DEBUG: Start Simulation
-                    Button(action: {
-                        viewModel.toggleSimulation(from: viewModel.selectedTestTranscript)
-                    }) {
-                        Image(systemName: viewModel.isListening ? "stop.circle.fill" : "play.circle.fill")
-                            .font(.title2)
-                            .foregroundStyle(viewModel.isListening ? .red : .blue)
-                    }
+//                    Button(action: {
+//                        viewModel.toggleSimulation(from: viewModel.selectedTestTranscript)
+//                    }) {
+//                        Image(systemName: viewModel.isListening ? "stop.circle.fill" : "play.circle.fill")
+//                            .font(.title2)
+//                            .foregroundStyle(viewModel.isListening ? .red : .blue)
+//                    }
                     // The two feeds are mutually exclusive, and starting a
                     // simulation mid-finish would race the final commit for the
                     // chart. AIVoiceViewModel guards against it, but greying the
@@ -71,8 +70,8 @@ struct AIListeningView: View {
                 .padding(.bottom, 8)
                 
                 // Speaker filter — visible whenever real dictation is running, and
-                // through the finish, so a withheld line is never mistaken for
-                // Whisper missing words. The final tail pass can still change these
+                // through the finish, so a withheld line is never mistaken for the
+                // decoder missing words. The tail chunk can still change these
                 // counts after the mic goes off.
                 if viewModel.isDictating || viewModel.isFinishing {
                     let status = viewModel.gateStatus

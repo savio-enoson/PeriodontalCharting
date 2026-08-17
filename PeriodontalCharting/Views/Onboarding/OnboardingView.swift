@@ -499,8 +499,8 @@ struct OnboardingView: View {
             enrollmentSucceeded = result.templates > 0
             refreshRecordedTakes()
 
-            let base = String(format: "%d take(s) · %.1f s audio · %d speech segment(s) · %d usable",
-                              result.takes, result.seconds, result.totalSpans, result.eligibleSpans)
+            let base = String(format: "%d take(s) · %.1f s audio · %d usable speech segment(s)",
+                              result.takes, result.seconds, result.totalSpans)
 
             if result.templates > 0 {
                 enrollmentStatus = result.takes >= 2

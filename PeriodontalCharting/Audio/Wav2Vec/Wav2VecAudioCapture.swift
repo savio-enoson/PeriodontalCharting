@@ -12,8 +12,6 @@ class Wav2VecAudioCapture: ObservableObject {
     @Published var isRecording = false
     @Published var audioLevel: Float = -60.0
     
-    // For offline mode: collect all audio data
-    private var offlineAudioBuffer: [Float] = []
     
     private init() {
     }
@@ -27,28 +25,41 @@ class Wav2VecAudioCapture: ObservableObject {
         }
     }
     
-    /// Starts recording and buffers the audio in memory until stopped.
-    func startOfflineRecording() throws {
-        offlineAudioBuffer.removeAll()
-        try startRecording { [weak self] buffer in
-            self?.offlineAudioBuffer.append(contentsOf: buffer)
-        }
-    }
-    
-    /// Stops offline recording and returns the Z-score normalized audio buffer.
-    func stopOfflineRecording() -> [Float] {
-        stopRecording()
-        return normalizeAudio(data: offlineAudioBuffer)
-    }
     
     private var alignmentBuffer: [Float] = []
-    
+
+    // THE LIVE PATH'S FRONT END, and until now it did not have one.
+    //
+    // `SpeakerGate.loadSamples` high-passes and auto-gains every CALIBRATION
+    // file, so enrollment templates were built from conditioned audio while live
+    // spans were judged raw. The energy segmenter sets its speech threshold at
+    // `noiseFloor * 3`, and sub-80 Hz rumble lifts that floor in silence and in
+    // speech alike — so a quiet clinician had to clear a bar his own templates
+    // never faced. Measured on synthetic dictation, adding these two lifts
+    // contrast 2.5x (6.1x -> 15.4x at rms 0.03, 18.0x -> 47.1x at 0.11).
+    //
+    // The STREAMING variants, which were written for exactly this and had no
+    // caller. Both carry state across buffers: `HighPassFilter` is an IIR biquad,
+    // and `AutoGain` smooths its multiplier over ~1.5 s and HOLDS it during
+    // silence so a quiet room cannot drive the noise floor up to the target.
+    private var highPass = HighPassFilter()
+    private var autoGain = AutoGain()
+
     /// Starts continuous streaming. The callback receives chunks that are exact multiples of 512 samples (for VAD compatibility).
     func startStreamingRecording(onBuffer: @escaping ([Float]) -> Void) throws {
         alignmentBuffer.removeAll()
+        // Per session. The filter's IIR state and the gain's multiplier are both
+        // history, and last session's history belongs to a different room.
+        highPass.reset()
+        autoGain.reset()
         try startRecording { [weak self] buffer in
             guard let self = self else { return }
-            self.alignmentBuffer.append(contentsOf: buffer)
+            // Condition BEFORE anything downstream sees it, so the gate, the
+            // decoder and the debug capture all work from the same signal.
+            var conditioned = buffer
+            self.highPass.apply(to: &conditioned)
+            self.autoGain.apply(to: &conditioned)
+            self.alignmentBuffer.append(contentsOf: conditioned)
             
             var alignedChunks: [Float] = []
             while self.alignmentBuffer.count >= 512 {

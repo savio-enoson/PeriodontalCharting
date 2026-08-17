@@ -4,9 +4,9 @@
 //
 //  Created by Hans Joachim Wiryonoptutro on 27/07/26.
 //
-//  Milestone-1 harness: validates the speaker gate on FILES, with no microphone
-//  and no WhisperKit dependency. This is deliberate — it isolates the TSE layer
-//  from STT so a failure here is unambiguously the gate's.
+//  Validates the speaker gate on FILES, with no microphone and no STT. That is
+//  deliberate — it isolates the gate from Wav2Vec, so a failure here is
+//  unambiguously the embedder's.
 //
 
 import SwiftUI
@@ -21,15 +21,17 @@ struct SpeakerGateDebugView: View {
     @State private var isWorking = false
     @State private var adaptive = false
 
+    @State private var captureEnabled = SessionRecorder.isEnabled
+    @State private var sessionSeconds: Double?
+    @State private var mode = TSEConfig.mode
+    @State private var coverage = TSEConfig.coverage
+    @ObservedObject private var audio = AudioManager.shared
+
     var body: some View {
         List {
-            Section("Extraction") {
-                Text("Mode: \(TSEConfig.mode.rawValue). Routing decisions and "
-                     + "per-span distances go to the console as [Gate/live] and "
-                     + "[TSE/live]. The A16 benchmark and the TSE harness were "
-                     + "removed once their numbers were recorded in handoff.md.")
-                    .font(.caption2).foregroundStyle(.secondary)
-            }
+            sessionCaptureSection
+
+            extractionSection
             
             Section("Status") {
                 Text(status).font(.callout)
@@ -44,6 +46,15 @@ struct SpeakerGateDebugView: View {
                      + "recorded, and TranscriptionEngine restores it at launch. "
                      + "This button re-runs it by hand.")
                     .font(.caption2).foregroundStyle(.secondary)
+                // THE CACHE OUTLIVES A REBUILD, and that is not obvious.
+                // `restoreEnrollment` returns early whenever a profile already has
+                // cached templates, so changing anything the segmenter does —
+                // `minSpeechSeconds`, the live high-pass, the auto-gain — leaves
+                // the OLD templates in place until someone re-records calibration.
+                // This rebuilds them from the takes already on disk, no recording.
+                Button("Re-enroll from existing takes") { reenroll() }
+                    .disabled(isWorking)
+
                 Button("Reset enrollment", role: .destructive) {
                     service?.resetEnrollment()
                     templateCount = 0
@@ -84,7 +95,155 @@ struct SpeakerGateDebugView: View {
             }
         }
         .navigationTitle("Speaker Gate (TSE)")
-        .task { initializeIfNeeded() }
+        .task {
+            initializeIfNeeded()
+            sessionSeconds = SessionRecorder.recordedSeconds()
+        }
+    }
+
+    // MARK: - Extraction
+
+    // Live switches, persisted. These take effect on the NEXT dictation session —
+    // an in-flight one has already captured the mode it started with.
+    @ViewBuilder
+    private var extractionSection: some View {
+        Section("Extraction") {
+            Picker("Mode", selection: $mode) {
+                ForEach(TSEConfig.Mode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+            }
+            .onChange(of: mode) { _, new in TSEConfig.mode = new }
+
+            Picker("Coverage", selection: $coverage) {
+                ForEach(TSEConfig.Coverage.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+            }
+            .onChange(of: coverage) { _, new in TSEConfig.coverage = new }
+
+            Text(modeExplanation)
+                .font(.caption2).foregroundStyle(.secondary)
+
+            Text("Per-span decisions go to the console as [Gate], [TSE] and "
+                 + "[TSE/cover]. Live dictation gates through Wav2VecViewModel; "
+                 + "this view is the file harness.")
+                .font(.caption2).foregroundStyle(.tertiary)
+        }
+    }
+
+    private var modeExplanation: String {
+        switch mode {
+        case .off:
+            return "Extractor never runs. Every voice in the room is transcribed."
+        case .observe:
+            return "Extractor runs and logs, but Wav2Vec receives the ORIGINAL audio. "
+                 + "The counterfactual, at full cost, with no risk."
+        case .extractOnly:
+            return "Wav2Vec receives extracted audio, and NOTHING is silenced. Separation "
+                 + "is the only mechanism. Rejects are still measured and named in the "
+                 + "console — check the transcript for their words."
+        case .enforce:
+            return "Wav2Vec receives extracted audio, rejected spans are silenced, and an "
+                 + "all-rejected chunk is withheld."
+        }
+    }
+
+    // MARK: - Session capture
+
+    // The A/B that answers the coverage question by ear. Play raw, then gated: if
+    // extraction is hurting Wav2Vec you hear it as warbling and dropped
+    // consonants long before WER would show it.
+    @ViewBuilder
+    private var sessionCaptureSection: some View {
+        Section("Session capture") {
+            Toggle("Record dictation sessions", isOn: $captureEnabled)
+                .onChange(of: captureEnabled) { _, on in SessionRecorder.isEnabled = on }
+
+            Text("DEBUG ONLY. Writes the last session as two sample-aligned WAVs — "
+                 + "what the mic heard and what Wav2Vec was given. A session records "
+                 + "whatever was said in the room, so leave this off around patients. "
+                 + "Each session overwrites the previous one.")
+                .font(.caption2).foregroundStyle(.secondary)
+
+            if let seconds = sessionSeconds {
+                LabeledContent("Last session", value: String(format: "%.1f s", seconds))
+
+                ForEach(SessionRecorder.Track.allCases, id: \.self) { track in
+                    Button {
+                        playbackToggle(track)
+                    } label: {
+                        Label(track.title,
+                              systemImage: isPlaying(track) ? "stop.fill" : "play.fill")
+                    }
+                }
+
+                // The point of keeping the file: re-judge the exact audio that
+                // misbehaved, as many times as needed, against whatever the config
+                // says today. No microphone, no second clinician, no luck.
+                Button("Re-run live gate on this session") { rerunOnSession() }
+                    .disabled(isWorking || !(service?.isEnrolled ?? false))
+
+                Button("Delete session recording", role: .destructive) {
+                    audio.stopPlaying()
+                    SessionRecorder.shared.deleteLastSession()
+                    sessionSeconds = nil
+                }
+            } else {
+                Text("No session recorded yet.")
+                    .font(.caption).foregroundStyle(.tertiary)
+            }
+        }
+    }
+
+    private func isPlaying(_ track: SessionRecorder.Track) -> Bool {
+        audio.isPlaying && audio.playingFilename == track.rawValue
+    }
+
+    private func playbackToggle(_ track: SessionRecorder.Track) {
+        if isPlaying(track) {
+            audio.stopPlaying()
+        } else {
+            audio.stopPlaying()          // switching tracks mid-play
+            audio.playRecording(filename: track.relativePath)
+        }
+    }
+
+    // Replays the session through `gatedAudio` — the SAME call the live path
+    // makes, extractor included — so the console fills with the identical
+    // [Gate]/[TSE]/[TSE/cover] lines the session produced, at current settings.
+    private func rerunOnSession() {
+        guard let service else { return }
+        isWorking = true
+        status = "Re-running the gate on the last session…"
+        let url = SessionRecorder.url(for: .raw)
+        let extractor = TSEEngine.shared.extractor
+
+        Task.detached {
+            do {
+                // Raw, NOT loadSamples — see SessionRecorder.loadRaw. Replaying
+                // through the calibration loader would add a high-pass and auto-gain
+                // the live session never had, and the re-run would stop reproducing
+                // the log it exists to reproduce.
+                let audio = try SessionRecorder.loadRaw(url)
+                let result = try service.gatedAudio(for: audio, extractor: extractor)
+                let mapped = result.spans.map {
+                    GatedSpan(start: $0.start, end: $0.end,
+                              verdict: $0.effectiveVerdict,
+                              distance: $0.distanceSeparated ?? $0.distanceMixed)
+                }
+                await MainActor.run {
+                    spans = mapped
+                    let secs = Double(audio.count) / Double(SpeakerGate.sampleRate)
+                    status = result.judged
+                        ? String(format: "Session re-run — %.1fs, %d span(s), coverage %@",
+                                 secs, mapped.count, TSEConfig.coverage.rawValue)
+                        : String(format: "Session re-run — %.1fs, nothing judgeable", secs)
+                    isWorking = false
+                }
+            } catch {
+                await MainActor.run {
+                    status = "Re-run failed: \(error)"
+                    isWorking = false
+                }
+            }
+        }
     }
 
     // MARK: - Setup
@@ -123,7 +282,6 @@ struct SpeakerGateDebugView: View {
             service.resetEnrollment()
             let n = (try? service.enrollmentUtterances(
                         fromFile: url,
-                        minSeconds: 3.0,
                         maxPerFile: SpeakerGate.maxTemplates))
                 .flatMap { try? service.enroll(utterances: $0) } ?? 0
             await MainActor.run {
@@ -131,6 +289,25 @@ struct SpeakerGateDebugView: View {
                 status = n > 0 ? "Enrolled \(n) template(s)" : "No usable speech in calibration"
                 isWorking = false
             }
+        }
+    }
+
+    // Rebuild the centroid from the calibration takes already recorded, and
+    // re-cache it. Also re-conditions the extractor, whose enroll_kv comes from
+    // the same takes and is just as stale.
+    private func reenroll() {
+        isWorking = true
+        status = "Re-enrolling from the takes on disk…"
+        Task {
+            let result = await TranscriptionEngine.shared.enrollFromCalibration(
+                reset: true, waitForFile: false)
+            await TSEEngine.shared.reprepare()
+            templateCount = service?.templateCount ?? 0
+            status = result.templates > 0
+                ? String(format: "Re-enrolled %d template(s) from %d take(s), %.1fs",
+                         result.templates, result.takes, result.seconds)
+                : "Re-enrollment produced no templates — check the takes"
+            isWorking = false
         }
     }
 

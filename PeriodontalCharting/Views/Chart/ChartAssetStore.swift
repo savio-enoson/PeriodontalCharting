@@ -43,7 +43,7 @@ final class ChartAssetStore {
     private(set) var isReady = false
     /// 0…1 across all four images — real progress, unlike Core ML compilation.
     private(set) var progress: Double = 0
-    private(set) var statusMessage = "Preparing chart images…"
+    private(set) var statusMessage = String(localized: "Preparing chart images…")
 
     /// STRONG references are the point. A weak cache would be purged under the
     /// model load and re-decoded from the 6800 px original.
@@ -72,7 +72,7 @@ final class ChartAssetStore {
         var completed = 0.0
 
         for name in Self.names {
-            statusMessage = "Preparing chart images… \(Int(completed) + 1) of \(Int(total))"
+            statusMessage = String(localized: "Preparing chart images… \(Int(completed) + 1) of \(Int(total))")
 
             // Off the main thread. `UIImage(named:)` is thread-safe, and
             // `preparingThumbnail(of:)` does the decode + resample on the calling
@@ -99,7 +99,7 @@ final class ChartAssetStore {
             progress = completed / total
         }
 
-        statusMessage = "Chart images ready"
+        statusMessage = String(localized: "Chart images ready")
         isReady = true
     }
 }

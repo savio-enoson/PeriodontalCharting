@@ -6,40 +6,27 @@ class AIVoiceViewModel: ObservableObject {
     @Published var committedTranscription: String = ""
     @Published var uncommittedTranscription: String = ""
     @Published var isListening: Bool = false
-    /// True while real Whisper dictation is feeding the parser (vs. the debug
-    /// simulation, which sets `isListening`). Kept separate so both controls can
-    /// show independent state; the two are mutually exclusive at runtime.
+    // True while real Wav2Vec dictation is feeding the parser (vs. the debug
+    // simulation, which sets `isListening`). Kept separate so both controls can
+    // show independent state; the two are mutually exclusive at runtime.
     @Published var isDictating: Bool = false
-    /// True after the mic is turned off but while the last decode and the final
-    /// speaker-gate pass are still landing (the async `transcriber.stopLive()` and
-    /// the final parse). The chart is not final yet, so the mic button shows a
-    /// "still working" state and stays disabled until this flips back to false.
+    // True after the mic is turned off but while the tail chunk's gate pass and
+    // decode are still landing. The chart is not final yet, so the mic button
+    // shows a "still working" state and stays disabled until this flips back.
     @Published var isFinishing: Bool = false
 
     var currentStatusMessage: String {
-        if UserDefaults.standard.bool(forKey: "useOfflineWav2Vec") {
-            return wav2VecTranscriber.statusMessage
-        } else {
-            return transcriber.statusMessage
-        }
+        wav2VecTranscriber.statusMessage
     }
 
-    /// Real on-device transcription. AI Mode drives it and consumes its confirmed
-    /// chunks; the standalone LiveTranscriptionView uses its own instance.
-    private let transcriber = TranscriptionViewModel()
+    // Real on-device transcription (Wav2Vec2), already speaker-gated. AI Mode
+    // drives it and consumes its confirmed chunks.
     private let wav2VecTranscriber = Wav2VecViewModel()
-    
-    /// Speaker-filter state for the AI Mode header. The transcriber is private, so
-    /// this is the only way the view can see it. Reading it inside a SwiftUI body
-    /// tracks the @Observable transcriber directly — no @Published mirror needed,
-    /// and it cannot go stale.
-    var gateStatus: TranscriptionViewModel.GateStatus { 
-        if UserDefaults.standard.bool(forKey: "useOfflineWav2Vec") {
-            let s = wav2VecTranscriber.gateStatus
-            return TranscriptionViewModel.GateStatus(active: s.active, extractorReady: s.extractorReady, spans: s.spans, rejected: s.rejected, routed: s.routed, rescued: s.rescued, withheldSegments: s.withheldSegments, lastDistance: s.lastDistance)
-        } else {
-            return transcriber.gateStatus 
-        }
+
+    /// Speaker-filter state for the AI Mode header. Reading it inside a SwiftUI
+    /// body tracks the transcriber directly — no @Published mirror needed.
+    var gateStatus: Wav2VecViewModel.GateStatus {
+        wav2VecTranscriber.gateStatus
     }
     
     // Stubs for future parsing architecture
@@ -137,18 +124,22 @@ resesi 18, 17, 16, -1 -1
         stopSimulation()
     }
 
-    // MARK: - Live dictation (real Whisper transcription → annotation parser)
+    // MARK: - Live dictation (gated Wav2Vec transcription → annotation parser)
 
     func toggleLiveDictation() {
         if isDictating { stopLiveDictation() } else { startLiveDictation() }
     }
 
-    /// Begin real on-device dictation. Tier 3 "optimistic preview + confirmed
-    /// commit": the chart is driven by the FULL running transcript (preview) so it
-    /// tracks the voice as accurately as the Transcribe sheet, while a separate
-    /// confirmed-only pass (`committedCommands`) marks which cells are finalized —
-    /// the rest render ghosted. The parser re-derives the whole chart from the full
-    /// text each call, so a revised hypothesis self-corrects; nothing sticks wrong.
+    // Begin real on-device dictation. "Optimistic preview + confirmed commit":
+    // the chart is driven by the full running transcript (preview) so it tracks
+    // the voice closely, while a separate confirmed-only pass
+    // (`committedCommands`) marks which cells are finalized — the rest render
+    // ghosted.
+    //
+    // ONLY THE CONFIRMED STREAM IS SPEAKER-GATED. `onLiveTranscript` is preview
+    // text from an ungated buffer and never reaches the parser;
+    // `onConfirmedTranscript` carries chunks that have already been through the
+    // gate and the extractor. Do not wire the parser to the live hook.
     func startLiveDictation() {
         stopSimulation()          // the two feeds are mutually exclusive
         isDictating = true
@@ -162,78 +153,47 @@ resesi 18, 17, 16, -1 -1
         sessionParser = StatefulParser(configuration: getConfiguration())
         committedCommandCount = 0
 
-        let useWav2Vec = UserDefaults.standard.bool(forKey: "useOfflineWav2Vec")
-        
-        if useWav2Vec {
-            wav2VecTranscriber.onLiveTranscript = { [weak self] fullText in
-                guard let self = self else { return }
-                let committed = self.committedTranscription
-                if fullText.hasPrefix(committed) {
-                    let uncommitted = String(fullText.dropFirst(committed.count)).trimmingCharacters(in: .whitespaces)
-                    self.uncommittedTranscription = uncommitted.isEmpty ? "" : " " + uncommitted
-                } else {
-                    self.uncommittedTranscription = fullText
-                }
+        wav2VecTranscriber.onLiveTranscript = { [weak self] fullText in
+            guard let self = self else { return }
+            let committed = self.committedTranscription
+            if fullText.hasPrefix(committed) {
+                let uncommitted = String(fullText.dropFirst(committed.count)).trimmingCharacters(in: .whitespaces)
+                self.uncommittedTranscription = uncommitted.isEmpty ? "" : " " + uncommitted
+            } else {
+                self.uncommittedTranscription = fullText
             }
-            wav2VecTranscriber.onConfirmedTranscript = { [weak self] confirmed in
-                guard let self = self else { return }
-                self.processConfirmedChunk(confirmed)
-            }
-        } else {
-            transcriber.onLiveTranscript = { [weak self] fullText in
-                guard let self = self else { return }
-                let committed = self.committedTranscription
-                if fullText.hasPrefix(committed) {
-                    let uncommitted = String(fullText.dropFirst(committed.count)).trimmingCharacters(in: .whitespaces)
-                    self.uncommittedTranscription = uncommitted.isEmpty ? "" : " " + uncommitted
-                } else {
-                    self.uncommittedTranscription = fullText
-                }
-            }
-            transcriber.onConfirmedTranscript = { [weak self] confirmed in
-                guard let self = self else { return }
-                self.processConfirmedChunk(confirmed)
-            }
+        }
+        wav2VecTranscriber.onConfirmedTranscript = { [weak self] confirmed in
+            guard let self = self else { return }
+            self.processConfirmedChunk(confirmed)
         }
 
         Task { [weak self] in
             guard let self else { return }
-            if useWav2Vec {
-                await self.wav2VecTranscriber.loadModel()
-            } else {
-                await self.transcriber.loadModel()
-            }
-            TokenizerManager.shared.loadModel()
+            await self.wav2VecTranscriber.loadModel()
             guard self.isDictating else { return }  // stopped during model load
-            if useWav2Vec {
-                self.wav2VecTranscriber.startLive()
-            } else {
-                self.transcriber.startLive()
-            }
+            self.wav2VecTranscriber.startLive()
         }
     }
 
     func stopLiveDictation() {
         guard isDictating else { return }
         isDictating = false
-        // Mic is off, but the last decode and the final gate pass are still
-        // landing. `transcriber.stopLive()` is async, so the teardown and final
-        // parse run in a Task; `isFinishing` gates the mic button until they
-        // finish. The class is @MainActor, so every mutation below stays on the
-        // main actor. Callers stay synchronous and untouched.
+        // Mic is off, but the tail chunk still has a gate pass and a decode ahead
+        // of it. `isFinishing` holds the mic button until both land. The class is
+        // @MainActor, so every mutation below stays on the main actor; callers
+        // stay synchronous and untouched.
         isFinishing = true
         Task {
             defer { isFinishing = false }
 
-            if UserDefaults.standard.bool(forKey: "useOfflineWav2Vec") {
-                wav2VecTranscriber.stopLive()
-                wav2VecTranscriber.onLiveTranscript = nil
-                wav2VecTranscriber.onConfirmedTranscript = nil
-            } else {
-                await transcriber.stopLive()
-                transcriber.onLiveTranscript = nil
-                transcriber.onConfirmedTranscript = nil
-            }
+            // AWAITED. `stopLive` returns only once the final chunk has reached
+            // `onConfirmedTranscript`, so the leftover text below is genuinely
+            // leftover. Firing and forgetting dropped whatever was said last,
+            // because the parser was consumed and nil'd before the tail arrived.
+            await wav2VecTranscriber.stopLive()
+            wav2VecTranscriber.onLiveTranscript = nil
+            wav2VecTranscriber.onConfirmedTranscript = nil
 
             let finalOutput = committedTranscription + uncommittedTranscription
             if finalOutput.hasPrefix(committedTranscription) {

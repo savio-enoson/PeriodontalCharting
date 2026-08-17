@@ -286,13 +286,12 @@ class AudioManager: NSObject, ObservableObject {
     // MARK: - Live transcription session ownership
     //
     // AudioManager is the single owner of the shared AVAudioSession for live
-    // mic capture. WhisperKit's AudioStreamTranscriber builds an AVAudioConverter
+    // mic capture. A live capture graph builds an AVAudioConverter
     // from the input format when it starts; if the route or sample rate changes
     // afterward (Bluetooth headset (dis)connects, a call/Siri interrupts), that
-    // converter no longer matches the tap buffers and WhisperKit throws
-    //   audioProcessingFailed("Error converting audio: …")
-    // (the AVAudioConverter FillComplexProc format-mismatch assertion). By owning
-    // the session here we can catch those events and have the driver rebuild the
+    // converter no longer matches the tap buffers and conversion fails — the
+    // AVAudioConverter FillComplexProc format-mismatch assertion. By owning the
+    // session here we can catch those events and have the driver rebuild the
     // stream against the new format instead of crashing.
 
     /// The capture graph AudioManager is currently driving (the view-model).
@@ -357,9 +356,9 @@ class AudioManager: NSObject, ObservableObject {
         case .newDeviceAvailable, .oldDeviceUnavailable:
             // The mic itself changed (e.g. Bluetooth headset (dis)connected) — the
             // capture graph must be rebuilt against the new device. Mere sample-rate
-            // / config changes (.routeConfigurationChange, .override) are handled
-            // seamlessly inside WhisperKit's adaptive converter, so we deliberately
-            // don't restart on those — that would just churn the stream needlessly.
+            // / config changes (.routeConfigurationChange, .override) are absorbed by
+            // the capture converter, so we deliberately don't restart on those — that
+            // would just churn the stream needlessly.
             Task { @MainActor [weak self] in await self?.performLiveRestart() }
         default:
             break
