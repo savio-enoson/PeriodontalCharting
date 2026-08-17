@@ -170,8 +170,8 @@ final class VoiceProfileStore {
     // sat at the Documents default — `completeUntilFirstUserAuthentication`,
     // decryptable at any point after one unlock since boot, so a clinic iPad
     // that stays awake between patients held them in the clear all day — and
-    // nothing excluded them from iCloud, while the 632 MB RE-DOWNLOADABLE
-    // Whisper model WAS excluded. Exactly backwards.
+    // nothing excluded them from iCloud, while the large RE-DOWNLOADABLE STT
+    // model WAS excluded. Exactly backwards.
     //
     // `.completeUnlessOpen` rather than `.complete`, and the difference is
     // operational, not a weakening: `.complete` kills an already-open file

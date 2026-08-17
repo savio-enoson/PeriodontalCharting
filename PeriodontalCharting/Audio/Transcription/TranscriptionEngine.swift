@@ -2,14 +2,14 @@
 //  TranscriptionEngine.swift
 //  PeriodontalCharting
 //
-//  App-wide host for the speaker-gate infrastructure: Silero VAD plus the
-//  SpeakerGateService (ECAPA embedder + enrollment) and, on demand, the TSE
-//  extractor. Loaded once at launch and shared everywhere.
+//  Owns the small shared audio infrastructure: Silero VAD and the app-wide
+//  SpeakerGateService. It transcribes nothing — the STT model is Wav2Vec2, it is
+//  bundled, and it loads through `Wav2VecEngine`. The name is a leftover; renaming
+//  it touches five call sites and is worth doing separately.
 //
-//  Transcription itself no longer lives here — the Whisper model was removed and
-//  Wav2Vec2 is the STT engine now (see Wav2VecEngine). What remains is small and
-//  cheap: `load()` builds Silero VAD, and the gate / extractor build lazily via
-//  `makeSpeakerGateIfNeeded()` / TSEEngine.
+//  The gate is deliberately independent of any STT load: enrollment needs only the
+//  small ECAPA embedder and Silero VAD, and gating it behind a large model meant
+//  onboarding always found `vad` still nil and silently skipped calibration.
 //
 //  ENROLLMENT READS THE ACTIVE VoiceProfile. Switching dentist restores cached
 //  embeddings rather than re-running ECAPA over every take.
@@ -26,12 +26,8 @@ final class TranscriptionEngine {
     @ObservationIgnored static let shared = TranscriptionEngine()
 
     @ObservationIgnored private(set) var vad: SileroVADEngine?
-    /// Observable so the UI can show a gate-ready indicator.
+    // Observable so the UI can show a gate-ready indicator.
     private(set) var isReady = false
-    private(set) var statusMessage = "Loading model…"
-    /// Retained for UI compatibility (the splash binds it). Always 0 now that
-    /// there is no model to download — the Wav2Vec model is bundled.
-    private(set) var downloadProgress: Double = 0
 
     /// App-wide speaker gate. Enrollment lives HERE, not in whatever view happened
     /// to trigger it — a locally-constructed service deallocates and takes the
@@ -48,31 +44,30 @@ final class TranscriptionEngine {
     /// for anything that should see every take.
     static var calibrationURL: URL {
         let store = VoiceProfileStore.shared
-        let dir = store.activeDirectory
+        let dir = store.activeDirectory 
             ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         return CalibrationTake.normal.url(in: dir)
     }
 
-    /// Megabytes this process may still allocate before jetsam kills it.
-    ///
-    /// This is the number that actually matters — not "memory used". The app holds
-    /// the Wav2Vec2 STT model, eight Core ML packages for the gate and TSE, and
-    /// TSE's 16 MB enroll_kv, and it has been SIGKILL'd before. Print it after each
-    /// subsystem loads so a regression shows up as a shrinking number rather than
-    /// as a crash with no stack trace.
-    ///
-    /// Returns 0 if the OS declines to report, so treat 0 as "unknown", not "none".
+    // Megabytes this process may still allocate before jetsam kills it.
+    //
+    // This is the number that actually matters — not "memory used". The app holds
+    // Wav2Vec2, eight Core ML packages for the gate and TSE, and TSE's 16 MB
+    // enroll_kv, and it has been SIGKILL'd before. Print it after each subsystem
+    // loads so a regression shows up as a shrinking number rather than as a crash
+    // with no stack trace.
+    //
+    // Returns 0 if the OS declines to report, so treat 0 as "unknown", not "none".
     nonisolated static func availableMemoryMB() -> Int {
         Int(os_proc_available_memory()) / 1_048_576
     }
 
-    /// What one enrollment pass produced. A struct rather than a wide tuple
-    /// because it crosses a `Task.detached` boundary and the fields matter.
+    // What one enrollment pass produced. A struct rather than a wide tuple
+    // because it crosses a `Task.detached` boundary and the fields matter.
     private struct EnrollmentOutcome: Sendable {
         var templates = 0
         var seconds = 0.0
         var totalSpans = 0
-        var eligibleSpans = 0
         var takes = 0
         var cachedTemplates: [[Double]] = []
         var selfDistances: [Double] = []
@@ -80,7 +75,7 @@ final class TranscriptionEngine {
 
     private init() {}
 
-    /// Load the shared model. Idempotent and coalesced.
+    // Load the shared VAD. Idempotent and coalesced.
     func load() async {
         if isReady { return }
         if loadTask == nil {
@@ -92,15 +87,11 @@ final class TranscriptionEngine {
 
     private func performLoad() async {
         if isReady { return }
-        // The heavy WhisperKit transcription model has been removed — Wav2Vec2 is
-        // the STT engine now and loads through Wav2VecEngine. All that remains here
-        // is the small Silero VAD the speaker gate depends on; the gate, extractor
-        // and enrollment build on demand (makeSpeakerGateIfNeeded / TSEEngine), so
-        // this is a fast, memory-cheap load.
+        // Only the small Silero VAD the gate depends on. The gate, the extractor
+        // and enrollment all build on demand (makeSpeakerGateIfNeeded / TSEEngine),
+        // so this is a fast, memory-cheap load.
         vad = try? SileroVADEngine()
         isReady = true
-        downloadProgress = 0
-        statusMessage = "Ready"
         print("[Mem] gate infra ready: \(Self.availableMemoryMB()) MB available")
     }
 
@@ -109,13 +100,13 @@ final class TranscriptionEngine {
     /// True once a centroid exists. Read this rather than tracking a separate flag.
     var isSpeakerEnrolled: Bool { speakerGate?.isEnrolled ?? false }
 
-    /// Build the app-wide gate on first use.
-    ///
-    /// Falls back to its own SileroVADEngine when `vad` is not set yet — during
-    /// onboarding it usually is not, because `performLoad` runs slightly later.
-    ///
-    /// Synchronous: it loads two small Core ML models on the main actor (~100 ms).
-    /// Acceptable for a one-time setup call; do not put it in a render path.
+    // Build the app-wide gate on first use, independent of any STT load.
+    //
+    // Falls back to its own SileroVADEngine when `vad` is not set yet — during
+    // onboarding it often is not, because `load()` may not have run.
+    //
+    // Synchronous: it loads two small Core ML models on the main actor (~100 ms).
+    // Acceptable for a one-time setup call; do not put it in a render path.
     @discardableResult
     func makeSpeakerGateIfNeeded() -> SpeakerGateService? {
         if let speakerGate { return speakerGate }
@@ -150,14 +141,13 @@ final class TranscriptionEngine {
     func enrollFromCalibration(
         reset: Bool,
         waitForFile: Bool
-    ) async -> (templates: Int, seconds: Double, totalSpans: Int,
-                eligibleSpans: Int, takes: Int) {
+    ) async -> (templates: Int, seconds: Double, totalSpans: Int, takes: Int) {
 
-        guard let service = makeSpeakerGateIfNeeded() else { return (0, 0, 0, 0, 0) }
+        guard let service = makeSpeakerGateIfNeeded() else { return (0, 0, 0, 0) }
         let store = VoiceProfileStore.shared
-        guard let profileID = store.activeID else { return (0, 0, 0, 0, 0) }
+        guard let profileID = store.activeID else { return (0, 0, 0, 0) }
         let urls = store.activeTakeURLs
-        guard !urls.isEmpty else { return (0, 0, 0, 0, 0) }
+        guard !urls.isEmpty else { return (0, 0, 0, 0) }
 
         // The profile's own operating point, before anything is judged against it.
         service.gate.applyThresholds(accept: store.active?.acceptThreshold,
@@ -191,20 +181,19 @@ final class TranscriptionEngine {
                 }
 
                 guard let selection = try? service.enrollmentSelection(
-                        fromFile: url, minSeconds: 3.0, maxPerFile: perTake) else {
+                        fromFile: url, maxPerFile: perTake) else {
                     print("[Enroll] \(url.lastPathComponent): no usable spans")
                     continue
                 }
 
                 let takeAdded = (try? service.enroll(utterances: selection.utterances)) ?? 0
-                print(String(format: "[Enroll] %@: %.1fs, %d span(s), %d eligible -> %d template(s)",
+                print(String(format: "[Enroll] %@: %.1fs, %d span(s) -> %d template(s)",
                              url.lastPathComponent, selection.audioSeconds,
-                             selection.totalSpans, selection.eligibleSpans, takeAdded))
+                             selection.totalSpans, takeAdded))
 
-                result.templates     += takeAdded
-                result.seconds       += selection.audioSeconds
-                result.totalSpans    += selection.totalSpans
-                result.eligibleSpans += selection.eligibleSpans
+                result.templates  += takeAdded
+                result.seconds    += selection.audioSeconds
+                result.totalSpans += selection.totalSpans
                 if takeAdded > 0 { result.takes += 1 }
             }
 
@@ -221,8 +210,7 @@ final class TranscriptionEngine {
                                     templates: outcome.cachedTemplates,
                                     selfDistances: outcome.selfDistances)
 
-        return (outcome.templates, outcome.seconds,
-                outcome.totalSpans, outcome.eligibleSpans, outcome.takes)
+        return (outcome.templates, outcome.seconds, outcome.totalSpans, outcome.takes)
     }
 
     /// Switch dentist.

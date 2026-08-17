@@ -128,7 +128,7 @@ struct ChartAnatomyResolver {
         }
         
         let result = (aspect, siteIndex)
-        print("ChartAnatomyResolver.resolve: anatomy=\(anatomy), tooth=\(tooth), isRight=\(isRight), isMesial=\(isMesial) -> result=\(String(describing: result))")
+        parserTrace("ChartAnatomyResolver.resolve: anatomy=\(anatomy), tooth=\(tooth), isRight=\(isRight), isMesial=\(isMesial) -> result=\(String(describing: result))")
         return result
     }
     

@@ -35,11 +35,17 @@ struct ContentView: View {
             .animation(.easeInOut(duration: 0.35), value: needsSplash)
             // Decode the chart diagrams once, downscaled, and hold them.
             .task { await assets.warm() }
-            // The Wav2Vec2 STT model, deferred until setup is finished. Nothing in
-            // onboarding needs it, so loading it under the splash after "Complete
-            // Setup" keeps setup responsive. `task(id:)` fires again when the flag
-            // flips, so the load begins the moment onboarding completes and the
-            // splash covers it exactly as it does on every later launch.
+            // The two heavy subsystems, deferred until setup is finished. Nothing
+            // in onboarding needs either — the gate uses its own small packages.
+            // `task(id:)` fires again when the flag flips, so loading begins the
+            // moment "Complete Setup" is tapped, behind the same splash that
+            // covers every later launch.
+            //
+            // STT FIRST, EXTRACTOR SECOND. The mic button unlocks on
+            // `isModelLoaded`, so making the clinician wait for six extra Core ML
+            // packages before they can dictate would be the wrong trade — the
+            // extractor catching up late costs at most the first chunk, which
+            // falls back to the gate's own verdict.
             .task(id: hasCompletedOnboarding) {
                 guard hasCompletedOnboarding else { return }
                 // `loadModel()` returns only after `isModelLoaded` is set on the
@@ -47,6 +53,7 @@ struct ContentView: View {
                 // stays up for the whole load and drops the instant it completes.
                 await Wav2VecEngine.shared.loadModel()
                 modelReady = Wav2VecEngine.shared.isModelLoaded
+                await TSEEngine.shared.prepare()
             }
     }
 

@@ -26,6 +26,13 @@ struct Beam {
 }
 
 class CTCDecoder {
+
+    // The bar a word must clear to survive. Named rather than left as a bare
+    // `4.5` at the comparison site, because it is an operating point and not an
+    // implementation detail. See TSE_ISSUES.md for the length-bias caveat.
+    static let maxCostPerLetter: Float = 4.5
+
+
     var labels: [String] = []
     let trie: PrefixTrie
     var blankIndex: Int = 27 // [PAD] in original vocab
@@ -243,11 +250,23 @@ class CTCDecoder {
             
             // Normalize cost by word length
             let costPerLetter = cost / Float(max(1, word.count))
-            
-            // If the cost per letter is very high (e.g. > 4.5), it means the model was heavily fighting the dictionary.
-            // i.e., it's a hallucination (like "sampai" forced out of static).
-            // We enforce this on ALL inferences (including Live Preview) so the UI doesn't jitter.
-            if costPerLetter <= 4.5 { 
+
+            // If the cost per letter is very high, it means the model was heavily
+            // fighting the dictionary — i.e. a hallucination (like "sampai" forced
+            // out of static). Enforced on ALL inferences, live preview included,
+            // so the UI does not jitter.
+            //
+            // KNOWN BIAS, see TSE_ISSUES.md P0. Dividing by LETTER count makes
+            // short words structurally expensive: a CTC beam cost carries a
+            // component that does not scale with length (the trie's fight at word
+            // boundaries), so a 3-letter word amortises it over fewer letters.
+            // Every word this has rejected in a captured session is <= 5 letters
+            // and among the most frequent in the language — including `dua` (2)
+            // and `enam` (6), which are chart values. Normalising by frames
+            // spanned rather than letters would remove the bias; that change needs
+            // a measured distribution behind it.
+            let accepted = costPerLetter <= Self.maxCostPerLetter
+            if accepted {
                 filteredWords.append(word)
             } else {
                 print("⚠️ WORD REJECTED via Acoustic Cost: '\(word)' (Cost per letter: \(costPerLetter))")

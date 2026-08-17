@@ -2,12 +2,9 @@ import Foundation
 
 struct ChartProcessor {
     static func apply(command: AnnotationCommand, to mouthState: inout [Int: ToothObject]) {
-        let old17PD = mouthState[17]?.probingDepth
-        let old47PD = mouthState[47]?.probingDepth
         
-        print("ChartProcessor.apply: tooth=\(command.teethSelection.startTooth.toothNumber) to \(command.teethSelection.endTooth.toothNumber), metric=\(command.operation), aspect=\(String(describing: command.aspect)), startSite=\(String(describing: command.teethSelection.startSite)), endSite=\(String(describing: command.teethSelection.endSite)), values=\(command.values)")
+        parserTrace("ChartProcessor.apply: tooth=\(command.teethSelection.startTooth.toothNumber) to \(command.teethSelection.endTooth.toothNumber), metric=\(command.operation), aspect=\(String(describing: command.aspect)), startSite=\(String(describing: command.teethSelection.startSite)), endSite=\(String(describing: command.teethSelection.endSite)), values=\(command.values)")
         
-        // print("APPLY: \(command)")
         
         let ts = command.teethSelection
         if let sAspect = ts.startAspect, let eAspect = ts.endAspect {
@@ -43,7 +40,7 @@ struct ChartProcessor {
                 case .missing:
                     let isMissing = command.values.first?.lowercased() == "true"
                     let wasMissing = mouthState[t]?.missing ?? false
-                    print("👉 ChartProcessor (aspect) setting missing for \(t) to \(isMissing) (was \(wasMissing))")
+                    parserTrace("👉 ChartProcessor (aspect) setting missing for \(t) to \(isMissing) (was \(wasMissing))")
                     mouthState[t]?.missing = isMissing
                     if !isMissing && wasMissing {
                         mouthState[t]?.probingDepth = AspectData(outer: [0,0,0], inner: [0,0,0])
@@ -264,7 +261,7 @@ struct ChartProcessor {
                         switch command.operation {
                         case .missing:
                             let wasMissing = mouthState[t]?.missing ?? false
-                            print("👉 ChartProcessor setting missing for \(t) to \(b1) (was \(wasMissing))")
+                            parserTrace("👉 ChartProcessor setting missing for \(t) to \(b1) (was \(wasMissing))")
                             mouthState[t]?.missing = b1
                             if !b1 && wasMissing {
                                 mouthState[t]?.probingDepth = AspectData(outer: [0,0,0], inner: [0,0,0])
@@ -323,7 +320,7 @@ struct ChartProcessor {
             let val = command.values.first?.lowercased() ?? "true"
             let isMissing = val == "true"
             let wasMissing = mouthState[tNum]?.missing ?? false
-            print("👉 ChartProcessor single tooth setting missing for \(tNum) to \(isMissing) (was \(wasMissing))")
+            parserTrace("👉 ChartProcessor single tooth setting missing for \(tNum) to \(isMissing) (was \(wasMissing))")
             mouthState[tNum]?.missing = isMissing
             if !isMissing && wasMissing {
                 mouthState[tNum]?.probingDepth = AspectData(outer: [0,0,0], inner: [0,0,0])
@@ -400,20 +397,6 @@ struct ChartProcessor {
                 mouthState[tNum]?.plaque.outer = boolVals
                 mouthState[tNum]?.plaque.inner = boolVals
             }
-        }
-        
-        let new17PD = mouthState[17]?.probingDepth
-        if old17PD != new17PD {
-            print("🚨 TOOTH 17 PD CHANGED BY: \(command.operation) \(command.aspect)")
-            print("  Old: \(String(describing: old17PD))")
-            print("  New: \(String(describing: new17PD))")
-        }
-        
-        let new47PD = mouthState[47]?.probingDepth
-        if old47PD != new47PD {
-            print("🚨 TOOTH 47 PD CHANGED BY: \(command.operation) \(String(describing: command.aspect))")
-            print("  Old: \(String(describing: old47PD))")
-            print("  New: \(String(describing: new47PD))")
         }
     }
 }
