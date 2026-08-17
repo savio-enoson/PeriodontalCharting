@@ -129,9 +129,11 @@ extension SpeakerGateService {
         // 0.70, 0.60 and 0.50 are identical, so this is a floor rather than a
         // point on a slope.
         //
-        // `var` so the harness can keep sweeping it as more sessions are captured.
-        // Ships at 0.75; one session is one session.
-        static var minSpeechSeconds = 0.75
+        // Ships at 0.75; one session is one session. The sweep above came from an
+        // offline harness that replayed a captured session through these exact
+        // models — rebuild that before moving this number again, rather than
+        // tuning it by feel.
+        static let minSpeechSeconds = 0.75
 
         // The EMBEDDER's own floor — `classify` returns `.tooShort` below it.
         // Deliberately NOT the qualification: its only job is to stop a span that

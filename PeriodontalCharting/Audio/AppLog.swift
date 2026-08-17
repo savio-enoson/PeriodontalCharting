@@ -29,3 +29,21 @@ enum AppLog {
     static let tse      = Logger(subsystem: subsystem, category: "tse")
     static let model    = Logger(subsystem: subsystem, category: "model")
 }
+
+// Verbose parser/chart tracing.
+//
+// The 47 `print` sites in NLP/ and Models/ that this replaces carried DICTATED
+// PATIENT MEASUREMENTS — tooth numbers, probing depths, bleeding flags — through
+// plain `print`, which reaches Console.app in RELEASE builds, unredacted, for
+// anyone who plugs the iPad into a Mac. That is the exact problem this file was
+// created to fix, and the parser sites were never migrated.
+//
+// Compiled out entirely unless PARSER_TRACE is defined, so a release build cannot
+// emit them at all — not merely "does not usually". Build the harnesses or a
+// debug run with -DPARSER_TRACE to get them back.
+@inline(__always)
+func parserTrace(_ message: @autoclosure () -> String) {
+    #if PARSER_TRACE
+    print(message())
+    #endif
+}

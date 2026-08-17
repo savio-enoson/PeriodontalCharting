@@ -154,8 +154,22 @@ enum TSEConfig {
     // per chunk so an A/B is a rebuild, not a re-instrument.
     enum Coverage: String, CaseIterable { case rescueOnly, everySpan }
 
+    // SHIPS AS `.rescueOnly`, and this default is measured rather than assumed.
+    //
+    // It was `.everySpan` while that was the open question. It is not open any
+    // more — replayed through the real decoder on a captured session:
+    //
+    //   ungated     ke resesi dari mesio bukal 1 5 hingga distal 1 1 minus 1 6 ...
+    //   everySpan   selesai dari mesio gak 1 5 5 disto dengan 1 1 mid 1 bop ...
+    //   rescueOnly  ke resesi dari mesio bukal 1 5 hingga distobukal 1 1 minus 1 ...
+    //
+    // `.everySpan` turned "ke resesi" into "selesai" and hallucinated `gak`,
+    // `dengan`, `mid 1`, `bop` — the masking artefact, audible as an autotuned
+    // quality on the clinician's own voice. `.rescueOnly` leaves accepted and
+    // confirmed speech bit-exact and produced a transcript identical to running
+    // with no extractor at all.
     static var coverage: Coverage =
-        Coverage(rawValue: UserDefaults.standard.string(forKey: coverageKey) ?? "") ?? .everySpan {
+        Coverage(rawValue: UserDefaults.standard.string(forKey: coverageKey) ?? "") ?? .rescueOnly {
         didSet { UserDefaults.standard.set(coverage.rawValue, forKey: coverageKey) }
     }
 

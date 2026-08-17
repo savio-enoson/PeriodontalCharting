@@ -12,8 +12,6 @@ class Wav2VecAudioCapture: ObservableObject {
     @Published var isRecording = false
     @Published var audioLevel: Float = -60.0
     
-    // For offline mode: collect all audio data
-    private var offlineAudioBuffer: [Float] = []
     
     private init() {
     }
@@ -27,19 +25,6 @@ class Wav2VecAudioCapture: ObservableObject {
         }
     }
     
-    /// Starts recording and buffers the audio in memory until stopped.
-    func startOfflineRecording() throws {
-        offlineAudioBuffer.removeAll()
-        try startRecording { [weak self] buffer in
-            self?.offlineAudioBuffer.append(contentsOf: buffer)
-        }
-    }
-    
-    /// Stops offline recording and returns the Z-score normalized audio buffer.
-    func stopOfflineRecording() -> [Float] {
-        stopRecording()
-        return normalizeAudio(data: offlineAudioBuffer)
-    }
     
     private var alignmentBuffer: [Float] = []
 

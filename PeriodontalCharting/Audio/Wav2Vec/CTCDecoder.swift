@@ -27,15 +27,11 @@ struct Beam {
 
 class CTCDecoder {
 
-    // The bar a word must clear to survive. Was a bare `4.5` at the comparison
-    // site; hoisted so the offline harness can sweep it against real recordings
-    // instead of it being tuned by literal edit. See TSE_ISSUES.md P0.
-    static var maxCostPerLetter: Float = 4.5
+    // The bar a word must clear to survive. Named rather than left as a bare
+    // `4.5` at the comparison site, because it is an operating point and not an
+    // implementation detail. See TSE_ISSUES.md for the length-bias caveat.
+    static let maxCostPerLetter: Float = 4.5
 
-    // Diagnostics hook: every word the filter judges, accepted or not. nil in the
-    // app, set by the harness to build the cost-versus-length distribution that
-    // should decide both the normalisation and the bar.
-    nonisolated(unsafe) static var reportWordCost: ((String, Float, Float, Bool) -> Void)?
 
     var labels: [String] = []
     let trie: PrefixTrie
@@ -268,9 +264,8 @@ class CTCDecoder {
             // and among the most frequent in the language — including `dua` (2)
             // and `enam` (6), which are chart values. Normalising by frames
             // spanned rather than letters would remove the bias; that change needs
-            // a measured distribution behind it, which `reportWordCost` provides.
+            // a measured distribution behind it.
             let accepted = costPerLetter <= Self.maxCostPerLetter
-            Self.reportWordCost?(word, cost, costPerLetter, accepted)
             if accepted {
                 filteredWords.append(word)
             } else {

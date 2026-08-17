@@ -136,7 +136,7 @@ extension VoiceTokenizer {
             words = recovered
         }
 
-        print("DEBUG Tokenizer input words: \(words)"); var i = 0
+        parserTrace("DEBUG Tokenizer input words: \(words)"); var i = 0
         var expectedValues = 3
         var currentValues = 0
 
@@ -317,7 +317,7 @@ extension VoiceTokenizer {
                                 let prevWord = words[prevIdx]
                                 if isToothPrefix(prevWord) {
                                     isDefinitelyTooth = true
-                                    print("DEBUG Tokenizer: \(combined) is preceded by tooth prefix \(prevWord)")
+                                    parserTrace("DEBUG Tokenizer: \(combined) is preceded by tooth prefix \(prevWord)")
                                 }
                             }
                         }
@@ -337,7 +337,7 @@ extension VoiceTokenizer {
                             
                             if trailingContextFound {
                                 isSequenceOfTeeth = true
-                                print("DEBUG Tokenizer: \(combined) is followed by aspect/action context")
+                                parserTrace("DEBUG Tokenizer: \(combined) is followed by aspect/action context")
                                 isDefinitelyTooth = true
                             } else if isStartOfBlock && hasExactlyNValues(words: words, from: i + 2, expected: expectedValues) {
                                 // If expectedValues is < 3 (e.g. after a site specific anatomy), a sequence of identical digits
@@ -347,18 +347,18 @@ extension VoiceTokenizer {
                                 } else {
                                     isDefinitelyTooth = true
                                     isSequenceOfTeeth = true // Protect from aggressive PD check
-                                    print("DEBUG Tokenizer: \(combined) is followed by exactly \(expectedValues) values")
+                                    parserTrace("DEBUG Tokenizer: \(combined) is followed by exactly \(expectedValues) values")
                                 }
                             } else if isSequenceOfTeethEndingInAction(words: words, from: i) {
                                 isSequenceOfTeeth = true
                                 isDefinitelyTooth = true
-                                print("DEBUG Tokenizer: \(combined) is part of a sequence of teeth ending in action")
+                                parserTrace("DEBUG Tokenizer: \(combined) is part of a sequence of teeth ending in action")
                             } else {
-                                print("DEBUG Eval: currentValues=\(currentValues), num=\(num), nextNum=\(nextNum), nextWord=\(nextWord)")
+                                parserTrace("DEBUG Eval: currentValues=\(currentValues), num=\(num), nextNum=\(nextNum), nextWord=\(nextWord)")
                                 if currentValues == 0 && num != nextNum && (nextWord == "_sep_" || nextWord == "nil" || nextWord == "," || nextWord == "." || nextWord == "dan" || nextWord == "maupun" || nextWord == "serta") {
                                     isDefinitelyTooth = true
                                     isSequenceOfTeeth = true
-                                    print("DEBUG Tokenizer: \(combined) is followed by separator and currentValues == 0")
+                                    parserTrace("DEBUG Tokenizer: \(combined) is followed by separator and currentValues == 0")
                                 }
                             }
                             
@@ -376,7 +376,7 @@ extension VoiceTokenizer {
                             expectedValues = 3; currentValues = 0
                             i += 2; continue
                         } else {
-                            print("DEBUG Tokenizer: \(combined) was NOT deemed a tooth. nextWord was \(i+2 < words.count ? words[i+2] : "nil")")
+                            parserTrace("DEBUG Tokenizer: \(combined) was NOT deemed a tooth. nextWord was \(i+2 < words.count ? words[i+2] : "nil")")
                         }
                     }
                 }

@@ -3,13 +3,13 @@ import Foundation
 extension StatefulParser {
     
     mutating func discardOrFlush(clearSelection: Bool = true) {
-        print("DEBUG discardOrFlush: clearSelection=\(clearSelection)")
+        parserTrace("DEBUG discardOrFlush: clearSelection=\(clearSelection)")
         if !pendingNumbers.isEmpty {
             flushNumbers(force: true)
         } else {
-            print("DEBUG discardOrFlush: before if clearSelection=\(clearSelection)")
+            parserTrace("DEBUG discardOrFlush: before if clearSelection=\(clearSelection)")
             if clearSelection {
-                print("DEBUG discardOrFlush: EXECUTING activeSelection = nil")
+                parserTrace("DEBUG discardOrFlush: EXECUTING activeSelection = nil")
                 emitBoolIfPending()
                 activeSelection = nil
                 didSpecifyExplicitFullAspect = false
@@ -20,23 +20,23 @@ extension StatefulParser {
     
     mutating func emitBoolIfPending() {
         let m = cursor.currentMetric
-        print("DEBUG emitBoolIfPending: metric=\(m), activeSelection=\(activeSelection != nil), isSelectionUsed=\(isSelectionUsed)")
+        parserTrace("DEBUG emitBoolIfPending: metric=\(m), activeSelection=\(activeSelection != nil), isSelectionUsed=\(isSelectionUsed)")
         if m == .bleeding || m == .plaque || m == .implant || m == .missing {
             if let sel = activeSelection, !isSelectionUsed {
                 let targetSlots = sel.expectedSlots
                 let values = Array(repeating: "True", count: targetSlots)
                 let cmd = AnnotationCommand(operation: m, teethSelection: sel, aspect: cursor.currentAspect, values: values)
-                print("DEBUG FLUSH: EMITTING BOOL \(m) for \(sel.startTooth.toothNumber) to \(sel.endTooth.toothNumber)")
+                parserTrace("DEBUG FLUSH: EMITTING BOOL \(m) for \(sel.startTooth.toothNumber) to \(sel.endTooth.toothNumber)")
                 commands.append(cmd)
                 activeSelection = nil
                 isSelectionUsed = true
                 pendingTeeth = []
                 pendingAnatomies = []
             } else {
-                print("DEBUG emitBoolIfPending: failed because sel=\(activeSelection != nil) isSelectionUsed=\(isSelectionUsed)")
+                parserTrace("DEBUG emitBoolIfPending: failed because sel=\(activeSelection != nil) isSelectionUsed=\(isSelectionUsed)")
             }
         } else {
-            print("DEBUG emitBoolIfPending: failed because metric is \(m)")
+            parserTrace("DEBUG emitBoolIfPending: failed because metric is \(m)")
         }
         
         if m == .bleeding || m == .plaque || m == .implant || m == .missing {
@@ -87,14 +87,14 @@ extension StatefulParser {
         cursor.syncWithSequence()
         
         while missingTeeth.contains(cursor.currentTooth) {
-            print("DEBUG ADVANCE: restoreToMainSequence missing")
+            parserTrace("DEBUG ADVANCE: restoreToMainSequence missing")
             if !cursor.advanceToNextTooth() { break }
         }
     }
     
 
     mutating func flushNumbers(force: Bool) {
-        print("flushNumbers: force=\(force), pendingNumbers = \(pendingNumbers), metric = \(cursor.currentMetric), activeSelStartSite=\(String(describing: activeSelection?.startSite)), pendingTeeth=\(pendingTeeth)")
+        parserTrace("flushNumbers: force=\(force), pendingNumbers = \(pendingNumbers), metric = \(cursor.currentMetric), activeSelStartSite=\(String(describing: activeSelection?.startSite)), pendingTeeth=\(pendingTeeth)")
         
         var targetSlots = activeSelection?.expectedSlots ?? 3
         
@@ -108,7 +108,7 @@ extension StatefulParser {
         }
         
         if pendingNumbers.count >= 3 && activeSelection != nil && activeSelection!.startSite != nil && activeSelection!.startTooth.toothNumber == activeSelection!.endTooth.toothNumber {
-            print("DEBUG FLUSH: expanding activeSelection to full tooth because we received \(pendingNumbers.count) numbers")
+            parserTrace("DEBUG FLUSH: expanding activeSelection to full tooth because we received \(pendingNumbers.count) numbers")
             activeSelection?.startSite = nil
             activeSelection?.endSite = nil
             targetSlots = 3
@@ -241,7 +241,7 @@ extension StatefulParser {
                     aspect: selectionToUse.startAspect ?? cursor.currentAspect,
                     values: reversedValues
                 )
-                print("DEBUG FLUSH: active=\(selectionToUse.startTooth.toothNumber) to \(selectionToUse.endTooth.toothNumber), startSite=\(String(describing: selectionToUse.startSite)), endSite=\(String(describing: selectionToUse.endSite)), operation=\(m), values=\(valuesToEmit)")
+                parserTrace("DEBUG FLUSH: active=\(selectionToUse.startTooth.toothNumber) to \(selectionToUse.endTooth.toothNumber), startSite=\(String(describing: selectionToUse.startSite)), endSite=\(String(describing: selectionToUse.endSite)), operation=\(m), values=\(valuesToEmit)")
                 commands.append(cmd)
             }
             
@@ -253,11 +253,11 @@ extension StatefulParser {
             
             if (activeSelection == nil || isPlainTooth) && cursor.currentMetric == .probingDepth && wasFull {
                 let oldTooth = cursor.currentTooth
-                print("DEBUG ADVANCE: flushNumbers normal. isPlain=\(isPlainTooth) activeSel=\(activeSelection == nil)")
+                parserTrace("DEBUG ADVANCE: flushNumbers normal. isPlain=\(isPlainTooth) activeSel=\(activeSelection == nil)")
                 _ = cursor.advanceToNextTooth()
                 lastAutoAdvancedFromTooth = oldTooth
                 while missingTeeth.contains(cursor.currentTooth) {
-                    print("DEBUG ADVANCE: flushNumbers missing")
+                    parserTrace("DEBUG ADVANCE: flushNumbers missing")
                     if !cursor.advanceToNextTooth() { break }
                 }
             }
