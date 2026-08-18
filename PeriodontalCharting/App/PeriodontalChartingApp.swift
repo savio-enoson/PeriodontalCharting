@@ -12,6 +12,7 @@ import SwiftData
 struct PeriodontalChartingApp: App {
     init() {
         UserDefaults.standard.register(defaults: [
+            "useWav2Vec": true,
             "useOfflineWav2Vec": true
         ])
     }

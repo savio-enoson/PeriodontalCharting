@@ -1,6 +1,9 @@
-akar	a k a r
 ada	a d a
+akar	a k a r
+ampat	a m p a t
+an	a n
 atas	a t a s
+bagian	b a g i a n
 bawah	b a w a h
 belas	b e l a s
 beope	b e o p e
@@ -8,19 +11,26 @@ berikutnya	b e r i k u t n y a
 bikal	b i k a l
 biopi	b i o p i
 black	b l a c k
+bleding	b l e d i n g
 bleeding	b l e e d i n g
+bliding	b l i d i n g
 bocal	b o c a l
 bop	b o p
+bope	b o p e
+brobing	b r o b i n g
 buckal	b u c k a l
 buk	b u k
 buka	b u k a
 bukal	b u k a l
 bukel	b u k e l
-bagian	b a g i a n
+da	d a
 dan	d a n
 dari	d a r i
+def	d e f
 delapan	d e l a p a n
 dengan	d e n g a n
+dep	d e p
+depth	d e p t h
 di	d i
 disal	d i s a l
 disco	d i s c o
@@ -29,14 +39,18 @@ discobocal	d i s c o b o c a l
 discobuckal	d i s c o b u c k a l
 discobuk	d i s c o b u k
 discobuka	d i s c o b u k a
+discobukal	d i s c o b u k a l
 discobukel	d i s c o b u k e l
+discolabial	d i s c o l a b i a l
 discolabiyal	d i s c o l a b i y a l
 discoleibial	d i s c o l e i b i a l
 discolinggual	d i s c o l i n g g u a l
+discolingual	d i s c o l i n g u a l
 discolinguo	d i s c o l i n g u o
 discolinguwal	d i s c o l i n g u w a l
 discolingwal	d i s c o l i n g w a l
 discopalat	d i s c o p a l a t
+discopalatal	d i s c o p a l a t a l
 discopalato	d i s c o p a l a t o
 discopaletel	d i s c o p a l e t e l
 discopelatal	d i s c o p e l a t a l
@@ -48,14 +62,18 @@ disobocal	d i s o b o c a l
 disobuckal	d i s o b u c k a l
 disobuk	d i s o b u k
 disobuka	d i s o b u k a
+disobukal	d i s o b u k a l
 disobukel	d i s o b u k e l
+disolabial	d i s o l a b i a l
 disolabiyal	d i s o l a b i y a l
 disoleibial	d i s o l e i b i a l
 disolinggual	d i s o l i n g g u a l
+disolingual	d i s o l i n g u a l
 disolinguo	d i s o l i n g u o
 disolinguwal	d i s o l i n g u w a l
 disolingwal	d i s o l i n g w a l
 disopalat	d i s o p a l a t
+disopalatal	d i s o p a l a t a l
 disopalato	d i s o p a l a t o
 disopaletel	d i s o p a l e t e l
 disopelatal	d i s o p e l a t a l
@@ -67,15 +85,41 @@ distabocal	d i s t a b o c a l
 distabuckal	d i s t a b u c k a l
 distabuk	d i s t a b u k
 distabuka	d i s t a b u k a
+distabukal	d i s t a b u k a l
 distabukel	d i s t a b u k e l
 distal	d i s t a l
+distalabial	d i s t a l a b i a l
 distalabiyal	d i s t a l a b i y a l
+distalbikal	d i s t a l b i k a l
+distalbocal	d i s t a l b o c a l
+distalbuckal	d i s t a l b u c k a l
+distalbuk	d i s t a l b u k
+distalbuka	d i s t a l b u k a
+distalbukal	d i s t a l b u k a l
+distalbukel	d i s t a l b u k e l
 distaleibial	d i s t a l e i b i a l
 distalinggual	d i s t a l i n g g u a l
+distalingual	d i s t a l i n g u a l
 distalinguo	d i s t a l i n g u o
 distalinguwal	d i s t a l i n g u w a l
 distalingwal	d i s t a l i n g w a l
+distallabial	d i s t a l l a b i a l
+distallabiyal	d i s t a l l a b i y a l
+distalleibial	d i s t a l l e i b i a l
+distallinggual	d i s t a l l i n g g u a l
+distallingual	d i s t a l l i n g u a l
+distallinguo	d i s t a l l i n g u o
+distallinguwal	d i s t a l l i n g u w a l
+distallingwal	d i s t a l l i n g w a l
+distalpalat	d i s t a l p a l a t
+distalpalatal	d i s t a l p a l a t a l
+distalpalato	d i s t a l p a l a t o
+distalpaletel	d i s t a l p a l e t e l
+distalpelatal	d i s t a l p e l a t a l
+distalpukal	d i s t a l p u k a l
+distalvocal	d i s t a l v o c a l
 distapalat	d i s t a p a l a t
+distapalatal	d i s t a p a l a t a l
 distapalato	d i s t a p a l a t o
 distapaletel	d i s t a p a l e t e l
 distapelatal	d i s t a p e l a t a l
@@ -87,26 +131,55 @@ distiobocal	d i s t i o b o c a l
 distiobuckal	d i s t i o b u c k a l
 distiobuk	d i s t i o b u k
 distiobuka	d i s t i o b u k a
+distiobukal	d i s t i o b u k a l
 distiobukel	d i s t i o b u k e l
+distiolabial	d i s t i o l a b i a l
 distiolabiyal	d i s t i o l a b i y a l
 distioleibial	d i s t i o l e i b i a l
 distiolinggual	d i s t i o l i n g g u a l
+distiolingual	d i s t i o l i n g u a l
 distiolinguo	d i s t i o l i n g u o
 distiolinguwal	d i s t i o l i n g u w a l
 distiolingwal	d i s t i o l i n g w a l
 distiopalat	d i s t i o p a l a t
+distiopalatal	d i s t i o p a l a t a l
 distiopalato	d i s t i o p a l a t o
 distiopaletel	d i s t i o p a l e t e l
 distiopelatal	d i s t i o p e l a t a l
 distiopukal	d i s t i o p u k a l
 distiovocal	d i s t i o v o c a l
 disto	d i s t o
+distobikal	d i s t o b i k a l
+distobocal	d i s t o b o c a l
+distobuckal	d i s t o b u c k a l
+distobuk	d i s t o b u k
+distobuka	d i s t o b u k a
 distobukal	d i s t o b u k a l
+distobukel	d i s t o b u k e l
 distolabial	d i s t o l a b i a l
+distolabiyal	d i s t o l a b i y a l
+distoleibial	d i s t o l e i b i a l
+distolima	d i s t o l i m a
+distolinggual	d i s t o l i n g g u a l
 distolingual	d i s t o l i n g u a l
+distolinguo	d i s t o l i n g u o
+distolinguwal	d i s t o l i n g u w a l
+distolingwal	d i s t o l i n g w a l
+distopalat	d i s t o p a l a t
 distopalatal	d i s t o p a l a t a l
+distopalato	d i s t o p a l a t o
+distopaletel	d i s t o p a l e t e l
+distopelatal	d i s t o p e l a t a l
+distopukal	d i s t o p u k a l
+distovocal	d i s t o v o c a l
+doa	d o a
+dooa	d o o a
 dua	d u a
+duwa	d u w a
+empan	e m p a n
 empat	e m p a t
+empet	e m p e t
+en	e n
 enam	e n a m
 engga	e n g g a
 enggak	e n g g a k
@@ -117,28 +190,35 @@ forkasi	f o r k a s i
 furgasi	f u r g a s i
 furkasi	f u r k a s i
 furkasion	f u r k a s i o n
-grade	g r a d e
-gubal	g u b a l
 ga	g a
 gak	g a k
 gigi	g i g i
+gingival	g i n g i v a l
+grade	g r a d e
+gubal	g u b a l
 hilang	h i l a n g
 hingga	h i n g g a
 igi	i g i
+impan	i m p a n
+impat	i m p a t
 impen	i m p e n
 implan	i m p l a n
 implant	i m p l a n t
 implen	i m p l e n
 insisal	i n s i s a l
+kal	k a l
+kalculus	k a l c u l u s
+kalkul	k a l k u l
 kalkulus	k a l k u l u s
+kalus	k a l u s
 ke	k e
 kemudian	k e m u d i a n
 komit	k o m i t
 koronal	k o r o n a l
 kosong	k o s o n g
-lalu	l a l u
 labial	l a b i a l
 labiyal	l a b i y a l
+lalu	l a l u
 lanjut	l a n j u t
 lanjutkan	l a n j u t k a n
 lapan	l a p a n
@@ -149,49 +229,214 @@ lingual	l i n g u a l
 linguo	l i n g u o
 linguwal	l i n g u w a l
 lingwal	l i n g w a l
+margin	m a r g i n
+marjin	m a r j i n
+med	m e d
+medbikal	m e d b i k a l
+medbocal	m e d b o c a l
+medbuckal	m e d b u c k a l
+medbuk	m e d b u k
+medbuka	m e d b u k a
+medbukal	m e d b u k a l
+medbukel	m e d b u k e l
+medlabial	m e d l a b i a l
+medlabiyal	m e d l a b i y a l
+medleibial	m e d l e i b i a l
+medlinggual	m e d l i n g g u a l
+medlingual	m e d l i n g u a l
+medlinguo	m e d l i n g u o
+medlinguwal	m e d l i n g u w a l
+medlingwal	m e d l i n g w a l
+medpalat	m e d p a l a t
+medpalatal	m e d p a l a t a l
+medpalato	m e d p a l a t o
+medpaletel	m e d p a l e t e l
+medpelatal	m e d p e l a t a l
+medpukal	m e d p u k a l
+medvocal	m e d v o c a l
+meed	m e e d
+meedbikal	m e e d b i k a l
+meedbocal	m e e d b o c a l
+meedbuckal	m e e d b u c k a l
+meedbuk	m e e d b u k
+meedbuka	m e e d b u k a
+meedbukal	m e e d b u k a l
+meedbukel	m e e d b u k e l
+meedid	m e e d i d
+meedidbikal	m e e d i d b i k a l
+meedidbocal	m e e d i d b o c a l
+meedidbuckal	m e e d i d b u c k a l
+meedidbuk	m e e d i d b u k
+meedidbuka	m e e d i d b u k a
+meedidbukal	m e e d i d b u k a l
+meedidbukel	m e e d i d b u k e l
+meedidlabial	m e e d i d l a b i a l
+meedidlabiyal	m e e d i d l a b i y a l
+meedidleibial	m e e d i d l e i b i a l
+meedidlinggual	m e e d i d l i n g g u a l
+meedidlingual	m e e d i d l i n g u a l
+meedidlinguo	m e e d i d l i n g u o
+meedidlinguwal	m e e d i d l i n g u w a l
+meedidlingwal	m e e d i d l i n g w a l
+meedidpalat	m e e d i d p a l a t
+meedidpalatal	m e e d i d p a l a t a l
+meedidpalato	m e e d i d p a l a t o
+meedidpaletel	m e e d i d p a l e t e l
+meedidpelatal	m e e d i d p e l a t a l
+meedidpukal	m e e d i d p u k a l
+meedidvocal	m e e d i d v o c a l
+meedlabial	m e e d l a b i a l
+meedlabiyal	m e e d l a b i y a l
+meedleibial	m e e d l e i b i a l
+meedlinggual	m e e d l i n g g u a l
+meedlingual	m e e d l i n g u a l
+meedlinguo	m e e d l i n g u o
+meedlinguwal	m e e d l i n g u w a l
+meedlingwal	m e e d l i n g w a l
+meedpalat	m e e d p a l a t
+meedpalatal	m e e d p a l a t a l
+meedpalato	m e e d p a l a t o
+meedpaletel	m e e d p a l e t e l
+meedpelatal	m e e d p e l a t a l
+meedpukal	m e e d p u k a l
+meedvocal	m e e d v o c a l
+merjin	m e r j i n
 mesial	m e s i a l
+mesialbikal	m e s i a l b i k a l
+mesialbocal	m e s i a l b o c a l
+mesialbuckal	m e s i a l b u c k a l
+mesialbuk	m e s i a l b u k
+mesialbuka	m e s i a l b u k a
+mesialbukal	m e s i a l b u k a l
+mesialbukel	m e s i a l b u k e l
+mesiallabial	m e s i a l l a b i a l
+mesiallabiyal	m e s i a l l a b i y a l
+mesialleibial	m e s i a l l e i b i a l
+mesiallinggual	m e s i a l l i n g g u a l
+mesiallingual	m e s i a l l i n g u a l
+mesiallinguo	m e s i a l l i n g u o
+mesiallinguwal	m e s i a l l i n g u w a l
+mesiallingwal	m e s i a l l i n g w a l
+mesialpalat	m e s i a l p a l a t
+mesialpalatal	m e s i a l p a l a t a l
+mesialpalato	m e s i a l p a l a t o
+mesialpaletel	m e s i a l p a l e t e l
+mesialpelatal	m e s i a l p e l a t a l
+mesialpukal	m e s i a l p u k a l
+mesialvocal	m e s i a l v o c a l
 mesin	m e s i n
 mesing	m e s i n g
 mesio	m e s i o
+mesiobikal	m e s i o b i k a l
+mesiobocal	m e s i o b o c a l
+mesiobuckal	m e s i o b u c k a l
+mesiobuk	m e s i o b u k
+mesiobuka	m e s i o b u k a
 mesiobukal	m e s i o b u k a l
+mesiobukel	m e s i o b u k e l
 mesiolabial	m e s i o l a b i a l
+mesiolabiyal	m e s i o l a b i y a l
+mesioleibial	m e s i o l e i b i a l
+mesiolima	m e s i o l i m a
+mesiolinggual	m e s i o l i n g g u a l
 mesiolingual	m e s i o l i n g u a l
+mesiolinguo	m e s i o l i n g u o
+mesiolinguwal	m e s i o l i n g u w a l
+mesiolingwal	m e s i o l i n g w a l
+mesiopalat	m e s i o p a l a t
 mesiopalatal	m e s i o p a l a t a l
+mesiopalato	m e s i o p a l a t o
+mesiopaletel	m e s i o p a l e t e l
+mesiopelatal	m e s i o p e l a t a l
+mesiopukal	m e s i o p u k a l
+mesiovocal	m e s i o v o c a l
 mesiyal	m e s i y a l
+mesiyalbikal	m e s i y a l b i k a l
+mesiyalbocal	m e s i y a l b o c a l
+mesiyalbuckal	m e s i y a l b u c k a l
+mesiyalbuk	m e s i y a l b u k
+mesiyalbuka	m e s i y a l b u k a
+mesiyalbukal	m e s i y a l b u k a l
+mesiyalbukel	m e s i y a l b u k e l
+mesiyallabial	m e s i y a l l a b i a l
+mesiyallabiyal	m e s i y a l l a b i y a l
+mesiyalleibial	m e s i y a l l e i b i a l
+mesiyallinggual	m e s i y a l l i n g g u a l
+mesiyallingual	m e s i y a l l i n g u a l
+mesiyallinguo	m e s i y a l l i n g u o
+mesiyallinguwal	m e s i y a l l i n g u w a l
+mesiyallingwal	m e s i y a l l i n g w a l
+mesiyalpalat	m e s i y a l p a l a t
+mesiyalpalatal	m e s i y a l p a l a t a l
+mesiyalpalato	m e s i y a l p a l a t o
+mesiyalpaletel	m e s i y a l p a l e t e l
+mesiyalpelatal	m e s i y a l p e l a t a l
+mesiyalpukal	m e s i y a l p u k a l
+mesiyalvocal	m e s i y a l v o c a l
 meso	m e s o
 mesobikal	m e s o b i k a l
 mesobocal	m e s o b o c a l
 mesobuckal	m e s o b u c k a l
 mesobuk	m e s o b u k
 mesobuka	m e s o b u k a
+mesobukal	m e s o b u k a l
 mesobukel	m e s o b u k e l
+mesolabial	m e s o l a b i a l
 mesolabiyal	m e s o l a b i y a l
 mesoleibial	m e s o l e i b i a l
 mesolinggual	m e s o l i n g g u a l
+mesolingual	m e s o l i n g u a l
 mesolinguo	m e s o l i n g u o
 mesolinguwal	m e s o l i n g u w a l
 mesolingwal	m e s o l i n g w a l
 mesopalat	m e s o p a l a t
+mesopalatal	m e s o p a l a t a l
 mesopalato	m e s o p a l a t o
 mesopaletel	m e s o p a l e t e l
 mesopelatal	m e s o p e l a t a l
 mesopukal	m e s o p u k a l
 mesovocal	m e s o v o c a l
 mesyal	m e s y a l
+mesyalbikal	m e s y a l b i k a l
+mesyalbocal	m e s y a l b o c a l
+mesyalbuckal	m e s y a l b u c k a l
+mesyalbuk	m e s y a l b u k
+mesyalbuka	m e s y a l b u k a
+mesyalbukal	m e s y a l b u k a l
+mesyalbukel	m e s y a l b u k e l
+mesyallabial	m e s y a l l a b i a l
+mesyallabiyal	m e s y a l l a b i y a l
+mesyalleibial	m e s y a l l e i b i a l
+mesyallinggual	m e s y a l l i n g g u a l
+mesyallingual	m e s y a l l i n g u a l
+mesyallinguo	m e s y a l l i n g u o
+mesyallinguwal	m e s y a l l i n g u w a l
+mesyallingwal	m e s y a l l i n g w a l
+mesyalpalat	m e s y a l p a l a t
+mesyalpalatal	m e s y a l p a l a t a l
+mesyalpalato	m e s y a l p a l a t o
+mesyalpaletel	m e s y a l p a l e t e l
+mesyalpelatal	m e s y a l p e l a t a l
+mesyalpukal	m e s y a l p u k a l
+mesyalvocal	m e s y a l v o c a l
 mesyio	m e s y i o
 mesyiobikal	m e s y i o b i k a l
 mesyiobocal	m e s y i o b o c a l
 mesyiobuckal	m e s y i o b u c k a l
 mesyiobuk	m e s y i o b u k
 mesyiobuka	m e s y i o b u k a
+mesyiobukal	m e s y i o b u k a l
 mesyiobukel	m e s y i o b u k e l
+mesyiolabial	m e s y i o l a b i a l
 mesyiolabiyal	m e s y i o l a b i y a l
 mesyioleibial	m e s y i o l e i b i a l
 mesyiolinggual	m e s y i o l i n g g u a l
+mesyiolingual	m e s y i o l i n g u a l
 mesyiolinguo	m e s y i o l i n g u o
 mesyiolinguwal	m e s y i o l i n g u w a l
 mesyiolingwal	m e s y i o l i n g w a l
 mesyiopalat	m e s y i o p a l a t
+mesyiopalatal	m e s y i o p a l a t a l
 mesyiopalato	m e s y i o p a l a t o
 mesyiopaletel	m e s y i o p a l e t e l
 mesyiopelatal	m e s y i o p e l a t a l
@@ -203,45 +448,116 @@ mesyubocal	m e s y u b o c a l
 mesyubuckal	m e s y u b u c k a l
 mesyubuk	m e s y u b u k
 mesyubuka	m e s y u b u k a
+mesyubukal	m e s y u b u k a l
 mesyubukel	m e s y u b u k e l
+mesyulabial	m e s y u l a b i a l
 mesyulabiyal	m e s y u l a b i y a l
 mesyuleibial	m e s y u l e i b i a l
 mesyulinggual	m e s y u l i n g g u a l
+mesyulingual	m e s y u l i n g u a l
 mesyulinguo	m e s y u l i n g u o
 mesyulinguwal	m e s y u l i n g u w a l
 mesyulingwal	m e s y u l i n g w a l
 mesyupalat	m e s y u p a l a t
+mesyupalatal	m e s y u p a l a t a l
 mesyupalato	m e s y u p a l a t o
 mesyupaletel	m e s y u p a l e t e l
 mesyupelatal	m e s y u p e l a t a l
 mesyupukal	m e s y u p u k a l
 mesyuvocal	m e s y u v o c a l
+met	m e t
+metbikal	m e t b i k a l
+metbocal	m e t b o c a l
+metbuckal	m e t b u c k a l
+metbuk	m e t b u k
+metbuka	m e t b u k a
+metbukal	m e t b u k a l
+metbukel	m e t b u k e l
+metlabial	m e t l a b i a l
+metlabiyal	m e t l a b i y a l
+metleibial	m e t l e i b i a l
+metlinggual	m e t l i n g g u a l
+metlingual	m e t l i n g u a l
+metlinguo	m e t l i n g u o
+metlinguwal	m e t l i n g u w a l
+metlingwal	m e t l i n g w a l
+metpalat	m e t p a l a t
+metpalatal	m e t p a l a t a l
+metpalato	m e t p a l a t o
+metpaletel	m e t p a l e t e l
+metpelatal	m e t p e l a t a l
+metpukal	m e t p u k a l
+metvocal	m e t v o c a l
 mezzo	m e z z o
 mezzobikal	m e z z o b i k a l
 mezzobocal	m e z z o b o c a l
 mezzobuckal	m e z z o b u c k a l
 mezzobuk	m e z z o b u k
 mezzobuka	m e z z o b u k a
+mezzobukal	m e z z o b u k a l
 mezzobukel	m e z z o b u k e l
+mezzolabial	m e z z o l a b i a l
 mezzolabiyal	m e z z o l a b i y a l
 mezzoleibial	m e z z o l e i b i a l
 mezzolinggual	m e z z o l i n g g u a l
+mezzolingual	m e z z o l i n g u a l
 mezzolinguo	m e z z o l i n g u o
 mezzolinguwal	m e z z o l i n g u w a l
 mezzolingwal	m e z z o l i n g w a l
 mezzopalat	m e z z o p a l a t
+mezzopalatal	m e z z o p a l a t a l
 mezzopalato	m e z z o p a l a t o
 mezzopaletel	m e z z o p a l e t e l
 mezzopelatal	m e z z o p e l a t a l
 mezzopukal	m e z z o p u k a l
 mezzovocal	m e z z o v o c a l
 mid	m i d
+midbikal	m i d b i k a l
+midbocal	m i d b o c a l
+midbuckal	m i d b u c k a l
+midbuk	m i d b u k
+midbuka	m i d b u k a
 midbukal	m i d b u k a l
+midbukel	m i d b u k e l
 midlabial	m i d l a b i a l
+midlabiyal	m i d l a b i y a l
+midleibial	m i d l e i b i a l
+midlinggual	m i d l i n g g u a l
 midlingual	m i d l i n g u a l
+midlinguo	m i d l i n g u o
+midlinguwal	m i d l i n g u w a l
+midlingwal	m i d l i n g w a l
+midpalat	m i d p a l a t
 midpalatal	m i d p a l a t a l
+midpalato	m i d p a l a t o
+midpaletel	m i d p a l e t e l
+midpelatal	m i d p e l a t a l
+midpukal	m i d p u k a l
+midvocal	m i d v o c a l
 minus	m i n u s
 misial	m i s i a l
+misialbikal	m i s i a l b i k a l
+misialbocal	m i s i a l b o c a l
+misialbuckal	m i s i a l b u c k a l
+misialbuk	m i s i a l b u k
+misialbuka	m i s i a l b u k a
+misialbukal	m i s i a l b u k a l
+misialbukel	m i s i a l b u k e l
+misiallabial	m i s i a l l a b i a l
+misiallabiyal	m i s i a l l a b i y a l
+misialleibial	m i s i a l l e i b i a l
+misiallinggual	m i s i a l l i n g g u a l
+misiallingual	m i s i a l l i n g u a l
+misiallinguo	m i s i a l l i n g u o
+misiallinguwal	m i s i a l l i n g u w a l
+misiallingwal	m i s i a l l i n g w a l
+misialpalat	m i s i a l p a l a t
+misialpalatal	m i s i a l p a l a t a l
+misialpalato	m i s i a l p a l a t o
+misialpaletel	m i s i a l p a l e t e l
+misialpelatal	m i s i a l p e l a t a l
+misialpukal	m i s i a l p u k a l
+misialvocal	m i s i a l v o c a l
 misin	m i s i n
 mising	m i s i n g
 misio	m i s i o
@@ -250,14 +566,18 @@ misiobocal	m i s i o b o c a l
 misiobuckal	m i s i o b u c k a l
 misiobuk	m i s i o b u k
 misiobuka	m i s i o b u k a
+misiobukal	m i s i o b u k a l
 misiobukel	m i s i o b u k e l
+misiolabial	m i s i o l a b i a l
 misiolabiyal	m i s i o l a b i y a l
 misioleibial	m i s i o l e i b i a l
 misiolinggual	m i s i o l i n g g u a l
+misiolingual	m i s i o l i n g u a l
 misiolinguo	m i s i o l i n g u o
 misiolinguwal	m i s i o l i n g u w a l
 misiolingwal	m i s i o l i n g w a l
 misiopalat	m i s i o p a l a t
+misiopalatal	m i s i o p a l a t a l
 misiopalato	m i s i o p a l a t o
 misiopaletel	m i s i o p a l e t e l
 misiopelatal	m i s i o p e l a t a l
@@ -265,6 +585,29 @@ misiopukal	m i s i o p u k a l
 misiovocal	m i s i o v o c a l
 misiyal	m i s i y a l
 missing	m i s s i n g
+mit	m i t
+mitbikal	m i t b i k a l
+mitbocal	m i t b o c a l
+mitbuckal	m i t b u c k a l
+mitbuk	m i t b u k
+mitbuka	m i t b u k a
+mitbukal	m i t b u k a l
+mitbukel	m i t b u k e l
+mitlabial	m i t l a b i a l
+mitlabiyal	m i t l a b i y a l
+mitleibial	m i t l e i b i a l
+mitlinggual	m i t l i n g g u a l
+mitlingual	m i t l i n g u a l
+mitlinguo	m i t l i n g u o
+mitlinguwal	m i t l i n g u w a l
+mitlingwal	m i t l i n g w a l
+mitpalat	m i t p a l a t
+mitpalatal	m i t p a l a t a l
+mitpalato	m i t p a l a t o
+mitpaletel	m i t p a l e t e l
+mitpelatal	m i t p e l a t a l
+mitpukal	m i t p u k a l
+mitvocal	m i t v o c a l
 mobil	m o b i l
 mobilit	m o b i l i t
 mobiliti	m o b i l i t i
@@ -276,16 +619,19 @@ nda	n d a
 ndak	n d a k
 nggak	n g g a k
 nol	n o l
-
 oklusal	o k l u s a l
+on	o n
 pada	p a d a
 palat	p a l a t
 palatal	p a l a t a l
+palatallima	p a l a t a l l i m a
 palato	p a l a t o
 paletel	p a l e t e l
 pelatal	p e l a t a l
 permukaan	p e r m u k a a n
+piope	p i o p e
 plak	p l a k
+plaque	p l a q u e
 plat	p l a t
 plek	p l e k
 plug	p l u g
@@ -295,6 +641,8 @@ poke	p o k e
 poked	p o k e d
 poket	p o k e t
 pokit	p o k i t
+probing	p r o b i n g
+proping	p r o p i n g
 pukal	p u k a l
 puluh	p u l u h
 purkasi	p u r k a s i
@@ -302,8 +650,11 @@ radang	r a d a n g
 rahang	r a h a n g
 rasesi	r a s e s i
 recesi	r e c e s i
+recession	r e c e s s i o n
 reses	r e s e s
 resesi	r e s e s i
+resesion	r e s e s i o n
+robing	r o b i n g
 sampai	s a m p a i
 sampe	s a m p e
 satu	s a t u
@@ -317,28 +668,12 @@ sembilan	s e m b i l a n
 semua	s e m u a
 semuanya	s e m u a n y a
 sepuluh	s e p u l u h
-tengah	t e n g a h
-tengahbikal	t e n g a h b i k a l
-tengahbocal	t e n g a h b o c a l
-tengahbuckal	t e n g a h b u c k a l
-tengahbuk	t e n g a h b u k
-tengahbuka	t e n g a h b u k a
-tengahbukel	t e n g a h b u k e l
-tengahlabiyal	t e n g a h l a b i y a l
-tengahleibial	t e n g a h l e i b i a l
-tengahlinggual	t e n g a h l i n g g u a l
-tengahlinguo	t e n g a h l i n g u o
-tengahlinguwal	t e n g a h l i n g u w a l
-tengahlingwal	t e n g a h l i n g w a l
-tengahpalat	t e n g a h p a l a t
-tengahpalato	t e n g a h p a l a t o
-tengahpaletel	t e n g a h p a l e t e l
-tengahpelatal	t e n g a h p e l a t a l
-tengahpukal	t e n g a h p u k a l
-tengahvocal	t e n g a h v o c a l
 terus	t e r u s
 tidak	t i d a k
 tiga	t i g a
+tige	t i g e
+tika	t i k a
+tike	t i k e
 tiopi	t i o p i
 tujuh	t u j u h
 vocal	v o c a l

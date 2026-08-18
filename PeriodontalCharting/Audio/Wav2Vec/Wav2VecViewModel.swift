@@ -60,6 +60,9 @@ final class Wav2VecViewModel {
     // True from the first line of `stopLive` until the drain finishes. Mic
     // buffers already queued on the main actor must not start a new commit.
     @ObservationIgnored private var isStopping = false
+    // Drives `startSimulation`: feeds a recorded clip through the live path in
+    // place of the mic. Cancelled by `stopLive` so a running sim stops cleanly.
+    @ObservationIgnored private var simulationTask: Task<Void, Never>?
 
     // MARK: - Speaker gate
 
@@ -171,7 +174,7 @@ final class Wav2VecViewModel {
         isRecording = true
         isTranscribing = true
         statusMessage = String(localized: "Listening…")
-        
+
         do {
             try Wav2VecAudioCapture.shared.startStreamingRecording { [weak self] buffer in
                 DispatchQueue.main.async {
@@ -185,6 +188,72 @@ final class Wav2VecViewModel {
         }
     }
 
+    // MARK: - File simulation
+    //
+    // Drives the live path from a recorded clip instead of the mic. It reuses the
+    // real chunker, chained commits and decoder, so commit ordering matches a live
+    // session, but leaves the speaker gate OFF: a file test is about STT and
+    // parsing on a known clip, not about who is speaking. `gatedChunk` fails open
+    // whenever `gateService` is nil. (Wire the gate exactly as `startLive` does if
+    // you ever want to exercise it from a file.)
+    //
+    // `speedMultiplier` paces the feed to emulate real time; a very large value
+    // (>= 100) runs flat out for offline batch testing.
+    func startSimulation(audio: [Float], speedMultiplier: Double) {
+        guard !isRecording else { return }
+        guard isModelReady else {
+            statusMessage = String(localized: "Voice dictation isn’t ready yet")
+            return
+        }
+
+        transcript = ""
+        committedHistory = []
+        streamingBuffer = []
+        silenceFrames = 0
+        hasStartedSpeaking = false
+        lastProcessedBufferCount = 0
+        baselineRMS = 0.01
+        commitChain = nil
+
+        // Gate off for file playback — `gatedChunk` passes chunks through untouched
+        // while `gateService` is nil.
+        gateService = nil
+        extractor = nil
+        gateStatus = GateStatus()
+
+        SessionRecorder.shared.begin()
+
+        isRecording = true
+        isTranscribing = true
+        statusMessage = String(localized: "Simulating…")
+
+        simulationTask?.cancel()
+        simulationTask = Task { [weak self] in
+            let chunkSize = 512                     // 32 ms at 16 kHz
+            let sleepTimeMs = 32.0 / speedMultiplier
+
+            var index = 0
+            while index < audio.count && !Task.isCancelled {
+                let end = min(index + chunkSize, audio.count)
+                let chunk = Array(audio[index..<end])
+                if chunk.count == chunkSize {
+                    self?.processAudioChunk(chunk)
+                }
+                index = end
+
+                if speedMultiplier < 100 {
+                    try? await Task.sleep(nanoseconds: UInt64(sleepTimeMs * 1_000_000))
+                } else {
+                    await Task.yield()
+                }
+            }
+
+            if !Task.isCancelled {
+                await self?.stopLive()
+            }
+        }
+    }
+
     // Stop the mic and finish every commit still in flight.
     //
     // ASYNC ON PURPOSE. The tail chunk still has a gate pass and a decode ahead of
@@ -195,6 +264,9 @@ final class Wav2VecViewModel {
     // serially before the decode.
     func stopLive() async {
         guard isRecording else { return }
+        // Cancel a running file simulation so its feeder loop stops queuing chunks.
+        // Harmless when the mic is the source — the task is already nil.
+        simulationTask?.cancel()
         // BEFORE stopRecording(). Removing the tap does not cancel mic buffers
         // already dispatched to the main actor, and each `await` below lets them
         // run — one of them starting a fresh commit is how a whole chunk got
@@ -205,10 +277,8 @@ final class Wav2VecViewModel {
         isRecording = false
         isTranscribing = false
         statusMessage = transcript.isEmpty ? String(localized: "No speech captured") : String(localized: "Done")
-        
-        // Final flush
-        let chunkToProcess = streamingBuffer
 
+        // Final flush
         let tail = streamingBuffer
         streamingBuffer = []
         if tail.count >= 16000 { commit(tail) }

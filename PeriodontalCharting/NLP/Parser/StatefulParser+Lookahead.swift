@@ -23,4 +23,15 @@ extension StatefulParser {
         consume(token: .toothIdentifier(candidate))
         pendingRangeDigits = []
     }
+    
+    mutating func cancelRangeExpectation() {
+        if isWaitingForRangeEnd {
+            isWaitingForRangeEnd = false
+            let digits = pendingRangeDigits
+            pendingRangeDigits = []
+            for d in digits {
+                consume(token: .number(d))
+            }
+        }
+    }
 }

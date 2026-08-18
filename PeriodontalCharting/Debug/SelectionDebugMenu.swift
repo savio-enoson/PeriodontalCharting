@@ -8,7 +8,12 @@ struct SelectionDebugMenu: View {
     
     @State private var showAlert = false
     @State private var alertMessage = ""
+
+    @AppStorage("useOfflineWav2Vec") var useOfflineWav2Vec: Bool = true
     @AppStorage("useStatefulParser") var useStatefulParser: Bool = true
+    
+    @State private var selectedAudioFile: String = "dr_lucky_audio"
+    @State private var speedMultiplier: Double = 2.0
     
     var body: some View {
         NavigationStack {
@@ -32,6 +37,39 @@ struct SelectionDebugMenu: View {
                 Section("Speaker Gate (TSE)") {
                     NavigationLink("Open gate test harness") {
                         SpeakerGateDebugView()
+                    }
+                }
+                
+
+                Section("Speech-to-Text Engine") {
+                    Picker("STT Engine", selection: Binding(
+                        get: { useOfflineWav2Vec ? "Wav2Vec2 STT" : "Whisper STT" },
+                        set: { useOfflineWav2Vec = ($0 == "Wav2Vec2 STT") }
+                    )) {
+                        Text("Whisper STT").tag("Whisper STT")
+                        Text("Wav2Vec2 STT").tag("Wav2Vec2 STT")
+                    }.pickerStyle(.segmented)
+                }
+                Section("Audio File Streaming") {
+                    Picker("Audio File", selection: $selectedAudioFile) {
+                        Text("Dr. Lucky").tag("dr_lucky_audio")
+                        Text("Student").tag("student_audio")
+                        Text("Dr. Gaby").tag("dr_gaby_audio")
+                    }
+                    
+                    VStack(alignment: .leading) {
+                        Text("Speed: \(String(format: "%.1fx", speedMultiplier))")
+                        Slider(value: $speedMultiplier, in: 0.5...5.0, step: 0.5)
+                    }
+                    
+                    Button("Start File Simulation") {
+                        if let url = Bundle.main.url(forResource: selectedAudioFile, withExtension: "m4a") {
+                            aiViewModel.audioFileSimulation(fileURL: url, speedMultiplier: speedMultiplier)
+                            dismiss()
+                        } else {
+                            alertMessage = "Audio file \\(selectedAudioFile).m4a not found in bundle."
+                            showAlert = true
+                        }
                     }
                 }
                 
@@ -84,7 +122,7 @@ struct SelectionDebugMenu: View {
                             // Fetch active config or default
                             let config = (try? JSONDecoder().decode(ChartingConfiguration.self, from: UserDefaults.standard.data(forKey: "ChartingConfiguration") ?? Data())) ?? ChartingConfiguration()
                             let mouth = ChartTestingUtilities.parseTranscript(text: text, config: config)
-                            let success = ChartTestingUtilities.saveChart(mouth: mouth)
+                            let success = ChartTestingUtilities.saveChart(mouth: mouth, for: aiViewModel.selectedTestTranscriptName)
                             alertMessage = success ? "Successfully saved ground truth to project folder." : "Failed to save ground truth."
                             showAlert = true
                         }
@@ -92,7 +130,7 @@ struct SelectionDebugMenu: View {
                     
                     Button("Test vs Ground Truth") {
                         if let text = TestTranscripts.all.first(where: { $0.0 == aiViewModel.selectedTestTranscriptName })?.1 {
-                            let expected = ChartTestingUtilities.loadChart()
+                            let expected = ChartTestingUtilities.loadChart(for: aiViewModel.selectedTestTranscriptName)
                             if let expected = expected {
                                 let config = (try? JSONDecoder().decode(ChartingConfiguration.self, from: UserDefaults.standard.data(forKey: "ChartingConfiguration") ?? Data())) ?? ChartingConfiguration()
                                 let actual = ChartTestingUtilities.parseTranscript(text: text, config: config)
