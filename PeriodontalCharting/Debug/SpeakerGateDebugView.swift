@@ -254,7 +254,7 @@ struct SpeakerGateDebugView: View {
     private func initializeIfNeeded() {
         guard service == nil else { return }
         guard let shared = TranscriptionEngine.shared.makeSpeakerGateIfNeeded() else {
-            status = "Speaker gate unavailable — ECAPA or Silero VAD failed to load"
+            status = "Speaker gate unavailable — SpeakerEmbedding_ECAPA failed to load"
             return
         }
         service = shared

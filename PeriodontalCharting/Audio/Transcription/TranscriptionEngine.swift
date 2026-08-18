@@ -2,14 +2,13 @@
 //  TranscriptionEngine.swift
 //  PeriodontalCharting
 //
-//  Owns the small shared audio infrastructure: Silero VAD and the app-wide
-//  SpeakerGateService. It transcribes nothing — the STT model is Wav2Vec2, it is
-//  bundled, and it loads through `Wav2VecEngine`. The name is a leftover; renaming
-//  it touches five call sites and is worth doing separately.
+//  Owns the app-wide SpeakerGateService. It transcribes nothing — the STT model
+//  is Wav2Vec2, it is bundled, and it loads through `Wav2VecEngine`. The name is a
+//  leftover; renaming it touches five call sites and is worth doing separately.
 //
-//  The gate is deliberately independent of any STT load: enrollment needs only the
-//  small ECAPA embedder and Silero VAD, and gating it behind a large model meant
-//  onboarding always found `vad` still nil and silently skipped calibration.
+//  The gate is deliberately independent of any STT load: it needs only the small
+//  ECAPA embedder, and gating it behind a large model meant onboarding silently
+//  skipped calibration.
 //
 //  ENROLLMENT READS THE ACTIVE VoiceProfile. Switching dentist restores cached
 //  embeddings rather than re-running ECAPA over every take.
@@ -25,7 +24,6 @@ import os
 final class TranscriptionEngine {
     @ObservationIgnored static let shared = TranscriptionEngine()
 
-    @ObservationIgnored private(set) var vad: SileroVADEngine?
     // Observable so the UI can show a gate-ready indicator.
     private(set) var isReady = false
 
@@ -75,7 +73,7 @@ final class TranscriptionEngine {
 
     private init() {}
 
-    // Load the shared VAD. Idempotent and coalesced.
+    // Mark the audio infrastructure ready. Idempotent and coalesced.
     func load() async {
         if isReady { return }
         if loadTask == nil {
@@ -87,10 +85,9 @@ final class TranscriptionEngine {
 
     private func performLoad() async {
         if isReady { return }
-        // Only the small Silero VAD the gate depends on. The gate, the extractor
-        // and enrollment all build on demand (makeSpeakerGateIfNeeded / TSEEngine),
-        // so this is a fast, memory-cheap load.
-        vad = try? SileroVADEngine()
+        // Nothing to load here any more. The gate, the extractor and enrollment
+        // all build on demand (makeSpeakerGateIfNeeded / TSEEngine); this just
+        // marks the infrastructure ready and reports the memory headroom.
         isReady = true
         print("[Mem] gate infra ready: \(Self.availableMemoryMB()) MB available")
     }
@@ -102,17 +99,23 @@ final class TranscriptionEngine {
 
     // Build the app-wide gate on first use, independent of any STT load.
     //
-    // Falls back to its own SileroVADEngine when `vad` is not set yet — during
-    // onboarding it often is not, because `load()` may not have run.
-    //
-    // Synchronous: it loads two small Core ML models on the main actor (~100 ms).
+    // Synchronous: it loads one small Core ML model on the main actor (~100 ms).
     // Acceptable for a one-time setup call; do not put it in a render path.
+    //
+    // FAILS LOUDLY. A nil return disables the entire speaker filter, and the only
+    // symptom downstream is the AI Mode header reading "Speaker filter off" —
+    // which looks like a setting, not a failure. That is exactly how a missing
+    // model went undiagnosed until a device session on 2026-08-17.
     @discardableResult
     func makeSpeakerGateIfNeeded() -> SpeakerGateService? {
         if let speakerGate { return speakerGate }
-        guard let vadEngine = vad ?? (try? SileroVADEngine()),
-              let gate = try? SpeakerGate() else { return nil }
-        let service = SpeakerGateService(gate: gate, vad: vadEngine)
+        guard let gate = try? SpeakerGate() else {
+            print("[Gate] UNAVAILABLE — SpeakerEmbedding_ECAPA.mlmodelc did not load. "
+                  + "The speaker filter is OFF and EVERY voice will be transcribed. "
+                  + "Check the .mlpackage is still in the app target.")
+            return nil
+        }
+        let service = SpeakerGateService(gate: gate)
         speakerGate = service
         return service
     }

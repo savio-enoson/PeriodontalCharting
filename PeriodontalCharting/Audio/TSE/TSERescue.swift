@@ -602,7 +602,6 @@ extension SpeakerGateService {
                          noiseFloor, threshold, dynamicRange))
         }
 
-        let sileroPeak = vad.speechProbabilities(audio).max() ?? 0
 
         // NO BLIND WINDOWS ON THE LIVE PATH.
         //
@@ -612,8 +611,8 @@ extension SpeakerGateService {
         // spliced or SILENCED on the strength of a distance measured on nothing,
         // which is strictly worse than leaving the audio alone.
         guard allowBlindWindows else {
-            print(String(format: "[Gate]   no verdict for this chunk (silero %.3f) — "
-                         + "audio passes through untouched", sileroPeak))
+            print(String(format: "[Gate]   no verdict for this %.1fs chunk — "
+                         + "audio passes through untouched", seconds))
             return ([], true)
         }
 
@@ -623,8 +622,7 @@ extension SpeakerGateService {
         // warning in `enrollmentSelection` fires when this happens.
         let window = SpeakerGate.inputSamples
         guard audio.count >= window else {
-            print(String(format: "[Gate]   window too short for a blind pass (silero %.3f)",
-                         sileroPeak))
+            print("[Gate]   window too short for a blind pass")
             return ([], true)
         }
         var windows: [SpeechSegment] = []
@@ -633,8 +631,8 @@ extension SpeakerGateService {
             windows.append(SpeechSegment(start: start, end: start + window))
             start += window
         }
-        print(String(format: "[Gate]   -> %d blind window(s), silero %.3f — DISTRUST these distances",
-                     windows.count, sileroPeak))
+        print(String(format: "[Gate]   -> %d blind window(s) — DISTRUST these distances",
+                     windows.count))
         return (windows, true)
     }
 

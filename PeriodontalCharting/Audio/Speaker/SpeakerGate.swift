@@ -121,7 +121,7 @@ final class SpeakerGate: @unchecked Sendable {
         resolveIONames()
     }
 
-    /// Same lookup strategy as SileroVADEngine: Xcode's synchronized file group
+    /// Xcode's synchronized file group
     /// flattens AI/ so the compiled model lands at the bundle ROOT.
     private static func locateModel() -> URL? {
         if let root = Bundle.main.resourceURL {

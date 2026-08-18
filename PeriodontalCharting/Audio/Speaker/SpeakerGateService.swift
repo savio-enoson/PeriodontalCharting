@@ -20,6 +20,14 @@
 
 import Foundation
 
+// Half-open speech span in SAMPLE indices. Lived in SileroVADEngine.swift until
+// that engine was removed; it has nothing to do with Silero and everything to do
+// with `mergeSpans` and the energy segmenter, which are here.
+struct SpeechSegment: Equatable {
+    var start: Int
+    var end: Int
+}
+
 // A speech span with a speaker verdict attached. Bounds are in SAMPLES at
 // 16 kHz, matching SpeechSegment.
 struct GatedSpan {
@@ -40,12 +48,15 @@ struct GatedSpan {
 // immutable, and each guards its own mutable state internally.
 final class SpeakerGateService: Sendable {
 
+    // The embedder, and nothing else. Silero was removed 2026-08-17: it measured
+    // 0.001–0.09 on this device (journal.md §10) and the live path never consumed
+    // it. While it was a required init parameter, deleting its .mlpackage made
+    // `makeSpeakerGateIfNeeded` return nil, enrollment return early in silence,
+    // and the ENTIRE speaker filter report itself "off" with no error in the log.
     let gate: SpeakerGate
-    let vad: SileroVADEngine
 
-    init(gate: SpeakerGate, vad: SileroVADEngine) {
+    init(gate: SpeakerGate) {
         self.gate = gate
-        self.vad = vad
     }
 
     var isEnrolled: Bool { gate.isEnrolled }
@@ -127,11 +138,11 @@ final class SpeakerGateService: Sendable {
     // Classify every merged VAD span in a buffer. Runs inference — call off the
     // main actor.
     //
-    // The DEBUG HARNESS path (SpeakerGateDebugView), deliberately kept separate
-    // from `gatedAudio`: it uses Silero segmentation and no extractor, so a
-    // failure here is unambiguously the embedder's rather than the rescue path's.
+    // The DEBUG HARNESS path (SpeakerGateDebugView): same segmenter as the live
+    // path but no extractor, so a failure here is unambiguously the embedder's
+    // rather than the rescue path's.
     func evaluate(audio: [Float], adapt: Bool = false) throws -> [GatedSpan] {
-        let spans = Self.mergeSpans(vad.speechTimestamps(audio), totalSamples: audio.count)
+        let spans = rescueSpans(in: audio).spans
         var results: [GatedSpan] = []
         results.reserveCapacity(spans.count)
 

@@ -117,7 +117,7 @@ final class TargetSpeakerExtractor: @unchecked Sendable {
         enrollProjection = try load("EnrollmentProjection_BSRNN")
     }
 
-    /// Same lookup as SpeakerGate / SileroVADEngine: Xcode's synchronized file
+    /// Same lookup as SpeakerGate: Xcode's synchronized file
     /// group flattens AI/, so compiled models land at the bundle ROOT.
     private static func locateModel(_ name: String) -> URL? {
         if let root = Bundle.main.resourceURL {
