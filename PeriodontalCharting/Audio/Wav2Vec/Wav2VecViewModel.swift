@@ -48,7 +48,11 @@ final class Wav2VecViewModel {
     private var silenceFrames = 0
     private var hasStartedSpeaking = false
     private var lastProcessedBufferCount = 0
-    private var baselineRMS: Float = 0.01
+    // Rolling per-buffer RMS for the speech detector, trimmed to
+    // `ActivityTuning.windowSeconds` of audio. Replaces the one-way `baselineRMS`
+    // — see `detectSpeech` for why a percentile and not a decaying baseline.
+    private var rmsHistory: [(rms: Float, samples: Int)] = []
+    private var rmsHistorySamples = 0
     private var isProcessing = false
 
     // Commits, chained. Each waits for its predecessor, so `committedHistory`
@@ -141,7 +145,8 @@ final class Wav2VecViewModel {
         silenceFrames = 0
         hasStartedSpeaking = false
         lastProcessedBufferCount = 0
-        baselineRMS = 0.01
+        rmsHistory = []
+        rmsHistorySamples = 0
         commitChain = nil
 
         // The gate is only real if a centroid exists. An unenrolled gate reports
@@ -212,7 +217,8 @@ final class Wav2VecViewModel {
         silenceFrames = 0
         hasStartedSpeaking = false
         lastProcessedBufferCount = 0
-        baselineRMS = 0.01
+        rmsHistory = []
+        rmsHistorySamples = 0
         commitChain = nil
 
         // Gate off for file playback — `gatedChunk` passes chunks through untouched
@@ -300,6 +306,79 @@ final class Wav2VecViewModel {
         statusMessage = transcript.isEmpty ? "No speech captured" : "Done"
     }
 
+    // Speech detection tuning. Percentiles are local; the two multiples are
+    // deliberately the SEGMENTER's own constants rather than a second set, because
+    // this answers the same question `rescueSpans` answers. The old rule used
+    // `2.0x` here against `speechFloorMultiple = 3.0` next door — two thresholds
+    // disagreeing about what counts as speech.
+    private enum ActivityTuning {
+        // Long enough to hold the pause inside ordinary dictation
+        // ("dua … dua … dua"), short enough to follow the room changing.
+        static let windowSeconds: Double = 4.0
+        // Below this much history the percentiles are meaningless, so fall back to
+        // an absolute floor. A CONSTANT, so the warm-up cannot latch either.
+        static let warmupSeconds: Double = 1.5
+        static let floorPercentile: Double = 0.20
+        static let loudPercentile: Double = 0.90
+    }
+
+    // Is this buffer speech?
+    //
+    // PERCENTILES OVER A ROLLING WINDOW, NOT A ONE-WAY BASELINE. This used to be:
+    //
+    //     let threshold = max(0.001, baselineRMS * 2.0)
+    //     if !isSpeech { baselineRMS = baselineRMS * 0.99 + rms * 0.01 }
+    //
+    // The baseline updated ONLY while the detector believed the room was quiet, so
+    // the first noise above `baselineRMS * 2` froze it at its old low value, the
+    // threshold stayed low, and every later buffer read as speech. A one-way door
+    // rather than a sensitivity problem — it could not recover within a session,
+    // which is what "the session keeps running on even a bit of noise" was.
+    //
+    // A percentile always tracks: the floor follows the room UP as well as down.
+    //
+    // AND IT TESTS CONTRAST, NOT JUST LEVEL. Steady noise is loud but flat.
+    // `rescueSpans` already separates the two on dynamic range — measured 14–50x
+    // on healthy speech against 2.3–3.4x on the noisy chunks — so the same test is
+    // applied here instead of a second, softer one.
+    //
+    // A consequence worth knowing: 4 s of UNBROKEN speech lifts the 20th
+    // percentile until contrast collapses and the buffer reads as silence, which
+    // commits the chunk. That is the intended outcome — it is the same reason
+    // `requiredSilence` ramps down as the buffer grows.
+    private func detectSpeech(rms: Float, samples: Int) -> Bool {
+        rmsHistory.append((rms, samples))
+        rmsHistorySamples += samples
+
+        let windowSamples = Int(ActivityTuning.windowSeconds * Double(SpeakerGate.sampleRate))
+        while rmsHistorySamples > windowSamples, let oldest = rmsHistory.first {
+            rmsHistory.removeFirst()
+            rmsHistorySamples -= oldest.samples
+        }
+
+        let absoluteFloor = SpeakerGateService.RescueTuning.absoluteFloor
+        let speechMultiple = SpeakerGateService.RescueTuning.speechFloorMultiple
+        let warmupSamples = Int(ActivityTuning.warmupSeconds * Double(SpeakerGate.sampleRate))
+
+        guard rmsHistorySamples >= warmupSamples else {
+            return rms > absoluteFloor * speechMultiple
+        }
+
+        let sorted = rmsHistory.map(\.rms).sorted()
+        let floor = max(Self.percentile(sorted, ActivityTuning.floorPercentile), absoluteFloor)
+        let loud = Self.percentile(sorted, ActivityTuning.loudPercentile)
+
+        return rms > floor * speechMultiple
+            && loud / floor >= SpeakerGateService.RescueTuning.minDynamicRange
+    }
+
+    // Nearest-rank percentile over an already-sorted array.
+    private static func percentile(_ sorted: [Float], _ p: Double) -> Float {
+        guard !sorted.isEmpty else { return 0 }
+        let index = Int((Double(sorted.count - 1) * p).rounded())
+        return sorted[min(sorted.count - 1, max(0, index))]
+    }
+
     private func processAudioChunk(_ buffer: [Float]) {
         // A buffer queued before the tap was removed. Dropping it is correct:
         // `stopLive` has already taken the tail, so anything arriving now is
@@ -309,10 +388,7 @@ final class Wav2VecViewModel {
         var rms: Float = 0.0
         vDSP_rmsqv(buffer, 1, &rms, vDSP_Length(buffer.count))
 
-        let threshold = max(0.001, baselineRMS * 2.0)
-        let isSpeech = rms > threshold
-
-        if !isSpeech { baselineRMS = baselineRMS * 0.99 + rms * 0.01 }
+        let isSpeech = detectSpeech(rms: rms, samples: buffer.count)
 
         if isSpeech {
             silenceFrames = 0

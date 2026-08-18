@@ -10,6 +10,35 @@ measurement rather than argument.
 
 ---
 
+## RESOLVED 2026-08-18
+
+- **P1 — Extractor conditioning is built from silence.** Already fixed before this
+  pass: `TSEEngine.enrollmentAudio` selects with `SpeakerGateService
+  .concatenatedSpeech` (the energy segmenter), not Silero. The entry below is kept
+  for the reasoning; the **P3 tfmap-cost inflation it caused needs re-measuring**,
+  since the recorded 0.37–0.41 RTF was taken while conditioning still spanned
+  whole files.
+- **P1 — Inactivity detector latches open on noise.** Fixed in
+  `Wav2VecViewModel.detectSpeech`: rolling 4 s window, floor = 20th percentile,
+  loud = 90th, speech iff `rms > floor * 3` **and** `loud / floor >= 3`. A
+  percentile always tracks, so the latch is gone, and the contrast test now
+  matches `rescueSpans` instead of disagreeing with it at `2.0x`.
+- **P2 — AutoGain may amplify room noise into the speech band.** Fixed in
+  `AutoGain.looksLikeSpeech`: adaptation now requires the `silenceRMS` level test
+  **and** the same contrast test, so steady room noise — loud but flat — no longer
+  drives the gain up.
+- **P2 — Post-extraction accept uses a global constant.** Fixed in
+  `TSERescue.route`: both bands now read `gate.acceptThreshold` /
+  `gate.rejectThreshold`. `TSEConfig.postAcceptThreshold` is deleted; the log
+  margin takes the profile's line as a parameter.
+
+**None of the four are verified on device yet** — all are code-reviewed and the
+project builds clean. The percentile detector and the AutoGain contrast test in
+particular change live segmentation behaviour and want a real session before they
+are trusted.
+
+---
+
 ## MEASURED 2026-08-14 — full pipeline, offline, on `session-raw.wav`
 
 Gate + extractor + Wav2Vec run end to end on the real capture

@@ -495,7 +495,7 @@ All STT model assets are stored in the `AI/` directory (gitignored) or downloade
 | `openai_whisper-large-v3-v20240930_turbo_632MB/` | `Application Support/WhisperKitModels/` (downloaded on first launch) or bundle root | `TranscriptionEngine` — WhisperKit STT model |
 | `SileroVAD.mlpackage` | Bundle — `AI/` | `SileroVADEngine` — Silero VAD v5 (~2 MB) |
 | `SpeakerEmbedding_ECAPA.mlpackage` | Bundle — `AI/` | `SpeakerGate` — 192-dim ECAPA-TDNN speaker embedder (~6 MB) |
-| `EnrollmentEncoder_WeSpeaker.mlpackage` | Bundle — `AI/` | `SpeakerGateService` — enrollment encoding |
+| `EnrollmentEncoder_WeSpeaker.mlpackage` | Bundle — `AI/` | `TargetSpeakerExtractor` — WeSpeaker ECAPA-TDNN layer-4 frames. NOT the gate's embedder: different weights, unrelated embedding space |
 | `EnrollmentProjection_BSRNN.mlpackage` | Bundle — `AI/` | TSE pipeline |
 | `SpeakerConditioning_BSRNN.mlpackage` | Bundle — `AI/` | TSE pipeline |
 | `TSEFrontend_BSRNN.mlpackage` | Bundle — `AI/` | TSE pipeline |

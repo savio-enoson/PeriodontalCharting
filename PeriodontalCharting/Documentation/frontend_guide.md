@@ -132,7 +132,7 @@ PeriodontalCharting/
     │   ├── vocab.txt                              <- IndoBERT WordPiece vocabulary (BertTokenizer)
     │   ├── SileroVAD.mlpackage                   <- Silero VAD v5 (~2 MB)
     │   ├── SpeakerEmbedding_ECAPA.mlpackage      <- ECAPA-TDNN speaker embedder (~6 MB)
-    │   ├── EnrollmentEncoder_WeSpeaker.mlpackage <- WeSpeaker ResNet34 enrollment encoder
+    │   ├── EnrollmentEncoder_WeSpeaker.mlpackage <- WeSpeaker ECAPA-TDNN, layer-4 frames (TSE only)
     │   ├── EnrollmentProjection_BSRNN.mlpackage  <- BSRNN enrollment projection
     │   ├── SpeakerConditioning_BSRNN.mlpackage   <- BSRNN speaker conditioning
     │   ├── TSEFrontend_BSRNN.mlpackage           <- BSRNN TSE frontend
@@ -938,7 +938,7 @@ The `AI/` directory contains all CoreML model packages and the BERT vocabulary f
 | `vocab.txt` | ~200 KB | `BertTokenizer` — WordPiece vocabulary for `MLVoiceTokenizer` |
 | `SileroVAD.mlpackage` | ~2 MB | `SileroVADEngine` — speech segment detection |
 | `SpeakerEmbedding_ECAPA.mlpackage` | ~6 MB | `SpeakerGate` — 192-dim speaker embedding |
-| `EnrollmentEncoder_WeSpeaker.mlpackage` | — | `SpeakerGateService` — WeSpeaker ResNet34 enrollment |
+| `EnrollmentEncoder_WeSpeaker.mlpackage` | — | `TargetSpeakerExtractor` — WeSpeaker ECAPA-TDNN layer-4 frame features. NOT the gate's embedder: different weights, unrelated embedding space, not substitutable |
 | `EnrollmentProjection_BSRNN.mlpackage` | — | TSE pipeline — enrollment projection |
 | `SpeakerConditioning_BSRNN.mlpackage` | — | TSE pipeline — speaker conditioning |
 | `TSEFrontend_BSRNN.mlpackage` | — | `TSEExtractor` — BSRNN frontend |

@@ -127,11 +127,11 @@ struct ChartDashboard: View {
                     Label("Zoom", systemImage: "magnifyingglass")
                 }
                 
-                // Button {
-                //     showDebugMenu = true
-                // } label: {
-                //     Label("Debug", systemImage: "ladybug")
-                // }
+                Button {
+                    showDebugMenu = true
+                } label: {
+                    Label("Debug", systemImage: "ladybug")
+                }
 
                 Button {
                     saveChart()
