@@ -107,7 +107,9 @@ final class TargetSpeakerExtractor: @unchecked Sendable {
         cfg.computeUnits = computeUnits
         func load(_ name: String) throws -> MLModel {
             guard let url = Self.locateModel(name) else { throw ExtractorError.modelNotFound(name) }
-            return try MLModel(contentsOf: url, configuration: cfg)
+            let model = try MLModel(contentsOf: url, configuration: cfg)
+            Self.logProvenance(name, model)
+            return model
         }
         frontend         = try load("TSEFrontend_BSRNN")
         conditioning     = try load("SpeakerConditioning_BSRNN")
@@ -115,6 +117,28 @@ final class TargetSpeakerExtractor: @unchecked Sendable {
         masker           = try load("TSEMasker_BSRNN")
         enrollEncoder    = try load("EnrollmentEncoder_WeSpeaker")
         enrollProjection = try load("EnrollmentProjection_BSRNN")
+    }
+
+    /// WHICH BUILD OF EACH MODEL IS ACTUALLY RUNNING.
+    ///
+    /// The .mlpackage files are copied into the app BY HAND from the export
+    /// notebook, so nothing in the Xcode project records what a given copy
+    /// contains — and the difference is not cosmetic. The fp16 export measured
+    /// 34.9 dB on the enrollment encoder and ~42 dB on the masker, which is
+    /// roughly 24 dB end to end and audible as an autotuned quality on the
+    /// clinician's own voice. The fp32 export measures 110-362 dB per stage.
+    /// Two builds that sound completely different are indistinguishable in
+    /// Finder, so the file has to say which one it is.
+    ///
+    /// `precision`, `parity_db` and `exported` are stamped by `export()` in
+    /// speech-sep/notebooks/bsrnn_deploy.ipynb. "unstamped" means a package
+    /// that predates the stamping — assume fp16 and re-export.
+    private static func logProvenance(_ name: String, _ model: MLModel) {
+        let creator = model.modelDescription.metadata[.creatorDefinedKey] as? [String: String] ?? [:]
+        let precision = creator["precision"] ?? "unstamped"
+        let parity = creator["parity_db"].map { " parity \($0) dB" } ?? ""
+        let exported = creator["exported"].map { " exported \($0)" } ?? ""
+        print("[TSE/model] \(name) — \(precision)\(parity)\(exported)")
     }
 
     /// Same lookup as SpeakerGate: Xcode's synchronized file

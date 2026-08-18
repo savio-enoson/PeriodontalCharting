@@ -1,3 +1,1684 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:ddd04ff33b8a64c607bb0b9e30f7e67913917c8254e46c15359d86539fff56eb
-size 18623
+ž
+
+enroll_frames*
+€€ €R
+	enroll_kv*
+ €€ €¢Þ¢:
++com.github.apple.coremltools.source_dialectTorchScript¢+
+$com.github.apple.coremltools.version9.0¢:
+,com.github.apple.coremltools.conversion_date
+2026-08-18¢3
+#com.github.apple.coremltools.sourcetorch==2.7.0²äu÷s
+mainîs
++
+enroll_frames
+
+
+€
+€CoreML7µs
+CoreML7©s	enroll_kv~
+const
+L_0_bias
+
+€*:
+val3
+
+€*"
+@model_path/weights/weight.bin@*
+name
+
+"
+
+L_0_bias‘
+const"
+
+L_0_weight
+
+€
+€*B
+val;
+
+€
+€*#
+@model_path/weights/weight.bin€* 
+name
+
+"
+
+L_0_weight€
+const
+L_1_bias
+
+€*<
+val5
+
+€*$
+@model_path/weights/weight.binÀ…*
+name
+
+"
+
+L_1_bias’
+const"
+
+L_1_weight
+
+€
+€*C
+val<
+
+€
+€*$
+@model_path/weights/weight.bin€Š* 
+name
+
+"
+
+L_1_weight€
+const
+L_2_bias
+
+€*<
+val5
+
+€*$
+@model_path/weights/weight.binÀŠ *
+name
+
+"
+
+L_2_bias’
+const"
+
+L_2_weight
+
+€
+€*C
+val<
+
+€
+€*$
+@model_path/weights/weight.bin€ * 
+name
+
+"
+
+L_2_weight€
+const
+L_3_bias
+
+€*<
+val5
+
+€*$
+@model_path/weights/weight.binÀ0*
+name
+
+"
+
+L_3_bias’
+const"
+
+L_3_weight
+
+€
+€*C
+val<
+
+€
+€*$
+@model_path/weights/weight.bin€”0* 
+name
+
+"
+
+L_3_weight€
+const
+L_4_bias
+
+€*<
+val5
+
+€*$
+@model_path/weights/weight.binÀ”@*
+name
+
+"
+
+L_4_bias’
+const"
+
+L_4_weight
+
+€
+€*C
+val<
+
+€
+€*$
+@model_path/weights/weight.bin€™@* 
+name
+
+"
+
+L_4_weight€
+const
+L_5_bias
+
+€*<
+val5
+
+€*$
+@model_path/weights/weight.binÀ™P*
+name
+
+"
+
+L_5_bias’
+const"
+
+L_5_weight
+
+€
+€*C
+val<
+
+€
+€*$
+@model_path/weights/weight.bin€žP* 
+name
+
+"
+
+L_5_weight€
+const
+L_6_bias
+
+€*<
+val5
+
+€*$
+@model_path/weights/weight.binÀž`*
+name
+
+"
+
+L_6_bias’
+const"
+
+L_6_weight
+
+€
+€*C
+val<
+
+€
+€*$
+@model_path/weights/weight.bin€£`* 
+name
+
+"
+
+L_6_weight€
+const
+L_7_bias
+
+€*<
+val5
+
+€*$
+@model_path/weights/weight.binÀ£p*
+name
+
+"
+
+L_7_bias’
+const"
+
+L_7_weight
+
+€
+€*C
+val<
+
+€
+€*$
+@model_path/weights/weight.bin€¨p* 
+name
+
+"
+
+L_7_weight
+const
+L_8_bias
+
+€*=
+val6
+
+€*%
+@model_path/weights/weight.binÀ¨€*
+name
+
+"
+
+L_8_bias“
+const"
+
+L_8_weight
+
+€
+€*D
+val=
+
+€
+€*%
+@model_path/weights/weight.bin€­€* 
+name
+
+"
+
+L_8_weight
+const
+L_9_bias
+
+€*=
+val6
+
+€*%
+@model_path/weights/weight.binÀ­*
+name
+
+"
+
+L_9_bias“
+const"
+
+L_9_weight
+
+€
+€*D
+val=
+
+€
+€*%
+@model_path/weights/weight.bin€²* 
+name
+
+"
+
+L_9_weightƒ
+const
+	L_10_bias
+
+€*=
+val6
+
+€*%
+@model_path/weights/weight.binÀ² *
+name
+
+"
+	L_10_bias•
+const#
+L_10_weight
+
+€
+€*D
+val=
+
+€
+€*%
+@model_path/weights/weight.bin€· *!
+name
+
+"
+L_10_weightƒ
+const
+	L_11_bias
+
+€*=
+val6
+
+€*%
+@model_path/weights/weight.binÀ·°*
+name
+
+"
+	L_11_bias•
+const#
+L_11_weight
+
+€
+€*D
+val=
+
+€
+€*%
+@model_path/weights/weight.bin€¼°*!
+name
+
+"
+L_11_weightƒ
+const
+	L_12_bias
+
+€*=
+val6
+
+€*%
+@model_path/weights/weight.binÀ¼À*
+name
+
+"
+	L_12_bias•
+const#
+L_12_weight
+
+€
+€*D
+val=
+
+€
+€*%
+@model_path/weights/weight.bin€ÁÀ*!
+name
+
+"
+L_12_weightƒ
+const
+	L_13_bias
+
+€*=
+val6
+
+€*%
+@model_path/weights/weight.binÀÁÐ*
+name
+
+"
+	L_13_bias•
+const#
+L_13_weight
+
+€
+€*D
+val=
+
+€
+€*%
+@model_path/weights/weight.bin€ÆÐ*!
+name
+
+"
+L_13_weightƒ
+const
+	L_14_bias
+
+€*=
+val6
+
+€*%
+@model_path/weights/weight.binÀÆà*
+name
+
+"
+	L_14_bias•
+const#
+L_14_weight
+
+€
+€*D
+val=
+
+€
+€*%
+@model_path/weights/weight.bin€Ëà*!
+name
+
+"
+L_14_weightƒ
+const
+	L_15_bias
+
+€*=
+val6
+
+€*%
+@model_path/weights/weight.binÀËð*
+name
+
+"
+	L_15_bias•
+const#
+L_15_weight
+
+€
+€*D
+val=
+
+€
+€*%
+@model_path/weights/weight.bin€Ðð*!
+name
+
+"
+L_15_weightƒ
+const
+	L_16_bias
+
+€*=
+val6
+
+€*%
+@model_path/weights/weight.binÀÐ€*
+name
+
+"
+	L_16_bias•
+const#
+L_16_weight
+
+€
+€*D
+val=
+
+€
+€*%
+@model_path/weights/weight.bin€Õ€*!
+name
+
+"
+L_16_weightƒ
+const
+	L_17_bias
+
+€*=
+val6
+
+€*%
+@model_path/weights/weight.binÀÕ*
+name
+
+"
+	L_17_bias•
+const#
+L_17_weight
+
+€
+€*D
+val=
+
+€
+€*%
+@model_path/weights/weight.bin€Ú*!
+name
+
+"
+L_17_weightƒ
+const
+	L_18_bias
+
+€*=
+val6
+
+€*%
+@model_path/weights/weight.binÀÚ *
+name
+
+"
+	L_18_bias•
+const#
+L_18_weight
+
+€
+€*D
+val=
+
+€
+€*%
+@model_path/weights/weight.bin€ß *!
+name
+
+"
+L_18_weightƒ
+const
+	L_19_bias
+
+€*=
+val6
+
+€*%
+@model_path/weights/weight.binÀß°*
+name
+
+"
+	L_19_bias•
+const#
+L_19_weight
+
+€
+€*D
+val=
+
+€
+€*%
+@model_path/weights/weight.bin€ä°*!
+name
+
+"
+L_19_weightƒ
+const
+	L_20_bias
+
+€*=
+val6
+
+€*%
+@model_path/weights/weight.binÀäÀ*
+name
+
+"
+	L_20_bias•
+const#
+L_20_weight
+
+€
+€*D
+val=
+
+€
+€*%
+@model_path/weights/weight.bin€éÀ*!
+name
+
+"
+L_20_weightƒ
+const
+	L_21_bias
+
+€*=
+val6
+
+€*%
+@model_path/weights/weight.binÀéÐ*
+name
+
+"
+	L_21_bias•
+const#
+L_21_weight
+
+€
+€*D
+val=
+
+€
+€*%
+@model_path/weights/weight.bin€îÐ*!
+name
+
+"
+L_21_weightƒ
+const
+	L_22_bias
+
+€*=
+val6
+
+€*%
+@model_path/weights/weight.binÀîà*
+name
+
+"
+	L_22_bias•
+const#
+L_22_weight
+
+€
+€*D
+val=
+
+€
+€*%
+@model_path/weights/weight.bin€óà*!
+name
+
+"
+L_22_weightƒ
+const
+	L_23_bias
+
+€*=
+val6
+
+€*%
+@model_path/weights/weight.binÀóð*
+name
+
+"
+	L_23_bias•
+const#
+L_23_weight
+
+€
+€*D
+val=
+
+€
+€*%
+@model_path/weights/weight.bin€øð*!
+name
+
+"
+L_23_weightƒ
+const
+	L_24_bias
+
+€*=
+val6
+
+€*%
+@model_path/weights/weight.binÀø€*
+name
+
+"
+	L_24_bias•
+const#
+L_24_weight
+
+€
+€*D
+val=
+
+€
+€*%
+@model_path/weights/weight.bin€ý€*!
+name
+
+"
+L_24_weightƒ
+const
+	L_25_bias
+
+€*=
+val6
+
+€*%
+@model_path/weights/weight.binÀý*
+name
+
+"
+	L_25_bias•
+const#
+L_25_weight
+
+€
+€*D
+val=
+
+€
+€*%
+@model_path/weights/weight.bin€‚‘*!
+name
+
+"
+L_25_weightƒ
+const
+	L_26_bias
+
+€*=
+val6
+
+€*%
+@model_path/weights/weight.binÀ‚¡*
+name
+
+"
+	L_26_bias•
+const#
+L_26_weight
+
+€
+€*D
+val=
+
+€
+€*%
+@model_path/weights/weight.bin€‡¡*!
+name
+
+"
+L_26_weightƒ
+const
+	L_27_bias
+
+€*=
+val6
+
+€*%
+@model_path/weights/weight.binÀ‡±*
+name
+
+"
+	L_27_bias•
+const#
+L_27_weight
+
+€
+€*D
+val=
+
+€
+€*%
+@model_path/weights/weight.bin€Œ±*!
+name
+
+"
+L_27_weightƒ
+const
+	L_28_bias
+
+€*=
+val6
+
+€*%
+@model_path/weights/weight.binÀŒÁ*
+name
+
+"
+	L_28_bias•
+const#
+L_28_weight
+
+€
+€*D
+val=
+
+€
+€*%
+@model_path/weights/weight.bin€‘Á*!
+name
+
+"
+L_28_weightƒ
+const
+	L_29_bias
+
+€*=
+val6
+
+€*%
+@model_path/weights/weight.binÀ‘Ñ*
+name
+
+"
+	L_29_bias•
+const#
+L_29_weight
+
+€
+€*D
+val=
+
+€
+€*%
+@model_path/weights/weight.bin€–Ñ*!
+name
+
+"
+L_29_weightƒ
+const
+	L_30_bias
+
+€*=
+val6
+
+€*%
+@model_path/weights/weight.binÀ–á*
+name
+
+"
+	L_30_bias•
+const#
+L_30_weight
+
+€
+€*D
+val=
+
+€
+€*%
+@model_path/weights/weight.bin€›á*!
+name
+
+"
+L_30_weightƒ
+const
+	L_31_bias
+
+€*=
+val6
+
+€*%
+@model_path/weights/weight.binÀ›ñ*
+name
+
+"
+	L_31_bias•
+const#
+L_31_weight
+
+€
+€*D
+val=
+
+€
+€*%
+@model_path/weights/weight.bin€ ñ*!
+name
+
+"
+L_31_weightk
+const
+input_perm_0
+
+
+* 
+val
+
+
+	
+
+ *"
+name
+
+"
+input_perm_0…
+	transpose
+x
+
+enroll_frames
+perm
+
+input_perm_0#
+input
+
+
+€
+€*!
+name
+
+"
+transpose_0Ž
+linear
+x	
+
+input
+bias
+
+
+L_0_bias
+weight
+
+
+L_0_weight$
+var_71
+
+
+€
+€*
+name
+
+"
+
+linear_0Ž
+linear
+x	
+
+input
+bias
+
+
+L_1_bias
+weight
+
+
+L_1_weight$
+var_74
+
+
+€
+€*
+name
+
+"
+
+linear_1Ž
+linear
+x	
+
+input
+bias
+
+
+L_2_bias
+weight
+
+
+L_2_weight$
+var_77
+
+
+€
+€*
+name
+
+"
+
+linear_2Ž
+linear
+x	
+
+input
+bias
+
+
+L_3_bias
+weight
+
+
+L_3_weight$
+var_80
+
+
+€
+€*
+name
+
+"
+
+linear_3Ž
+linear
+x	
+
+input
+bias
+
+
+L_4_bias
+weight
+
+
+L_4_weight$
+var_83
+
+
+€
+€*
+name
+
+"
+
+linear_4Ž
+linear
+x	
+
+input
+bias
+
+
+L_5_bias
+weight
+
+
+L_5_weight$
+var_86
+
+
+€
+€*
+name
+
+"
+
+linear_5Ž
+linear
+x	
+
+input
+bias
+
+
+L_6_bias
+weight
+
+
+L_6_weight$
+var_89
+
+
+€
+€*
+name
+
+"
+
+linear_6Ž
+linear
+x	
+
+input
+bias
+
+
+L_7_bias
+weight
+
+
+L_7_weight$
+var_92
+
+
+€
+€*
+name
+
+"
+
+linear_7Ž
+linear
+x	
+
+input
+bias
+
+
+L_8_bias
+weight
+
+
+L_8_weight$
+var_95
+
+
+€
+€*
+name
+
+"
+
+linear_8Ž
+linear
+x	
+
+input
+bias
+
+
+L_9_bias
+weight
+
+
+L_9_weight$
+var_98
+
+
+€
+€*
+name
+
+"
+
+linear_9’
+linear
+x	
+
+input
+bias
+
+	L_10_bias
+weight
+
+L_10_weight%
+var_101
+
+
+€
+€*
+name
+
+"
+	linear_10’
+linear
+x	
+
+input
+bias
+
+	L_11_bias
+weight
+
+L_11_weight%
+var_104
+
+
+€
+€*
+name
+
+"
+	linear_11’
+linear
+x	
+
+input
+bias
+
+	L_12_bias
+weight
+
+L_12_weight%
+var_107
+
+
+€
+€*
+name
+
+"
+	linear_12’
+linear
+x	
+
+input
+bias
+
+	L_13_bias
+weight
+
+L_13_weight%
+var_110
+
+
+€
+€*
+name
+
+"
+	linear_13’
+linear
+x	
+
+input
+bias
+
+	L_14_bias
+weight
+
+L_14_weight%
+var_113
+
+
+€
+€*
+name
+
+"
+	linear_14’
+linear
+x	
+
+input
+bias
+
+	L_15_bias
+weight
+
+L_15_weight%
+var_116
+
+
+€
+€*
+name
+
+"
+	linear_15’
+linear
+x	
+
+input
+bias
+
+	L_16_bias
+weight
+
+L_16_weight%
+var_119
+
+
+€
+€*
+name
+
+"
+	linear_16’
+linear
+x	
+
+input
+bias
+
+	L_17_bias
+weight
+
+L_17_weight%
+var_122
+
+
+€
+€*
+name
+
+"
+	linear_17’
+linear
+x	
+
+input
+bias
+
+	L_18_bias
+weight
+
+L_18_weight%
+var_125
+
+
+€
+€*
+name
+
+"
+	linear_18’
+linear
+x	
+
+input
+bias
+
+	L_19_bias
+weight
+
+L_19_weight%
+var_128
+
+
+€
+€*
+name
+
+"
+	linear_19’
+linear
+x	
+
+input
+bias
+
+	L_20_bias
+weight
+
+L_20_weight%
+var_131
+
+
+€
+€*
+name
+
+"
+	linear_20’
+linear
+x	
+
+input
+bias
+
+	L_21_bias
+weight
+
+L_21_weight%
+var_134
+
+
+€
+€*
+name
+
+"
+	linear_21’
+linear
+x	
+
+input
+bias
+
+	L_22_bias
+weight
+
+L_22_weight%
+var_137
+
+
+€
+€*
+name
+
+"
+	linear_22’
+linear
+x	
+
+input
+bias
+
+	L_23_bias
+weight
+
+L_23_weight%
+var_140
+
+
+€
+€*
+name
+
+"
+	linear_23’
+linear
+x	
+
+input
+bias
+
+	L_24_bias
+weight
+
+L_24_weight%
+var_143
+
+
+€
+€*
+name
+
+"
+	linear_24’
+linear
+x	
+
+input
+bias
+
+	L_25_bias
+weight
+
+L_25_weight%
+var_146
+
+
+€
+€*
+name
+
+"
+	linear_25’
+linear
+x	
+
+input
+bias
+
+	L_26_bias
+weight
+
+L_26_weight%
+var_149
+
+
+€
+€*
+name
+
+"
+	linear_26’
+linear
+x	
+
+input
+bias
+
+	L_27_bias
+weight
+
+L_27_weight%
+var_152
+
+
+€
+€*
+name
+
+"
+	linear_27’
+linear
+x	
+
+input
+bias
+
+	L_28_bias
+weight
+
+L_28_weight%
+var_155
+
+
+€
+€*
+name
+
+"
+	linear_28’
+linear
+x	
+
+input
+bias
+
+	L_29_bias
+weight
+
+L_29_weight%
+var_158
+
+
+€
+€*
+name
+
+"
+	linear_29’
+linear
+x	
+
+input
+bias
+
+	L_30_bias
+weight
+
+L_30_weight%
+var_161
+
+
+€
+€*
+name
+
+"
+	linear_30’
+linear
+x	
+
+input
+bias
+
+	L_31_bias
+weight
+
+L_31_weight%
+var_164
+
+
+€
+€*
+name
+
+"
+	linear_31N
+const
+var_166
+*
+val
+
+
+ *
+name
+
+
+"
+op_166h
+const
+var_167_interleave_0
+*
+val
+
+
+ *)
+name!
+
+"
+op_167_interleave_0ð
+concat
+axis
+	
+var_166á
+valuesÖ
+
+var_71
+
+var_74
+
+var_77
+
+var_80
+
+var_83
+
+var_86
+
+var_89
+
+var_92
+
+var_95
+
+var_98
+	
+var_101
+	
+var_104
+	
+var_107
+	
+var_110
+	
+var_113
+	
+var_116
+	
+var_119
+	
+var_122
+	
+var_125
+	
+var_128
+	
+var_131
+	
+var_134
+	
+var_137
+	
+var_140
+	
+var_143
+	
+var_146
+	
+var_149
+	
+var_152
+	
+var_155
+	
+var_158
+	
+var_161
+	
+var_164&
+
+interleave
+
+var_167_interleave_0'
+	enroll_kv
+
+ 
+€
+€*
+name
+
+
+"
+op_167"å
+	buildInfo×"
+
+
+Ä"Á
+6
+!
+
+"
+coremltools-version
+	
+"
+9.0
+@
+)
+!
+"
+coremltools-component-torch
+
+	"
+2.7.0
+E
+(
+ 
+"
+coremltools-source-dialect
+
+"
+TorchScript
