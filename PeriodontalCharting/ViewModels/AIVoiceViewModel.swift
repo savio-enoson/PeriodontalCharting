@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import AVFoundation
 
 @MainActor
 class AIVoiceViewModel: ObservableObject {
@@ -104,23 +105,15 @@ resesi 18, 17, 16, -1 -1
         
         // Simulate Wav2Vec2 STT engine by forcing spaces between consecutive digits
         let sttSimulated = text.replacingOccurrences(of: #"(?<=\d)(?=\d)"#, with: " ", options: .regularExpression)
-        let chunks = sttSimulated.components(separatedBy: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         
-        committedTranscription = ""
+        committedTranscription = sttSimulated
         uncommittedTranscription = ""
         
         var parser = StatefulParser(configuration: self.getConfiguration())
-        
-        for (idx, chunk) in chunks.enumerated() {
-            let isFinal = idx == chunks.count - 1
-            if !committedTranscription.isEmpty {
-                committedTranscription += " \n "
-            }
-            committedTranscription += chunk
-            
-            let tokens = TokenizerManager.shared.tokenize(text: chunk, isFinal: isFinal, currentMetric: parser.cursor.currentMetric)
-            parser.consume(tokens: tokens, isFinal: isFinal)
-        }
+        let parserCurrentValues = parser.pendingNumbers.count
+        let parserExpectedValues = parser.activeSelection?.expectedSlots ?? 3
+        let tokens = TokenizerManager.shared.tokenize(text: sttSimulated, isFinal: true, currentMetric: parser.cursor.currentMetric, parserCurrentValues: parserCurrentValues, parserExpectedValues: parserExpectedValues)
+        parser.consume(tokens: tokens, isFinal: true)
         
         self.commandHistory = parser.commands
         if let last = parser.commands.last, last.operation == parser.cursor.currentMetric {
@@ -135,6 +128,117 @@ resesi 18, 17, 16, -1 -1
     
     private func internalStopSimulation() {
         stopSimulation()
+    }
+
+    // MARK: - Audio File Simulation
+    
+    func audioFileSimulation(fileURL: URL, speedMultiplier: Double) {
+        stopSimulation()
+        stopLiveDictation()
+        
+        guard let file = try? AVAudioFile(forReading: fileURL),
+              let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16000, channels: 1, interleaved: false),
+              let converter = AVAudioConverter(from: file.processingFormat, to: format) else {
+            print("Failed to setup audio file reading")
+            return
+        }
+        
+        let ratio = 16000.0 / file.processingFormat.sampleRate
+        let targetFrameCapacity = AVAudioFrameCount(Double(file.length) * ratio) + 1024
+        guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: targetFrameCapacity) else { return }
+        
+        var error: NSError?
+        var isDone = false
+        converter.convert(to: outputBuffer, error: &error) { packetCount, outStatus in
+            if isDone {
+                outStatus.pointee = .noDataNow
+                return nil
+            }
+            let readCapacity = AVAudioFrameCount(8192)
+            guard let inputBuffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: readCapacity) else {
+                outStatus.pointee = .noDataNow
+                return nil
+            }
+            do {
+                try file.read(into: inputBuffer, frameCount: readCapacity)
+                if inputBuffer.frameLength == 0 {
+                    isDone = true
+                    outStatus.pointee = .noDataNow
+                    return nil
+                }
+                outStatus.pointee = .haveData
+                return inputBuffer
+            } catch {
+                isDone = true
+                outStatus.pointee = .noDataNow
+                return nil
+            }
+        }
+        
+        guard let channelData = outputBuffer.floatChannelData else { return }
+        let audioArray = Array(UnsafeBufferPointer(start: channelData[0], count: Int(outputBuffer.frameLength)))
+        
+        isDictating = true
+        committedTranscription = ""
+        uncommittedTranscription = ""
+        commandHistory = []
+        committedCommands = []
+        currentCommand = nil
+        initializeCursorIfNeeded()
+
+        sessionParser = StatefulParser(configuration: getConfiguration())
+        committedCommandCount = 0
+
+        let useWav2Vec = UserDefaults.standard.bool(forKey: "useOfflineWav2Vec")
+        
+        if useWav2Vec {
+            wav2VecTranscriber.onLiveTranscript = { [weak self] fullText in
+                guard let self = self else { return }
+                let committed = self.committedTranscription
+                if fullText.hasPrefix(committed) {
+                    let uncommitted = String(fullText.dropFirst(committed.count)).trimmingCharacters(in: .whitespaces)
+                    self.uncommittedTranscription = uncommitted.isEmpty ? "" : " " + uncommitted
+                } else {
+                    self.uncommittedTranscription = fullText
+                }
+            }
+            wav2VecTranscriber.onConfirmedTranscript = { [weak self] confirmed in
+                guard let self = self else { return }
+                self.processConfirmedChunk(confirmed)
+            }
+        } else {
+            transcriber.onLiveTranscript = { [weak self] fullText in
+                guard let self = self else { return }
+                let committed = self.committedTranscription
+                if fullText.hasPrefix(committed) {
+                    let uncommitted = String(fullText.dropFirst(committed.count)).trimmingCharacters(in: .whitespaces)
+                    self.uncommittedTranscription = uncommitted.isEmpty ? "" : " " + uncommitted
+                } else {
+                    self.uncommittedTranscription = fullText
+                }
+            }
+            transcriber.onConfirmedTranscript = { [weak self] confirmed in
+                guard let self = self else { return }
+                self.processConfirmedChunk(confirmed)
+            }
+        }
+        
+        Task { [weak self] in
+            guard let self = self else { return }
+            if useWav2Vec {
+                await self.wav2VecTranscriber.loadModel()
+            } else {
+                await self.transcriber.loadModel()
+            }
+            TokenizerManager.shared.loadModel()
+            guard self.isDictating else { return }
+            
+            if useWav2Vec {
+                self.wav2VecTranscriber.startSimulation(audio: audioArray, speedMultiplier: speedMultiplier)
+            } else {
+                self.transcriber.startSimulation(audio: audioArray, speedMultiplier: speedMultiplier)
+            }
+        }
     }
 
     // MARK: - Live dictation (real Whisper transcription → annotation parser)
@@ -239,7 +343,9 @@ resesi 18, 17, 16, -1 -1
             if finalOutput.hasPrefix(committedTranscription) {
                 let leftover = String(finalOutput.dropFirst(committedTranscription.count)).trimmingCharacters(in: .whitespaces)
                 if !leftover.isEmpty {
-                    let tokens = TokenizerManager.shared.tokenize(text: leftover, isFinal: true, currentMetric: sessionParser?.cursor.currentMetric)
+                    let parserCurrentValues = sessionParser?.pendingNumbers.count ?? 0
+                    let parserExpectedValues = sessionParser?.activeSelection?.expectedSlots ?? 3
+                    let tokens = TokenizerManager.shared.tokenize(text: leftover, isFinal: true, currentMetric: sessionParser?.cursor.currentMetric, parserCurrentValues: parserCurrentValues, parserExpectedValues: parserExpectedValues)
                     sessionParser?.consume(tokens: tokens, isFinal: true)
                 } else {
                     sessionParser?.consume(tokens: [], isFinal: true)
@@ -281,7 +387,9 @@ resesi 18, 17, 16, -1 -1
         self.uncommittedTranscription = ""
         
         if !newChunk.isEmpty {
-            let tokens = TokenizerManager.shared.tokenize(text: newChunk, isFinal: false, currentMetric: sessionParser?.cursor.currentMetric)
+            let parserCurrentValues = sessionParser?.pendingNumbers.count ?? 0
+            let parserExpectedValues = sessionParser?.activeSelection?.expectedSlots ?? 3
+            let tokens = TokenizerManager.shared.tokenize(text: newChunk, isFinal: false, currentMetric: sessionParser?.cursor.currentMetric, parserCurrentValues: parserCurrentValues, parserExpectedValues: parserExpectedValues)
             sessionParser?.consume(tokens: tokens, isFinal: false)
             
             if let parser = sessionParser {
@@ -383,7 +491,9 @@ resesi 18, 17, 16, -1 -1
     }
     nonisolated private func parseOffline(text: String, config: ChartingConfiguration, isFinal: Bool) -> ([AnnotationCommand], ChartingCursor, TeethSelection?, [String]) {
         var parser = StatefulParser(configuration: config)
-        let tokens = TokenizerManager.shared.tokenize(text: text, isFinal: isFinal, currentMetric: parser.cursor.currentMetric)
+        let parserCurrentValues = parser.pendingNumbers.count
+        let parserExpectedValues = parser.activeSelection?.expectedSlots ?? 3
+        let tokens = TokenizerManager.shared.tokenize(text: text, isFinal: isFinal, currentMetric: parser.cursor.currentMetric, parserCurrentValues: parserCurrentValues, parserExpectedValues: parserExpectedValues)
         parser.consume(tokens: tokens, isFinal: isFinal)
         return (parser.commands, parser.cursor, parser.activeSelection, parser.pendingValues)
     }

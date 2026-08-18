@@ -59,6 +59,7 @@ final class TranscriptionViewModel: LiveCaptureDriver {
     // Live mic: WhisperKit's native streaming transcriber + the task driving it.
     private var streamTranscriber: AudioStreamTranscriber?
     private var streamTask: Task<Void, Never>?
+    private var simulationTask: Task<Void, Never>?
 
     /// Gain + speaker gating upstream of Whisper. When present it also fills the
     /// gate timeline itself, so `startGateMonitor` skips its polling loop.
@@ -291,7 +292,7 @@ final class TranscriptionViewModel: LiveCaptureDriver {
     /// Build a fresh AudioStreamTranscriber against the *current* audio route and
     /// start it. Split out so `restartLiveStream` can rebuild the capture graph —
     /// and WhisperKit's converter — without re-owning the session.
-    private func launchStreamTranscriber() {
+    private func launchStreamTranscriber(isSimulation: Bool = false) {
         guard let whisper = whisperKit, let tokenizer = whisper.tokenizer else { return }
         let options = clinicalOptions(whisper)
 
@@ -302,7 +303,13 @@ final class TranscriptionViewModel: LiveCaptureDriver {
         // Gain-correct and speaker-gate the audio BEFORE Whisper hears it. Only
         // when the gate is actually enrolled — with no centroid there is nothing to
         // judge against and the wrapper would be pure overhead.
-        let gated: GatedAudioProcessor? = gate.map { GatedAudioProcessor(gate: $0) }
+        let gated: GatedAudioProcessor?
+        if isSimulation {
+            gated = GatedAudioProcessor(gate: gate)
+            gated?.isSimulationMode = true
+        } else {
+            gated = gate.map { GatedAudioProcessor(gate: $0) }
+        }
         gatedProcessor = gated
 
         let transcriber = AudioStreamTranscriber(
@@ -523,6 +530,62 @@ final class TranscriptionViewModel: LiveCaptureDriver {
         launchStreamTranscriber()
     }
 
+    func startSimulation(audio: [Float], speedMultiplier: Double) {
+        guard whisperKit != nil && whisperKit?.tokenizer != nil else {
+            statusMessage = "Model not ready."
+            return
+        }
+
+        transcript = ""
+        liveCarryOver = ""
+        verifiedCarryOver = ""
+        lastVerifiedText = ""
+        liveConfirmedCarryOver = ""
+        lastConfirmedCumulative = ""
+        lastConfirmedSegmentCount = 0
+        isRecording = true
+        isTranscribing = true
+        statusMessage = "Simulating at \(speedMultiplier)x..."
+        lastLiveUpdateTime = nil
+        lastLiveConfirmedSeconds = 0
+        WhisperStageTimer.shared.reset()
+
+        self.speakerGate = TranscriptionEngine.shared.makeSpeakerGateIfNeeded()
+        self.speakerGate?.resetTimeline()
+
+        self.launchStreamTranscriber(isSimulation: true)
+        
+        simulationTask?.cancel()
+        simulationTask = Task { [weak self] in
+            let chunkSize = 4096
+            let chunkDurationMs = 256.0
+            let sleepTimeMs = chunkDurationMs / speedMultiplier
+            
+            var index = 0
+            while index < audio.count && !Task.isCancelled {
+                guard let self = self else { return }
+                let end = min(index + chunkSize, audio.count)
+                let chunk = Array(audio[index..<end])
+                
+                self.gatedProcessor?.ingestSimulationAudio(chunk)
+                
+                index = end
+                
+                if speedMultiplier < 100 {
+                    try? await Task.sleep(nanoseconds: UInt64(sleepTimeMs * 1_000_000))
+                } else {
+                    await Task.yield()
+                }
+            }
+            
+            if !Task.isCancelled {
+                await MainActor.run {
+                    Task { await self?.stopLiveTranscription() }
+                }
+            }
+        }
+    }
+
     /// Stop capturing, but FINISH what is already in flight.
     ///
     /// The old version cancelled three things too early and each one lost work:
@@ -532,6 +595,7 @@ final class TranscriptionViewModel: LiveCaptureDriver {
     /// mel, before the encoder and before the decode loop, so cancelling threw away
     /// exactly the sentence the clinician was part-way through.
     private func stopLiveTranscription() async {
+        simulationTask?.cancel()
         // Microphone off immediately so the button responds, but `isTranscribing`
         // stays true — there is still work to finish and the UI should say so.
         isRecording = false

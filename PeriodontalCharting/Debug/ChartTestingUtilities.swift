@@ -3,20 +3,21 @@ import Foundation
 struct ChartTestingUtilities {
     
     static func getProjectDirectoryURL() -> URL {
-        return URL(fileURLWithPath: "/Users/vio/PycharmProjects/Periodontology/PeriodontalCharting/PeriodontalCharting/Testing/Ground/")
+        return URL(fileURLWithPath: "/Users/vio/XCodeProjects/PeriodontalCharting/PeriodontalCharting/Testing/Suite/Data/GroundTruth/")
     }
     
-    static func getFileURL() -> URL {
+    static func getFileURL(for transcriptName: String) -> URL {
+        let filename = "\(transcriptName)_ground.json"
         #if targetEnvironment(simulator) || targetEnvironment(macCatalyst) || os(macOS)
-        return getProjectDirectoryURL().appendingPathComponent("ground_truth.json")
+        return getProjectDirectoryURL().appendingPathComponent(filename)
         #else
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        return docs.appendingPathComponent("ground_truth.json")
+        return docs.appendingPathComponent(filename)
         #endif
     }
     
-    static func saveChart(mouth: [Int: ToothObject]) -> Bool {
-        let url = getFileURL()
+    static func saveChart(mouth: [Int: ToothObject], for transcriptName: String) -> Bool {
+        let url = getFileURL(for: transcriptName)
         do {
             let encoder = JSONEncoder()
             encoder.outputFormatting = .prettyPrinted
@@ -32,8 +33,8 @@ struct ChartTestingUtilities {
         }
     }
     
-    static func loadChart() -> [Int: ToothObject]? {
-        let url = getFileURL()
+    static func loadChart(for transcriptName: String) -> [Int: ToothObject]? {
+        let url = getFileURL(for: transcriptName)
         do {
             let data = try Data(contentsOf: url)
             let decoder = JSONDecoder()
@@ -94,7 +95,11 @@ struct ChartTestingUtilities {
     static func parseTranscript(text: String, config: ChartingConfiguration) -> [Int: ToothObject] {
         var mouth = ToothObject.fullMouthEmpty()
         var parser = StatefulParser(configuration: config)
-        let tokens = TokenizerManager.shared.tokenize(text: text, isFinal: true, currentMetric: parser.cursor.currentMetric)
+        let parserCurrentValues = parser.pendingNumbers.count
+        let parserExpectedValues = parser.activeSelection?.expectedSlots ?? 3
+        
+        let sttSimulated = text.replacingOccurrences(of: #"(?<=\d)(?=\d)"#, with: " ", options: .regularExpression)
+        let tokens = TokenizerManager.shared.tokenize(text: sttSimulated, isFinal: true, currentMetric: parser.cursor.currentMetric, parserCurrentValues: parserCurrentValues, parserExpectedValues: parserExpectedValues)
         parser.consume(tokens: tokens, isFinal: true)
         let commands = parser.commands
         

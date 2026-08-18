@@ -4,7 +4,8 @@ extension VoiceTokenizer {
     static func isToothPrefix(_ word: String) -> Bool {
         let w = word.lowercased()
         let prefixes = [
-            "sampai", "hingga", "ke", "dan", "maupun", "gigi"
+            "sampai", "hingga", "ke", "dan", "maupun", "gigi", "dari",
+            "distal", "mesial", "bukal", "lingual", "palatal", "labial", "oklusal", "insisal", "facial", "mesio", "disto"
         ]
         return prefixes.contains(w)
     }
@@ -59,9 +60,15 @@ extension VoiceTokenizer {
         var sawComma = false
         
         while i < words.count {
-            let word = words[i]
-            if isAspectOrAction(word) {
-                return foundTeeth > 0
+            let word = words[i].lowercased()
+            
+            let actions = [
+                "missing", "gak", "tidak", "resesi", "poket", "pocket", "bop", "bleeding", "plak", "flek", "mobiliti", "furkasi", "impaksi", "sisa", "akar", "lanjut", "selesai",
+                "semua", "semuanya", "seluruh", "seluruhnya", "kemudian", "selanjutnya", "berikutnya", "ada"
+            ]
+            
+            if actions.contains(word) {
+                return foundTeeth > 1 || (foundTeeth == 1 && sawComma)
             }
             
             if word == "," || word == "dan" || word == "maupun" {
@@ -74,7 +81,7 @@ extension VoiceTokenizer {
                 return foundTeeth > 1 || (foundTeeth == 1 && sawComma)
             }
             
-            if let d1 = parseIntOrWord(word), d1 >= 1 && d1 <= 8 {
+            if let d1 = parseIntOrWord(word), d1 >= 1 && d1 <= 4 {
                 var j = i + 1
                 while j < words.count && (words[j] == "," || words[j] == "dan" || words[j] == "maupun") {
                     j += 1
@@ -90,6 +97,6 @@ extension VoiceTokenizer {
             break
         }
         
-        return foundTeeth > 1 || (foundTeeth == 1 && sawComma)
+        return foundTeeth > 1 && sawComma
     }
 }

@@ -12,7 +12,7 @@ import SwiftData
 struct PeriodontalChartingApp: App {
     init() {
         UserDefaults.standard.register(defaults: [
-            "useMLTokenizer": false,
+            "useWav2Vec": true,
             "useOfflineWav2Vec": true
         ])
     }

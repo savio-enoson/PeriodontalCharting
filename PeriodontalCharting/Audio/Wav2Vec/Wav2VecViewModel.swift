@@ -87,8 +87,64 @@ final class Wav2VecViewModel {
         }
     }
 
+    func startSimulation(audio: [Float], speedMultiplier: Double) {
+        guard !isRecording else { return }
+        guard isModelReady else {
+            statusMessage = "Model not ready. (Check logs)"
+            return
+        }
+        
+        transcript = ""
+        committedHistory = []
+        streamingBuffer = []
+        silenceFrames = 0
+        hasStartedSpeaking = false
+        lastProcessedBufferCount = 0
+        baselineRMS = 0.01
+        
+        isRecording = true
+        isTranscribing = true
+        statusMessage = "Simulating at \(speedMultiplier)x..."
+        
+        simulationTask?.cancel()
+        simulationTask = Task {
+            let chunkSize = 512
+            // 512 samples at 16kHz = 32ms
+            let chunkDurationMs = 32.0
+            let sleepTimeMs = chunkDurationMs / speedMultiplier
+            
+            var index = 0
+            while index < audio.count && !Task.isCancelled {
+                let end = min(index + chunkSize, audio.count)
+                let chunk = Array(audio[index..<end])
+                
+                if chunk.count == chunkSize {
+                    await MainActor.run {
+                        self.processAudioChunk(chunk)
+                    }
+                }
+                
+                index = end
+                
+                if speedMultiplier < 100 { // If it's huge, just run as fast as possible without sleeping
+                    // Convert ms to nanoseconds
+                    try? await Task.sleep(nanoseconds: UInt64(sleepTimeMs * 1_000_000))
+                } else {
+                    await Task.yield()
+                }
+            }
+            
+            if !Task.isCancelled {
+                await MainActor.run {
+                    self.stopLive()
+                }
+            }
+        }
+    }
+
     func stopLive() {
         guard isRecording else { return }
+        simulationTask?.cancel()
         Wav2VecAudioCapture.shared.stopRecording()
         isRecording = false
         isTranscribing = false
@@ -117,7 +173,9 @@ final class Wav2VecViewModel {
         }
     }
 
-    private func processAudioChunk(_ buffer: [Float]) {
+    private var simulationTask: Task<Void, Never>?
+
+    func processAudioChunk(_ buffer: [Float]) {
         var rms: Float = 0.0
         vDSP_rmsqv(buffer, 1, &rms, vDSP_Length(buffer.count))
         
@@ -168,7 +226,9 @@ final class Wav2VecViewModel {
             self.lastProcessedBufferCount = 0
             
             Task {
-                let normalizedChunk = Wav2VecAudioCapture.shared.normalizeAudio(data: chunkToProcess)
+                let zeroPadding = Array(repeating: Float(0.0), count: 8000) // 0.5s padding
+                let paddedChunk = chunkToProcess + zeroPadding
+                let normalizedChunk = Wav2VecAudioCapture.shared.normalizeAudio(data: paddedChunk)
                 if let result = await Wav2VecEngine.shared.predict(audioData: normalizedChunk, isLivePreview: false) {
                     if !result.trimmingCharacters(in: .whitespaces).isEmpty {
                         await MainActor.run {
@@ -191,7 +251,9 @@ final class Wav2VecViewModel {
                 
                 self.isProcessing = true
                 Task {
-                    let normalizedChunk = Wav2VecAudioCapture.shared.normalizeAudio(data: chunk)
+                    let zeroPadding = Array(repeating: Float(0.0), count: 8000) // 0.5s padding
+                    let paddedChunk = chunk + zeroPadding
+                    let normalizedChunk = Wav2VecAudioCapture.shared.normalizeAudio(data: paddedChunk)
                     
                     if let result = await Wav2VecEngine.shared.predict(audioData: normalizedChunk, isLivePreview: true) {
                         await MainActor.run {

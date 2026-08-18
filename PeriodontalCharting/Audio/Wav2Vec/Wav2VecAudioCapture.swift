@@ -150,18 +150,66 @@ class Wav2VecAudioCapture: ObservableObject {
         guard !data.isEmpty else { return data }
         let length = vDSP_Length(data.count)
         
-        var output = [Float](repeating: 0.0, count: data.count)
-        var mean: Float = 0.0
-        var stdDev: Float = 0.0
+        var mean: Float = 0
+        var stdDev: Float = 0
+        vDSP_normalize(data, 1, nil, 1, &mean, &stdDev, length)
         
-        // vDSP_normalize calculates mean and stddev, then applies standard score scaling
-        vDSP_normalize(data, 1, &output, 1, &mean, &stdDev, length)
+        var normalized = [Float](repeating: 0, count: data.count)
+        vDSP_vsub([mean], 0, data, 1, &normalized, 1, length)
         
-        // If the buffer is pure silence (stdDev = 0), vDSP might output NaNs. 
-        if stdDev == 0 {
-            return [Float](repeating: 0.0, count: data.count)
+        if stdDev > 0 {
+            var variance = stdDev
+            vDSP_vsdiv(normalized, 1, &variance, &normalized, 1, length)
         }
         
-        return output
+        return normalized
+    }
+    
+    func readAudioFile(url: URL) -> [Float]? {
+        let asset = AVAsset(url: url)
+        guard let track = asset.tracks(withMediaType: .audio).first else {
+            print("No audio track found in file")
+            return nil
+        }
+        
+        do {
+            let assetReader = try AVAssetReader(asset: asset)
+            let outputSettings: [String: Any] = [
+                AVFormatIDKey: kAudioFormatLinearPCM,
+                AVSampleRateKey: 16000.0,
+                AVNumberOfChannelsKey: 1,
+                AVLinearPCMBitDepthKey: 32,
+                AVLinearPCMIsFloatKey: true,
+                AVLinearPCMIsBigEndianKey: false,
+                AVLinearPCMIsNonInterleaved: false
+            ]
+            let trackOutput = AVAssetReaderTrackOutput(track: track, outputSettings: outputSettings)
+            assetReader.add(trackOutput)
+            assetReader.startReading()
+            
+            var audioData: [Float] = []
+            while assetReader.status == .reading {
+                if let sampleBuffer = trackOutput.copyNextSampleBuffer() {
+                    if let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) {
+                        let length = CMBlockBufferGetDataLength(blockBuffer)
+                        var bytes = [UInt8](repeating: 0, count: length)
+                        CMBlockBufferCopyDataBytes(blockBuffer, atOffset: 0, dataLength: length, destination: &bytes)
+                        bytes.withUnsafeBytes { ptr in
+                            let floats = ptr.bindMemory(to: Float.self)
+                            audioData.append(contentsOf: floats)
+                        }
+                    }
+                }
+            }
+            if assetReader.status == .completed {
+                return audioData
+            } else {
+                print("Asset reader failed: \(String(describing: assetReader.error))")
+                return nil
+            }
+        } catch {
+            print("Failed to setup AVAssetReader: \(error)")
+            return nil
+        }
     }
 }

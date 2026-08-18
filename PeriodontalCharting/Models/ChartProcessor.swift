@@ -20,8 +20,9 @@ struct ChartProcessor {
             
             for (t, aspect, site) in seq {
                 guard mouthState[t] != nil else { continue }
+                guard valueIndex < command.values.count || isBroadcast else { break }
                 
-                let valStr = isBroadcast ? (command.values.first ?? "0") : (valueIndex < command.values.count ? command.values[valueIndex] : "0")
+                let valStr = isBroadcast ? (command.values.first ?? "0") : (command.values[valueIndex])
                 if !isBroadcast { valueIndex += 1 }
                 
                 let intValue = Int(valStr) ?? 0
@@ -224,8 +225,9 @@ struct ChartProcessor {
                                 let site = item.2
                                 
                                 guard mouthState[t] != nil else { continue }
+                                guard valueIndex < command.values.count || isBroadcast else { break }
                                 
-                                let valStr = isBroadcast ? command.values[0] : (valueIndex < command.values.count ? command.values[valueIndex] : "0")
+                                let valStr = isBroadcast ? command.values[0] : command.values[valueIndex]
                                 if !isBroadcast { valueIndex += 1 }
                                 
                                 let intValue = Int(valStr) ?? 0

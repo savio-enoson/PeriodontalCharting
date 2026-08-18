@@ -71,11 +71,14 @@ final class GatedAudioProcessor: AudioProcessing, @unchecked Sendable {
     /// Run the target-speaker extractor on routed spans. SEE THE HEADER — false on
     /// purpose, and it should stay false without new evidence.
     static var useExtractor = false
+    
+    /// When true, bypasses the actual microphone tap. Audio must be fed manually via ingestSimulationAudio.
+    var isSimulationMode = false
 
     // MARK: Collaborators
 
     private let inner = AudioProcessor()
-    private let gate: SpeakerGateService
+    private let gate: SpeakerGateService?
 
     // MARK: State (all behind `lock`)
 
@@ -100,7 +103,7 @@ final class GatedAudioProcessor: AudioProcessing, @unchecked Sendable {
 
     private var pump: Task<Void, Never>?
 
-    init(gate: SpeakerGateService) {
+    init(gate: SpeakerGateService?) {
         self.gate = gate
     }
 
@@ -153,12 +156,19 @@ final class GatedAudioProcessor: AudioProcessing, @unchecked Sendable {
         downstream = callback
         lock.unlock()
 
-        // The real recorder feeds US; we feed Whisper.
-        try inner.startRecordingLive(inputDeviceID: inputDeviceID) { [weak self] buffer in
-            self?.ingestRaw(buffer)
+        if !isSimulationMode {
+            // The real recorder feeds US; we feed Whisper.
+            try inner.startRecordingLive(inputDeviceID: inputDeviceID) { [weak self] buffer in
+                self?.ingestRaw(buffer)
+            }
         }
         startPump()
-        print("[GatedAudio] started — gain on, gate on, extractor \(Self.useExtractor ? "ON" : "off")")
+        print("[GatedAudio] started — gain on, gate on, extractor \(Self.useExtractor ? "ON" : "off") \(isSimulationMode ? "(SIMULATION)" : "")")
+    }
+
+    func ingestSimulationAudio(_ buffer: [Float]) {
+        guard isSimulationMode else { return }
+        ingestRaw(buffer)
     }
 
     func resumeRecordingLive(inputDeviceID: DeviceID?, callback: (([Float]) -> Void)?) throws {
@@ -240,9 +250,9 @@ final class GatedAudioProcessor: AudioProcessing, @unchecked Sendable {
         //
         // `extractor: nil` unless useExtractor. See the header.
         let extractor = Self.useExtractor ? TSEEngine.extractorUnsafe : nil
-        let results = (try? gate.appendEvaluation(audio: chunk,
-                                                  absoluteOffsetSeconds: absoluteOffset,
-                                                  extractor: extractor)) ?? []
+        let results = (try? gate?.appendEvaluation(audio: chunk,
+                                                   absoluteOffsetSeconds: absoluteOffset,
+                                                   extractor: extractor)) ?? []
 
         let cleaned = Self.silenceRejected(in: chunk, results: results, baseSample: base)
 
