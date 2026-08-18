@@ -241,9 +241,16 @@ extension SpeakerGateService {
         let separated = (try? gate.classify(extracted))
             ?? GateResult(verdict: .reject, distance: nil)
 
+        // BOTH BANDS COME FROM THE PROFILE. This read
+        // `d < TSEConfig.postAcceptThreshold` — a global 0.675 — for the accept
+        // band while taking the reject band from `gate.rejectThreshold`, which is
+        // per profile. A clinician who lowered their accept line was judged before
+        // extraction at their own operating point and after it at a stale global,
+        // and the two could disagree. That is the exact drift `routeThreshold` was
+        // deleted for; it had survived one line further down.
         let verdict: Verdict
         if let d = separated.distance {
-            verdict = d < TSEConfig.postAcceptThreshold ? .accept
+            verdict = d < gate.acceptThreshold ? .accept
                     : (d < gate.rejectThreshold ? .confirm : .reject)
         } else {
             verdict = .reject
@@ -301,7 +308,8 @@ extension SpeakerGateService {
                                      keepAudio: mode.splicesAudio))
         }
 
-        Self.log(results, mode: mode, fromFallback: fromFallback)
+        Self.log(results, mode: mode, fromFallback: fromFallback,
+                 acceptThreshold: gate.acceptThreshold)
         Self.logAudioLedger(results, chunkSeconds: chunkSeconds, mode: mode)
         guard mode.splicesAudio else {
             return GatedAudio(audio: audio, spans: results, judged: true)
@@ -819,14 +827,17 @@ extension SpeakerGateService {
     // then the distance and its margin.
     private static func log(_ results: [RescuedSpan],
                             mode: TSEConfig.Mode,
-                            fromFallback: Bool) {
+                            fromFallback: Bool,
+                            acceptThreshold: Double) {
         let source = fromFallback ? "win" : "nrg"
         for r in results {
             let d = r.distanceMixed
             let dText = d.map { String(format: "%.3f", $0) } ?? " --- "
             let cosText = r.similarity.map { String(format: "%.3f", $0) } ?? " --- "
             // Positive margin = inside the accept region. Negative = how far over.
-            let marginText = d.map { String(format: "%+.3f", TSEConfig.postAcceptThreshold - $0) } ?? "  --- "
+            // Measured against the PROFILE's accept line, which is the line the
+            // verdict beside it was actually decided at.
+            let marginText = d.map { String(format: "%+.3f", acceptThreshold - $0) } ?? "  --- "
 
             if r.routed {
                 // A frozen accept has no `d_sep` on purpose — "kept" says the

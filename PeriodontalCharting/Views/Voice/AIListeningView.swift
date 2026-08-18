@@ -80,7 +80,7 @@ struct AIListeningView: View {
                     // simulation mid-finish would race the final commit for the
                     // chart. AIVoiceViewModel guards against it, but greying the
                     // control is clearer than silently discarding one of them.
-                    .disabled(viewModel.isFinishing)
+//                    .disabled(viewModel.isFinishing) 
                 }
                 .padding(.bottom, 8)
                 
