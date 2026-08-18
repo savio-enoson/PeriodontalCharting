@@ -5,14 +5,15 @@ import Foundation
 /// Kept as the shared seam so callers (AIVoiceViewModel, tests) are unchanged.
 final class TokenizerManager {
     static let shared = TokenizerManager()
-
-    private init() {}
-
-    /// No-op retained for call-site compatibility. There is no model to load now
-    /// that the rule-based tokenizer is the only Phase 1 path.
-    func loadModel() {}
-
-    func tokenize(text: String, isFinal: Bool = false, currentMetric: AnnotationOperation? = nil) -> [VoiceToken] {
-        VoiceTokenizer.tokenize(text: text, isFinal: isFinal, currentMetric: currentMetric)
+    
+    init() {
+    }
+    
+    func loadModel() {
+        // No-op
+    }
+    
+    func tokenize(text: String, isFinal: Bool = false, currentMetric: AnnotationOperation? = nil, parserCurrentValues: Int = 0, parserExpectedValues: Int = 3) -> [VoiceToken] {
+        return VoiceTokenizer.tokenize(text: text, isFinal: isFinal, currentMetric: currentMetric, parserCurrentValues: parserCurrentValues, parserExpectedValues: parserExpectedValues)
     }
 }
