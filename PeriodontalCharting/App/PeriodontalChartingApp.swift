@@ -8,6 +8,7 @@
 import SwiftUI
 import SwiftData
 
+#if !REGRESSION_TEST
 @main
 struct PeriodontalChartingApp: App {
     init() {
@@ -38,3 +39,4 @@ struct PeriodontalChartingApp: App {
         }
     }
 }
+#endif

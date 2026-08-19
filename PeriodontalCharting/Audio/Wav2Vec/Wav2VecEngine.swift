@@ -128,7 +128,7 @@ class Wav2VecEngine: ObservableObject {
                 }
                 
                 // 3. Decode
-                let rawResult = decoder.decode(logits: logits2D, beamWidth: 10, isLivePreview: isLivePreview)
+                let rawResult = decoder.decode(logits: logits2D, beamWidth: 40, isLivePreview: isLivePreview)
                 return rawResult
                 
             } catch {

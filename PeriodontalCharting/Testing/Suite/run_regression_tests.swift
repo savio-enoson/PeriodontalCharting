@@ -4,56 +4,34 @@ import Accelerate
 
 @main
 struct RegressionRunner {
-    static func main() async throws {
-        let args = CommandLine.arguments
-        if args.count < 3 {
-            print("Usage: run_regression_tests <transcript.txt or audio.m4a> <ground_truth.json> [--save]")
-            return
-        }
-        
-        let transcriptPath = args[1] 
-        let groundTruthPath = args[2]
-        let saveMode = args.count > 3 && args[3] == "--save"
-        
+        static func main() async throws {
+        freopen("/Users/vio/XCodeProjects/PeriodontalCharting/test_out.txt", "w", stdout)
         UserDefaults.standard.set(false, forKey: "useMLTokenizer")
         
-        var mouth = ToothObject.fullMouthEmpty()
-        var parser = StatefulParser(configuration: ChartingConfiguration())
+        print("Starting DR LUCKY")
+        var mouth1 = ToothObject.fullMouthEmpty()
+        var parser1 = StatefulParser(configuration: ChartingConfiguration())
+        try await runAudioTest(path: "/Users/vio/XCodeProjects/PeriodontalCharting/PeriodontalCharting/Testing/Raw/dr_lucky_audio.m4a", parser: &parser1, mouth: &mouth1)
+        let diffs1 = ChartTestingUtilities.compareCharts(expected: try getExpected(path: "/Users/vio/XCodeProjects/PeriodontalCharting/PeriodontalCharting/Testing/Ground/ground_truth.json"), actual: mouth1)
+        print("DR LUCKY DIFFS:", diffs1)
         
-        if transcriptPath.hasSuffix(".m4a") || transcriptPath.hasSuffix(".wav") {
-            try await runAudioTest(path: transcriptPath, parser: &parser, mouth: &mouth)
-        } else {
-            try runTextTest(path: transcriptPath, parser: &parser, mouth: &mouth)
-        }
+        print("Starting STUDENT")
+        var mouth2 = ToothObject.fullMouthEmpty()
+        var parser2 = StatefulParser(configuration: ChartingConfiguration())
+        try await runAudioTest(path: "/Users/vio/XCodeProjects/PeriodontalCharting/PeriodontalCharting/Testing/Raw/student_audio.m4a", parser: &parser2, mouth: &mouth2)
+        let diffs2 = ChartTestingUtilities.compareCharts(expected: try getExpected(path: "/Users/vio/XCodeProjects/PeriodontalCharting/PeriodontalCharting/Testing/Ground/student_ground.json"), actual: mouth2)
+        print("STUDENT DIFFS:", diffs2)
         
-        if saveMode {
-            // Save the actual output as the new ground truth
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = .prettyPrinted
-            let array = Array(mouth.values).sorted(by: { $0.toothNumber < $1.toothNumber })
-            let data = try encoder.encode(array)
-            try data.write(to: URL(fileURLWithPath: groundTruthPath))
-            print("✅ SAVED: New ground truth written to \(groundTruthPath)")
-        } else {
-            // Read the ground truth JSON
-            let gtData = try Data(contentsOf: URL(fileURLWithPath: groundTruthPath))
-            let decoder = JSONDecoder()
-            let gtArray = try decoder.decode([ToothObject].self, from: gtData)
-            var expectedMouth: [Int: ToothObject] = [:]
-            for t in gtArray { expectedMouth[t.toothNumber] = t }
-            
-            // Compare
-            let diffs = ChartTestingUtilities.compareCharts(expected: expectedMouth, actual: mouth)
-            if diffs.isEmpty {
-                print("✅ PASSED: No differences found!")
-            } else {
-                print("❌ FAILED: Differences found:")
-                for d in diffs {
-                    print("  - \(d)")
-                }
-            }
-        }
-        print("--------------------------------------------------\n")
+        print("DONE")
+        exit(0)
+    }
+
+    static func getExpected(path: String) throws -> [Int: ToothObject] {
+        let gtData = try Data(contentsOf: URL(fileURLWithPath: path))
+        let gtArray = try JSONDecoder().decode([ToothObject].self, from: gtData)
+        var expectedMouth: [Int: ToothObject] = [:]
+        for t in gtArray { expectedMouth[t.toothNumber] = t }
+        return expectedMouth
     }
 
     static func runTextTest(path: String, parser: inout StatefulParser, mouth: inout [Int: ToothObject]) throws {
@@ -87,7 +65,6 @@ struct RegressionRunner {
         }
         
         Wav2VecAudioCapture.shared.resetConditioning()
-        Wav2VecAudioCapture.shared.conditionAudio(buffer: &audioData)
         
         print("Loaded \(audioData.count) audio samples (\(Double(audioData.count)/16000.0) seconds)")
         
@@ -117,8 +94,10 @@ struct RegressionRunner {
         
         while chunkIndex < audioData.count {
             let endIndex = min(chunkIndex + chunkSize, audioData.count)
-            let chunk = Array(audioData[chunkIndex..<endIndex])
+            var chunk = Array(audioData[chunkIndex..<endIndex])
             chunkIndex += chunkSize
+            
+            Wav2VecAudioCapture.shared.conditionAudio(buffer: &chunk)
             
             // Simple RMS energy calculation to emulate VAD speech detection
             var rms: Float = 0

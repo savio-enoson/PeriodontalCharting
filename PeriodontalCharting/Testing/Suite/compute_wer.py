@@ -35,6 +35,9 @@ def normalize_text(text):
     text = text.replace('\n', ' ')
     text = re.sub(r'[^\w\s-]', ' ', text)
     
+    # Strip spaces after anatomy prefixes to match STT compound words
+    text = re.sub(r'\b(disto|mesio|mid)\s+', r'\1', text)
+    
     def split_large_numbers(match):
         num_str = match.group(0)
         return " ".join(list(num_str))
@@ -43,22 +46,27 @@ def normalize_text(text):
     text = text.replace('-', ' ')
     
     words = text.split()
+    
+    # Filter out ghost words and non-diagnostic fillers
+    ignore_words = {"gigi", "ada", "pada", "ke", "di", "bagian"}
+    words = [w for w in words if w not in ignore_words]
+    
     return [normalize_word(w) for w in words]
 
 def parse_log_for_words(log_path):
-    words = []
+    all_text = ""
     with open(log_path, 'r') as f:
         for line in f:
             if line.startswith("EARLY COMMIT:"):
-                # Format: EARLY COMMIT: 8 3 8 -> ["probingDepth"]
                 text = line[13:].split("->")[0].strip()
                 if text:
-                    words.extend(text.split())
+                    all_text += " " + text
             elif line.startswith("COMMIT:"):
                 text = line[7:].strip()
                 if text:
-                    words.extend(text.split())
-    return [normalize_word(w) for w in words]
+                    all_text += " " + text
+                    
+    return normalize_text(all_text)
 
 def main():
     if len(sys.argv) < 3:

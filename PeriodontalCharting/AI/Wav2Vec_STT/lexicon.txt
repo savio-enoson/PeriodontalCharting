@@ -1,7 +1,6 @@
 ada	a d a
 akar	a k a r
 ampat	a m p a t
-an	a n
 atas	a t a s
 bagian	b a g i a n
 bawah	b a w a h
@@ -23,7 +22,6 @@ buk	b u k
 buka	b u k a
 bukal	b u k a l
 bukel	b u k e l
-da	d a
 dan	d a n
 dari	d a r i
 def	d e f
@@ -179,7 +177,6 @@ duwa	d u w a
 empan	e m p a n
 empat	e m p a t
 empet	e m p e t
-en	e n
 enam	e n a m
 engga	e n g g a
 enggak	e n g g a k
@@ -190,7 +187,6 @@ forkasi	f o r k a s i
 furgasi	f u r g a s i
 furkasi	f u r k a s i
 furkasion	f u r k a s i o n
-ga	g a
 gak	g a k
 gigi	g i g i
 gingival	g i n g i v a l
@@ -198,7 +194,6 @@ grade	g r a d e
 gubal	g u b a l
 hilang	h i l a n g
 hingga	h i n g g a
-igi	i g i
 impan	i m p a n
 impat	i m p a t
 impen	i m p e n
@@ -206,18 +201,19 @@ implan	i m p l a n
 implant	i m p l a n t
 implen	i m p l e n
 insisal	i n s i s a l
-kal	k a l
 kalculus	k a l c u l u s
 kalkul	k a l k u l
 kalkulus	k a l k u l u s
 kalus	k a l u s
 ke	k e
 kemudian	k e m u d i a n
+ket	k e t
 komit	k o m i t
 koronal	k o r o n a l
 kosong	k o s o n g
 labial	l a b i a l
 labiyal	l a b i y a l
+lak	l a k
 lalu	l a l u
 lanjut	l a n j u t
 lanjutkan	l a n j u t k a n
@@ -534,6 +530,7 @@ midpaletel	m i d p a l e t e l
 midpelatal	m i d p e l a t a l
 midpukal	m i d p u k a l
 midvocal	m i d v o c a l
+mili	m i l i
 minus	m i n u s
 misial	m i s i a l
 misialbikal	m i s i a l b i k a l
@@ -617,16 +614,18 @@ mulai	m u l a i
 nam	n a m
 nda	n d a
 ndak	n d a k
+nem	n e m
 nggak	n g g a k
 nol	n o l
 oklusal	o k l u s a l
-on	o n
+ope	o p e
 pada	p a d a
 palat	p a l a t
 palatal	p a l a t a l
 palatallima	p a l a t a l l i m a
 palato	p a l a t o
 paletel	p a l e t e l
+pat	p a t
 pelatal	p e l a t a l
 permukaan	p e r m u k a a n
 piope	p i o p e
