@@ -128,6 +128,12 @@ struct ChartDashboard: View {
                 }
                 
                 Button {
+                    showDebugMenu = true
+                } label: {
+                    Label("Debug", systemImage: "ladybug")
+                }
+
+                Button {
                     saveChart()
                 } label: {
                     Label(saveConfirmation ? "Saved" : "Save",
@@ -147,11 +153,6 @@ struct ChartDashboard: View {
                 } label: {
                     Label("Settings", systemImage: "gear")
                 }
-                .simultaneousGesture(
-                    LongPressGesture(minimumDuration: 2.0).onEnded { _ in
-                        showDebugMenu = true
-                    }
-                )
             }
             .foregroundStyle(.white)
             .padding(.horizontal, 20)
