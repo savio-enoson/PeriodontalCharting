@@ -15,13 +15,28 @@ struct NumberPadPopoverView: View {
     
     var body: some View {
         VStack(spacing: 12) {
+            // Dismiss button at top right
+            HStack {
+                Spacer()
+                Button {
+                    isPresented = false
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.headline)
+                        .foregroundStyle(.secondary)
+                        .padding(6)
+                        .background(Color(.secondarySystemBackground))
+                        .clipShape(Circle())
+                }
+            }
+            
             HStack {
                 Text(typedValue.isEmpty ? "\(currentValue)" : typedValue)
                     .font(.title2.bold())
                     .foregroundStyle(typedValue.isEmpty ? .secondary : .primary)
                     .frame(maxWidth: .infinity, alignment: .trailing)
                     .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
+                    .padding(.vertical, 16)
                     .background(Color(.secondarySystemBackground))
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                 
@@ -34,7 +49,7 @@ struct NumberPadPopoverView: View {
                         .font(.title2)
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 12)
-                        .padding(.vertical, 12)
+                        .padding(.vertical, 16)
                 }
             }
             
@@ -43,17 +58,8 @@ struct NumberPadPopoverView: View {
                     numButton("\(num)")
                 }
                 
-                Button {
-                    isPresented = false
-                } label: {
-                    Text("Cancel")
-                        .font(.headline)
-                        .foregroundStyle(.red)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .padding(.vertical, 12)
-                        .background(Color(.secondarySystemBackground))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                }
+                // Replaced Cancel with Negative sign
+                numButton("-")
                 
                 numButton("0")
                 
@@ -67,14 +73,14 @@ struct NumberPadPopoverView: View {
                         .font(.headline)
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .padding(.vertical, 12)
+                        .padding(.vertical, 16)
                         .background(Color.blue)
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
             }
         }
         .padding(16)
-        .frame(width: 260)
+        .frame(width: 270, height: 420) // Made the body taller and slightly wider
     }
     
     @ViewBuilder
@@ -85,8 +91,8 @@ struct NumberPadPopoverView: View {
             Text(text)
                 .font(.title2)
                 .foregroundStyle(.primary)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.vertical, 16)
                 .background(Color(.secondarySystemBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 8))
         }
