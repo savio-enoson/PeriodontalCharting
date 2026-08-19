@@ -282,9 +282,8 @@ A custom `HStack` overlaid at `.topTrailing` on a dark navy pill (`RoundedRectan
 | AI Mode | `apple.intelligence` | Toggle `showAIMode`, collapse sidebar, animate zoom to 1.75× |
 | 1 Column / 2 Columns | `rectangle.split.1x2` / `rectangle.split.2x2` | Toggle `isSingleColumn` |
 | Zoom | `magnifyingglass` | Toggles visibility of the zoom slider anchored to the bottom-right |
-| Debug | `ladybug` | Open `SelectionDebugMenu` sheet |
 | Export | `square.and.arrow.up` | Placeholder (not yet implemented) |
-| Settings | `gear` | Open `OnboardingView` sheet |
+| Settings | `gear` | Open `OnboardingView` sheet. A 2.0s long press opens the `SelectionDebugMenu` sheet instead. |
 
 **`ZoomableScrollView` and zoom implementation:**
 
@@ -413,8 +412,8 @@ A floating overlay panel that slides in from the trailing edge in AI Mode. Fills
 **Header controls:**
 
 - **AI Mode icon** — `apple.intelligence` SF Symbol with orange gradient and `.pulse` symbol effect.
-- **Live mic button** — Gated on `Wav2VecViewModel.isModelReady`. Shows a `ProgressView` spinner while the model is loading, then a `mic` / `mic.fill` icon. Tapping calls `viewModel.toggleLiveDictation()`. Active state renders the icon red with a pulse effect.
-- **Simulation play/stop button** — `play.circle.fill` / `stop.circle.fill`. Calls `viewModel.toggleSimulation(from: viewModel.selectedTestTranscript)`. Independent of the live mic — the two modes are mutually exclusive at runtime.
+- **Live dictation controls** — Gated on `Wav2VecEngine.shared.isModelLoaded`. Shows a `ProgressView` spinner while the model is loading, then a solid circular `mic.fill` start button. When dictation is active, this transitions into an `HStack` with a Stop button (red `square.fill`) and a Pause/Resume button (`pause.fill` / `mic.fill`) to pause the recording without ending the session.
+- **Simulation play/stop button** — Removed from the active view to avoid racing the final commit.
 
 **Speaker gate status strip** (visible only during live dictation):
 
@@ -479,6 +478,7 @@ An `@MainActor` `ObservableObject` that orchestrates the voice pipeline — both
 | `liveTranscription` | `String` | The raw incoming text stream, updated continuously during simulation or live dictation. |
 | `isListening` | `Bool` | True while the debug simulation is running. |
 | `isDictating` | `Bool` | True while real live dictation is active. The two modes are mutually exclusive. |
+| `isPaused` | `Bool` | True while live dictation is temporarily paused. |
 | `currentCommand` | `AnnotationCommand?` | The most recent command emitted by the parser. |
 | `commandHistory` | `[AnnotationCommand]` | Complete list of all applied mutations. `ChartDashboard` listens to this to rebuild the mouth. During live dictation, derived from the full preview transcript. |
 | `committedCommands` | `[AnnotationCommand]?` | Commands parsed from confirmed chunks only. `nil` during simulation/instant fill (no ghosting). Non-nil during live dictation — cells not in this set render ghosted. |
@@ -493,6 +493,7 @@ An `@MainActor` `ObservableObject` that orchestrates the voice pipeline — both
 
 - **`toggleSimulation(from:)`** — If already listening, stops the simulation. Otherwise starts it. Stops live dictation first (mutually exclusive).
 - **`toggleLiveDictation()`** — Primary public method called by `AIListeningView`. Wires `Wav2VecViewModel.onLiveTranscript` / `onConfirmedTranscript` callbacks and calls `startLiveDictation()` or `stopLiveDictation()` based on `isDictating`.
+- **`togglePauseLiveDictation()`** — Pauses or resumes an active live dictation session without destroying the ongoing session state or flushing the `StatefulParser`.
 - **`startSimulation(from:)`** *(private)* — Splits the transcript into words (expanding `\n`, `.`, `,` as discrete tokens). Resets state, then spawns an `@MainActor` bound `Task` that appends one word per loop iteration. Parsing is offloaded to a detached thread via `Task.detached` calling a `nonisolated` helper (`parseOffline`) to prevent UI hitching during dense token streams. Sets `committedCommands = nil` (no ghosting in simulation mode).
 - **`parseInstant(text:)`** — Stops any running simulation/dictation, runs a fresh `StatefulParser` with `isFinal: true` on the given text. Sets `committedCommands = nil` (no ghosting). Used by the Debug menu's **Fill Chart** and **Test Debug Transcript** buttons.
 - **`startLiveDictation()`** — Hooks `Wav2VecViewModel.onLiveTranscript` → `ingestPreview` (full transcript → chart preview) and `onConfirmedTranscript` → `ingestCommitted` (confirmed-only → committed set). Calls `Wav2VecViewModel.startLive()`.
@@ -517,18 +518,19 @@ A developer `.sheet` presented as a `NavigationStack` with `List` sections. Rece
 
 **Section: Chart Overrides**
 - **All Implants** toggle — sets `implant = true/false` on every tooth in `mouth` directly via the binding. No parser involvement.
+- **Fill Random Data** — overwrites `mouth` with `ToothObject.fullMouthMock()`.
 
 **Section: Speaker Gate (TSE)**
+- **Enable TSE (Extraction & Gate)** toggle — bound to `TSEConfig.mode`. Toggles the target speech extraction pipeline between `.enforce` (on) and `.off`.
 - `NavigationLink` to `SpeakerGateDebugView`, which is the enrollment + verification test harness for the ECAPA-TDNN speaker gate.
 
-**Section: Session Recorder**
-- Toggle for `SessionRecorder` (records raw+gated audio per session for debug).
-
-**Section: NLP Phase 1 Tokenizer**
-- `Toggle` bound to `@AppStorage("useMLTokenizer")`. Switches the active Phase 1 tokenizer at runtime between `MLVoiceTokenizer` (IndoBERT CoreML) and the rule-based `VoiceTokenizer` without restarting the app.
+**Section: Audio File Streaming**
+- `Picker` to select an audio file (Dr. Lucky, Student, Dr. Gaby) and `Slider` for speed multiplier.
+- **Start File Simulation** — calls `aiViewModel.audioFileSimulation` to simulate dictation directly from a bundled `.m4a` file.
 
 **Section: AI Simulation**
 - `Slider` for `aiViewModel.wpm` in the range 20–300, step 10.
+- **Start Simulation** — simulates a running voice transcript word-by-word.
 
 **Section: Instant Fill (Testing)**
 - `Picker` bound to `aiViewModel.selectedTestTranscriptName` listing all entries in `TestTranscripts.all`.
@@ -536,9 +538,8 @@ A developer `.sheet` presented as a `NavigationStack` with `List` sections. Rece
 - **Test Debug Transcript** button — calls `aiViewModel.parseInstant(text: AIVoiceViewModel.debugTranscript)` with the static hardcoded debug transcript string for quick iteration without the picker.
 - **Clear Chart** (destructive) — calls `parseInstant(text: "")` and removes all `selectionModel.selectedCells`.
 
-**Section: Regression Testing**
-- **Save as Ground Truth** — parses the currently selected transcript via `ChartTestingUtilities.parseTranscript(text:config:)`, then writes the resulting `[ToothObject]` JSON array to the ground truth file. Shows a success/failure alert.
-- **Test vs Ground Truth** — loads the ground truth JSON, re-parses the selected transcript, and calls `ChartTestingUtilities.compareCharts(expected:actual:)`. Results are displayed in an alert: `✅ Regression Test PASSED` or `❌ Regression Test FAILED` with per-tooth difference strings.
+**Section: Clear**
+- **Clear All Selections** (destructive) — empties `selectionModel.selectedCells`.
 
 > [!NOTE]
 > On a **physical iOS device**, ground truth files are written to the app’s `Documents/` sandbox folder. On the **Simulator** or macOS, `#if targetEnvironment(simulator)` directs the save path directly to the project’s `Testing/Ground/` folder so files are checked into source control immediately.
