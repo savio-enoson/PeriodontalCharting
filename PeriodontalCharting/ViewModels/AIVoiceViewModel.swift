@@ -203,6 +203,25 @@ resesi 18, 17, 16, -1 -1
                 self.uncommittedTranscription = fullText
             }
         }
+        wav2VecTranscriber.isCommandBoundary = { [weak self] uncommittedText in
+            guard let self = self, let parser = self.sessionParser else { return false }
+            if uncommittedText.trimmingCharacters(in: .whitespaces).isEmpty { return false }
+            
+            var testParser = parser
+            let parserCurrentValues = testParser.pendingNumbers.count
+            let parserExpectedValues = testParser.activeSelection?.expectedSlots ?? 3
+            let tokens = TokenizerManager.shared.tokenize(text: uncommittedText, isFinal: false, currentMetric: testParser.cursor.currentMetric, parserCurrentValues: parserCurrentValues, parserExpectedValues: parserExpectedValues)
+            
+            let prevCommands = testParser.commands.count
+            testParser.consume(tokens: tokens, isFinal: false)
+            
+            let commandCompleted = testParser.commands.count > prevCommands
+            let noPendingNumbers = testParser.pendingNumbers.isEmpty
+            let noPendingAnatomies = testParser.pendingAnatomies.isEmpty
+            let noPendingTeeth = testParser.pendingTeeth.isEmpty
+            
+            return commandCompleted && noPendingNumbers && noPendingAnatomies && noPendingTeeth
+        }
         wav2VecTranscriber.onConfirmedTranscript = { [weak self] confirmed in
             guard let self = self else { return }
             self.processConfirmedChunk(confirmed)
@@ -266,6 +285,25 @@ resesi 18, 17, 16, -1 -1
             } else {
                 self.uncommittedTranscription = fullText
             }
+        }
+        wav2VecTranscriber.isCommandBoundary = { [weak self] uncommittedText in
+            guard let self = self, let parser = self.sessionParser else { return false }
+            if uncommittedText.trimmingCharacters(in: .whitespaces).isEmpty { return false }
+            
+            var testParser = parser
+            let parserCurrentValues = testParser.pendingNumbers.count
+            let parserExpectedValues = testParser.activeSelection?.expectedSlots ?? 3
+            let tokens = TokenizerManager.shared.tokenize(text: uncommittedText, isFinal: false, currentMetric: testParser.cursor.currentMetric, parserCurrentValues: parserCurrentValues, parserExpectedValues: parserExpectedValues)
+            
+            let prevCommands = testParser.commands.count
+            testParser.consume(tokens: tokens, isFinal: false)
+            
+            let commandCompleted = testParser.commands.count > prevCommands
+            let noPendingNumbers = testParser.pendingNumbers.isEmpty
+            let noPendingAnatomies = testParser.pendingAnatomies.isEmpty
+            let noPendingTeeth = testParser.pendingTeeth.isEmpty
+            
+            return commandCompleted && noPendingNumbers && noPendingAnatomies && noPendingTeeth
         }
         wav2VecTranscriber.onConfirmedTranscript = { [weak self] confirmed in
             guard let self = self else { return }

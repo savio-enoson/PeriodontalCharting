@@ -9,6 +9,22 @@ SDK=$(xcrun --sdk macosx --show-sdk-path)
 
 SOURCES=(
   "$PROJ/PeriodontalCharting/Testing/Suite/run_regression_tests.swift"
+  # Audio — Signal
+  "$PROJ/PeriodontalCharting/Audio/Signal/HighPassFilter.swift"
+  "$PROJ/PeriodontalCharting/Audio/Signal/AutoGain.swift"
+  # Audio — Speaker & TSE & Profiles
+  "$PROJ/PeriodontalCharting/Audio/Speaker/SpeakerGate.swift"
+  "$PROJ/PeriodontalCharting/Audio/Speaker/SpeakerGateService.swift"
+  "$PROJ/PeriodontalCharting/Audio/TSE/TSEConfig.swift"
+  "$PROJ/PeriodontalCharting/Audio/TSE/TSEEngine.swift"
+  "$PROJ/PeriodontalCharting/Audio/TSE/TSEExtractor.swift"
+  "$PROJ/PeriodontalCharting/Audio/TSE/TSEFeatures.swift"
+  "$PROJ/PeriodontalCharting/Audio/TSE/TSERescue.swift"
+  "$PROJ/PeriodontalCharting/Audio/Transcription/TranscriptionEngine.swift"
+  "$PROJ/PeriodontalCharting/Audio/Profiles/CalibrationTake.swift"
+  "$PROJ/PeriodontalCharting/Audio/Profiles/VoiceProfile.swift"
+  "$PROJ/PeriodontalCharting/Audio/Profiles/VoiceProfileStore.swift"
+  "$PROJ/PeriodontalCharting/Debug/SessionRecorder.swift"
   # Audio — Wav2Vec2
   # Audio — Wav2Vec
   "$PROJ/PeriodontalCharting/Audio/Wav2Vec/Wav2VecEngine.swift"

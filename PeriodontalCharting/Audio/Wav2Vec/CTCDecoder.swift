@@ -27,11 +27,8 @@ struct Beam {
 
 class CTCDecoder {
 
-    // The bar a word must clear to survive. Named rather than left as a bare
-    // `4.5` at the comparison site, because it is an operating point and not an
-    // implementation detail. See TSE_ISSUES.md for the length-bias caveat.
-    static let maxCostPerLetter: Float = 3.0
-
+    // The bar a word must clear to survive.
+    static let maxCostPerFrame: Float = 2.0
 
     var labels: [String] = []
     let trie: PrefixTrie
@@ -102,13 +99,19 @@ class CTCDecoder {
         let initialBeam = Beam(text: "", lastCharIndex: -1, probBlank: 0.0, probNonBlank: negInf, lastSpaceFrame: -1, wordCosts: [], currentWordCost: 0.0)
         beams[initialBeam.state] = initialBeam
         
+        // We need to track wordFrames to calculate costPerFrame
+        var beamWordFrames: [BeamState: [Int]] = [initialBeam.state: []]
+        
         for t in 0..<logProbs.count {
             let stepLogits = logProbs[t]
             let maxLogit = stepLogits.max() ?? 0.0
             
             var nextBeams: [BeamState: Beam] = [:]
+            var nextBeamWordFrames: [BeamState: [Int]] = [:]
             
-            for (_, beam) in beams {
+            for (state, beam) in beams {
+                let currentWordFrames = beamWordFrames[state] ?? []
+                
                 // 1. Extension with blank
                 let pBlank = stepLogits[blankIndex]
                 if pBlank > -20.0 { // minor pruning
@@ -117,18 +120,20 @@ class CTCDecoder {
                     newBeam.probNonBlank = negInf
                     newBeam.lastCharIndex = -1 // Reset last char
                     
-                    let state = newBeam.state
-                    if let existing = nextBeams[state] {
+                    let newState = newBeam.state
+                    if let existing = nextBeams[newState] {
                         if newBeam.totalProb > existing.totalProb {
                             newBeam.probBlank = max(newBeam.probBlank, existing.probBlank)
-                            nextBeams[state] = newBeam
+                            nextBeams[newState] = newBeam
+                            nextBeamWordFrames[newState] = currentWordFrames
                         } else {
                             var updatedExisting = existing
                             updatedExisting.probBlank = max(updatedExisting.probBlank, newBeam.probBlank)
-                            nextBeams[state] = updatedExisting
+                            nextBeams[newState] = updatedExisting
                         }
                     } else {
-                        nextBeams[state] = newBeam
+                        nextBeams[newState] = newBeam
+                        nextBeamWordFrames[newState] = currentWordFrames
                     }
                 }
                 
@@ -137,13 +142,14 @@ class CTCDecoder {
                     if c == blankIndex || label.isEmpty { continue }
                     
                     let pChar = stepLogits[c]
-                    if pChar < -10.0 { continue } // prune highly unlikely chars
+                    if pChar < -15.0 { continue } // prune highly unlikely chars
                     
                     var newText = beam.text
                     let isRepeat = (c == beam.lastCharIndex)
                     
                     var newLastSpaceFrame = beam.lastSpaceFrame
                     var newWordCosts = beam.wordCosts
+                    var newWordFrames = currentWordFrames
                     var newCurrentWordCost = beam.currentWordCost + (maxLogit - pChar)
                     
                     if !isRepeat {
@@ -151,6 +157,7 @@ class CTCDecoder {
                         if label == " " {
                             newLastSpaceFrame = t
                             newWordCosts.append(newCurrentWordCost)
+                            newWordFrames.append(max(1, t - beam.lastSpaceFrame))
                             newCurrentWordCost = 0.0
                         }
                     }
@@ -159,6 +166,16 @@ class CTCDecoder {
                     var activeText = newText
                     var activeLastSpaceFrame = newLastSpaceFrame
                     var beamProbPenalty: Float = 0.0
+                    
+                    if !isRepeat && label == " " {
+                        let words = activeText.split(separator: " ", omittingEmptySubsequences: true)
+                        if let completedWord = words.last {
+                            let anatomyTerms: Set<String> = ["lingual", "mesiolingual", "distolingual", "mesio", "disto", "bukal", "mesiobukal", "distobukal", "palatal", "labial"]
+                            if anatomyTerms.contains(String(completedWord)) {
+                                beamProbPenalty -= 3.0 // Shallow fusion anatomy bonus
+                            }
+                        }
+                    }
                     
                     if !isRepeat {
                         if !trie.isValidPrefix(sequence: activeText) {
@@ -171,9 +188,16 @@ class CTCDecoder {
                                     activeLastSpaceFrame = t
                                     beamProbPenalty = 2.0 // Penalize fracturing
                                     
+                                    let anatomyTerms: Set<String> = ["lingual", "mesiolingual", "distolingual", "mesio", "disto", "bukal", "mesiobukal", "distobukal", "palatal", "labial"]
+                                    if anatomyTerms.contains(String(lastWord)) {
+                                        beamProbPenalty -= 3.0 // Shallow fusion anatomy bonus overrides fracture penalty
+                                    }
+                                    
                                     // Implicit space was injected!
                                     newWordCosts = beam.wordCosts
                                     newWordCosts.append(beam.currentWordCost)
+                                    newWordFrames = currentWordFrames
+                                    newWordFrames.append(max(1, t - beam.lastSpaceFrame))
                                     // The new letter's cost applies to the NEXT word
                                     newCurrentWordCost = (maxLogit - pChar)
                                 } else {
@@ -194,18 +218,20 @@ class CTCDecoder {
                     newBeam.wordCosts = newWordCosts
                     newBeam.currentWordCost = newCurrentWordCost
                     
-                    let state = newBeam.state
-                    if let existing = nextBeams[state] {
+                    let newState = newBeam.state
+                    if let existing = nextBeams[newState] {
                         if newBeam.totalProb > existing.totalProb {
                             newBeam.probNonBlank = max(newBeam.probNonBlank, existing.probNonBlank)
-                            nextBeams[state] = newBeam
+                            nextBeams[newState] = newBeam
+                            nextBeamWordFrames[newState] = newWordFrames
                         } else {
                             var updatedExisting = existing
                             updatedExisting.probNonBlank = max(updatedExisting.probNonBlank, newBeam.probNonBlank)
-                            nextBeams[state] = updatedExisting
+                            nextBeams[newState] = updatedExisting
                         }
                     } else {
-                        nextBeams[state] = newBeam
+                        nextBeams[newState] = newBeam
+                        nextBeamWordFrames[newState] = newWordFrames
                     }
                 }
             }
@@ -213,12 +239,15 @@ class CTCDecoder {
             // Prune to beam width
             let sortedNext = nextBeams.values.sorted(by: { $0.totalProb > $1.totalProb })
             beams.removeAll(keepingCapacity: true)
+            beamWordFrames.removeAll(keepingCapacity: true)
             for b in sortedNext.prefix(beamWidth) {
                 beams[b.state] = b
+                beamWordFrames[b.state] = nextBeamWordFrames[b.state] ?? []
             }
         }
         
         let bestBeam = beams.values.max(by: { $0.totalProb < $1.totalProb })
+        let bestBeamWordFrames = beamWordFrames[bestBeam?.state ?? BeamState(text: "", lastCharIndex: -1)] ?? []
         let sortedBeams = beams.values.sorted(by: { $0.totalProb > $1.totalProb }).prefix(3)
         print("--- TOP 3 BEAMS ---")
         for (i, beam) in sortedBeams.enumerated() {
@@ -235,57 +264,44 @@ class CTCDecoder {
         
         var finalWords = constrainedText.split(separator: " ").map(String.init)
         var finalWordCosts = bestBeam?.wordCosts ?? []
+        var finalWordFrames = bestBeamWordFrames
         if !hasTrailingSpace {
             finalWordCosts.append(bestBeam?.currentWordCost ?? 0.0)
+            finalWordFrames.append(max(1, logProbs.count - lastSpaceFrame))
         }
         
         if !hasTrailingSpace {
             if let lastWord = finalWords.last, !trie.isWord(lastWord) {
                 finalWords.removeLast() // Hard commit: only drop if it's an invalid partial
                 if !finalWordCosts.isEmpty { finalWordCosts.removeLast() }
+                if !finalWordFrames.isEmpty { finalWordFrames.removeLast() }
             }
         }
         
         // 2. Evaluate Acoustic Cost per word!
-        // This completely replaces Levenshtein. It strictly catches phonetic hallucinations 
-        // by looking at how hard the Trie had to fight the acoustic model's top probabilities.
         var filteredWords: [String] = []
-        for i in 0..<finalWords.count {
+        for i in 0..<min(finalWords.count, finalWordCosts.count) {
             let word = finalWords[i]
             let cost = finalWordCosts[i]
+            let frames = (i < finalWordFrames.count) ? finalWordFrames[i] : 1
             
-            // Normalize cost by word length
-            let costPerLetter = cost / Float(max(1, word.count))
+            // Normalize cost by frames spanned
+            let costPerFrame = cost / Float(max(1, frames))
 
-            // If the cost per letter is very high, it means the model was heavily
-            // fighting the dictionary — i.e. a hallucination (like "sampai" forced
-            // out of static). Enforced on ALL inferences, live preview included,
-            // so the UI does not jitter.
-            //
-            // KNOWN BIAS, see TSE_ISSUES.md P0. Dividing by LETTER count makes
-            // short words structurally expensive: a CTC beam cost carries a
-            // component that does not scale with length (the trie's fight at word
-            // boundaries), so a 3-letter word amortises it over fewer letters.
-            // Every word this has rejected in a captured session is <= 5 letters
-            // and among the most frequent in the language — including `dua` (2)
-            // and `enam` (6), which are chart values. Normalising by frames
-            // spanned rather than letters would remove the bias; that change needs
-            // a measured distribution behind it.
-            var threshold = Self.maxCostPerLetter
+            var threshold: Float = 1.5 // Relaxed default threshold
             
-            // Destructive modifiers are rarely mumbled. If hallucinated, they destroy
-            // the entire chart state (e.g. applying a value to all teeth or opening a massive range).
-            // We hold them to a much stricter acoustic standard to prevent cascading failures.
             let strictModifiers: Set<String> = ["semua", "semuanya", "seluruh", "seluruhnya", "sampai", "hingga", "tika", "tike"]
             if strictModifiers.contains(word) {
-                threshold = 1.0
+                threshold = 0.2 // Tighter threshold for strict modifiers
             }
             
-            let accepted = costPerLetter <= threshold
+            let accepted = costPerFrame <= threshold
             if accepted {
                 filteredWords.append(word)
             } else {
-                print("⚠️ WORD REJECTED via Acoustic Cost: '\(word)' (Cost per letter: \(costPerLetter))")
+                if !isLivePreview {
+                    print("⚠️ WORD REJECTED via Acoustic Cost: '\(word)' (Cost per frame: \(costPerFrame))")
+                }
             }
         }
         
@@ -294,18 +310,20 @@ class CTCDecoder {
         // 3. Apply canonical mapping for multi-word phrases and variants
         // Sort keys by length descending so longer phrases match first
         let sortedKeys = dynamicMapping.keys.sorted { $0.count > $1.count }
-        for key in sortedKeys {
-            if finalString.contains(key) {
-                let escapedKey = NSRegularExpression.escapedPattern(for: key)
-                let pattern = "\\b\(escapedKey)\\b"
-                if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
-                    let range = NSRange(location: 0, length: finalString.utf16.count)
-                    finalString = regex.stringByReplacingMatches(
-                        in: finalString,
-                        options: [],
-                        range: range,
-                        withTemplate: dynamicMapping[key]!
-                    )
+        for _ in 0..<2 {
+            for key in sortedKeys {
+                if finalString.contains(key) {
+                    let escapedKey = NSRegularExpression.escapedPattern(for: key)
+                    let pattern = "\\b\(escapedKey)\\b"
+                    if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
+                        let range = NSRange(location: 0, length: finalString.utf16.count)
+                        finalString = regex.stringByReplacingMatches(
+                            in: finalString,
+                            options: [],
+                            range: range,
+                            withTemplate: dynamicMapping[key]!
+                        )
+                    }
                 }
             }
         }

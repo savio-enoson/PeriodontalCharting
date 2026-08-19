@@ -265,72 +265,74 @@ final class TargetSpeakerExtractor: @unchecked Sendable {
 
         var start = 0
         while start < frames {
-            let count = min(block, frames - start)
+            try autoreleasepool {
+                let count = min(block, frames - start)
 
-            // ---- tfmap: attend this block's magnitudes over the enrollment.
-            // Frame-local by construction (each mix frame attends enrollment
-            // frames only), so computing it per block is identical to computing
-            // it over the whole span.
-            for k in 0..<TSEConfig.bins {
-                for t in 0..<block {
-                    blockMag[k * block + t] = t < count ? mixMag[k * frames + start + t] : 0
+                // ---- tfmap: attend this block's magnitudes over the enrollment.
+                // Frame-local by construction (each mix frame attends enrollment
+                // frames only), so computing it per block is identical to computing
+                // it over the whole span.
+                for k in 0..<TSEConfig.bins {
+                    for t in 0..<block {
+                        blockMag[k * block + t] = t < count ? mixMag[k * frames + start + t] : 0
+                    }
                 }
-            }
-            Self.computeTFMap(mixMagnitude: blockMag,
-                              enrollNormalised: enrollMag,
-                              enrollFrames: enrollFrames,
-                              blockFrames: block,
-                              into: &tfmap)
+                Self.computeTFMap(mixMagnitude: blockMag,
+                                  enrollNormalised: enrollMag,
+                                  enrollFrames: enrollFrames,
+                                  blockFrames: block,
+                                  into: &tfmap)
 
-            // ---- spec_ri: (1, 3, bins, block) = [real, imag, tfmap]
-            let ri = specRI.dataPointer.assumingMemoryBound(to: Float.self)
-            for k in 0..<TSEConfig.bins {
-                let rowOut = k * block
-                for t in 0..<block {
-                    let inside = t < count
-                    let src = k * frames + start + t
-                    ri[0 * TSEConfig.bins * block + rowOut + t] = inside ? spec.real[src] : 0
-                    ri[1 * TSEConfig.bins * block + rowOut + t] = inside ? spec.imag[src] : 0
-                    ri[2 * TSEConfig.bins * block + rowOut + t] = tfmap[rowOut + t]
+                // ---- spec_ri: (1, 3, bins, block) = [real, imag, tfmap]
+                let ri = specRI.dataPointer.assumingMemoryBound(to: Float.self)
+                for k in 0..<TSEConfig.bins {
+                    let rowOut = k * block
+                    for t in 0..<block {
+                        let inside = t < count
+                        let src = k * frames + start + t
+                        ri[0 * TSEConfig.bins * block + rowOut + t] = inside ? spec.real[src] : 0
+                        ri[1 * TSEConfig.bins * block + rowOut + t] = inside ? spec.imag[src] : 0
+                        ri[2 * TSEConfig.bins * block + rowOut + t] = tfmap[rowOut + t]
+                    }
                 }
-            }
 
-            // ---- the four per-block models. Outputs are handed straight to the
-            // next model, so nothing large is copied through Swift arrays.
-            let features = try predict(frontend, ["spec_ri": specRI], output: "features")
-            let conditioned = try predict(conditioning,
-                                          ["features": features, "enroll_kv": kv],
-                                          output: "conditioned")
-            let separatorOut = try separator.prediction(
-                from: MLDictionaryFeatureProvider(dictionary: [
-                    "features": conditioned, "h_in": h, "c_in": c
-                ]))
-            guard let separated = separatorOut.featureValue(for: "separated")?.multiArrayValue,
-                  let hOut = separatorOut.featureValue(for: "h_out")?.multiArrayValue,
-                  let cOut = separatorOut.featureValue(for: "c_out")?.multiArrayValue else {
-                throw ExtractorError.unexpectedIO("TargetSeparator outputs missing")
-            }
-            h = hOut; c = cOut       // carry (h, c) — the ONLY state in this model
+                // ---- the four per-block models. Outputs are handed straight to the
+                // next model, so nothing large is copied through Swift arrays.
+                let features = try predict(frontend, ["spec_ri": specRI], output: "features")
+                let conditioned = try predict(conditioning,
+                                              ["features": features, "enroll_kv": kv],
+                                              output: "conditioned")
+                let separatorOut = try separator.prediction(
+                    from: MLDictionaryFeatureProvider(dictionary: [
+                        "features": conditioned, "h_in": h, "c_in": c
+                    ]))
+                guard let separated = separatorOut.featureValue(for: "separated")?.multiArrayValue,
+                      let hOut = separatorOut.featureValue(for: "h_out")?.multiArrayValue,
+                      let cOut = separatorOut.featureValue(for: "c_out")?.multiArrayValue else {
+                    throw ExtractorError.unexpectedIO("TargetSeparator outputs missing")
+                }
+                h = hOut; c = cOut       // carry (h, c) — the ONLY state in this model
 
-            let maskOut = try masker.prediction(
-                from: MLDictionaryFeatureProvider(dictionary: ["separated": separated]))
-            guard let mr = maskOut.featureValue(for: "mask_real")?.multiArrayValue,
-                  let mi = maskOut.featureValue(for: "mask_imag")?.multiArrayValue else {
-                throw ExtractorError.unexpectedIO("TSEMasker outputs missing")
-            }
-            Self.read(mr, into: &maskReal)
-            Self.read(mi, into: &maskImag)
+                let maskOut = try masker.prediction(
+                    from: MLDictionaryFeatureProvider(dictionary: ["separated": separated]))
+                guard let mr = maskOut.featureValue(for: "mask_real")?.multiArrayValue,
+                      let mi = maskOut.featureValue(for: "mask_imag")?.multiArrayValue else {
+                    throw ExtractorError.unexpectedIO("TSEMasker outputs missing")
+                }
+                Self.read(mr, into: &maskReal)
+                Self.read(mi, into: &maskImag)
 
-            // ---- complex ratio mask: adjusts magnitude AND phase. A
-            // magnitude-only mask cannot fix timing, which is why this is not
-            // just a multiply of the magnitudes.
-            for k in 0..<TSEConfig.bins {
-                for t in 0..<count {
-                    let src = k * frames + start + t
-                    let m = k * block + t
-                    let re = spec.real[src], im = spec.imag[src]
-                    estReal[src] = re * maskReal[m] - im * maskImag[m]
-                    estImag[src] = re * maskImag[m] + im * maskReal[m]
+                // ---- complex ratio mask: adjusts magnitude AND phase. A
+                // magnitude-only mask cannot fix timing, which is why this is not
+                // just a multiply of the magnitudes.
+                for k in 0..<TSEConfig.bins {
+                    for t in 0..<count {
+                        let src = k * frames + start + t
+                        let m = k * block + t
+                        let re = spec.real[src], im = spec.imag[src]
+                        estReal[src] = re * maskReal[m] - im * maskImag[m]
+                        estImag[src] = re * maskImag[m] + im * maskReal[m]
+                    }
                 }
             }
             start += block

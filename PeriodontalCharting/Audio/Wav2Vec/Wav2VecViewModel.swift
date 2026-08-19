@@ -43,6 +43,7 @@ final class Wav2VecViewModel {
     // updates the on-screen text and nothing else.
     var onLiveTranscript: ((String) -> Void)?
     var onConfirmedTranscript: ((String) -> Void)?
+    var isCommandBoundary: (@MainActor (String) -> Bool)?
 
     private var streamingBuffer: [Float] = []
     private var committedHistory: [String] = []
@@ -474,6 +475,21 @@ final class Wav2VecViewModel {
                     let live = (self.committedHistory + [result]).joined(separator: " ")
                     self.transcript = live
                     self.onLiveTranscript?(live)
+                    
+                    let textToCheck = result
+                    Task { @MainActor [weak self] in
+                        guard let self = self else { return }
+                        if self.isCommandBoundary?(textToCheck) == true {
+                            if self.streamingBuffer.count >= 16000 {
+                                let chunkToCommit = self.streamingBuffer
+                                self.streamingBuffer.removeAll()
+                                self.silenceFrames = 0
+                                self.hasStartedSpeaking = false
+                                self.lastProcessedBufferCount = 0
+                                self.commit(chunkToCommit)
+                            }
+                        }
+                    }
                 }
             }
         }
