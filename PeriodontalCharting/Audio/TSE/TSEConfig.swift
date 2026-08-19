@@ -140,11 +140,16 @@ enum TSEConfig {
     // WHICH SPANS GO THROUGH THE EXTRACTOR. This is the open question, and the
     // two answers are one word apart on purpose.
     //
-    //   rescueOnly  extract only spans the gate did not accept. Clean speech
-    //               reaches Wav2Vec bit-exact, so extraction artefacts can never
-    //               cost a word that was already going to be transcribed right.
+    //   rescueOnly  extract the spans the gate did NOT accept — `confirm` and
+    //               `reject`. Accepted speech reaches Wav2Vec bit-exact, so
+    //               extraction artefacts can never cost a word that was already
+    //               going to be transcribed right.
     //   everySpan   extract every judged span, so Wav2Vec always sees a signal
     //               with the other voice suppressed.
+    //
+    // `.rescueOnly` routes its two bands for different reasons — `reject` to win
+    // the span back, `confirm` for the ASR only, since a confirm's verdict is
+    // frozen. The decision table in `TSERescue.shouldExtract` is the detail.
     //
     // WHAT THE EXISTING BENCH DOES AND DOES NOT SETTLE. "Gate 1 (do no harm)
     // killed every always-on candidate" was measured on SPEAKER DISTANCE — does
@@ -156,8 +161,10 @@ enum TSEConfig {
     // ratio mask punches spectral holes, and a CTC acoustic model that never saw
     // enhanced audio in training can lose phonemes to them — the same failure
     // Wav2VecEngine already pads white noise to avoid at the buffer edge. The
-    // real risk of `.rescueOnly` is the friend's point: a `confirm`-band span
-    // that IS the clinician, transcribed through the other voice.
+    // risk `.rescueOnly` used to carry was the friend's point — a `confirm`-band
+    // span that IS the clinician, transcribed through the other voice. Routing
+    // `confirm` closes that, and buys the artefact risk on those spans instead;
+    // only `accept` is bit-exact now.
     //
     // Both are measurable with the same recording. `[TSE/cover]` logs the split
     // per chunk so an A/B is a rebuild, not a re-instrument.

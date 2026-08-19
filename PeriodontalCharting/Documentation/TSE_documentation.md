@@ -286,9 +286,13 @@ Static, pure. Returns `true` only when ALL of:
 | Verdict | `.rescueOnly` | `.everySpan` |
 |---|---|---|
 | `.accept` | no (pass bit-exact) | yes (verdict frozen) |
-| `.confirm` | no (pass bit-exact) | yes (verdict frozen) |
+| `.confirm` | yes (verdict frozen) | yes (verdict frozen) |
 | `.reject` | yes | yes |
 | `.tooShort` | no | no |
+
+`.rescueOnly` routes its two bands for different reasons: `.reject` to re-judge and
+win the span back, `.confirm` for the decoder's benefit only — a confirm's verdict
+is frozen and extraction cannot move it. Only `.accept` reaches Wav2Vec bit-exact.
 
 ### Verdict Revision in `route()`
 

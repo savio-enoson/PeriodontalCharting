@@ -151,17 +151,33 @@ extension SpeakerGateService {
     //
     //                     .rescueOnly   .everySpan
     //     accept              no           yes      (audio only — verdict frozen)
-    //     confirm             no           yes      (audio only — verdict frozen)
+    //     confirm             yes          yes      (audio only — verdict frozen)
     //     reject              yes          yes
     //     tooShort            no           no
     //
-    // `.rescueOnly` routes EXACTLY what the freeze rule lets extraction re-judge,
-    // and nothing else. It used to route `confirm` too, on the reading that
-    // "anything not accepted might need saving" — but a confirm already passes
-    // `passesGate`, so once its verdict is frozen there is no outcome extraction
-    // can improve. All it can do is spend ~1 s and hand the decoder the audible
-    // masking artefact (measured 5 of 6 spans in one session, ~4.9 s of extraction
-    // for zero possible verdict change).
+    // `.rescueOnly` ROUTES `confirm` AS WELL AS `reject`, and the two are routed
+    // for DIFFERENT REASONS — do not collapse them.
+    //
+    //   reject   the span is lost as things stand, so `d_sep` is re-judged and
+    //            extraction can win the span back. A VERDICT decision.
+    //   confirm  the verdict is frozen and cannot move (see the freeze rule in
+    //            `route`). Extraction runs purely to hand the decoder a cleaner
+    //            waveform. An AUDIO decision.
+    //
+    // THE CASE AGAINST ROUTING `confirm`, which is on the record and was the
+    // reason it was removed once: a confirm already passes `passesGate`, so no
+    // outcome can improve, and the run costs ~1 s per span while handing the
+    // decoder the audible masking artefact (measured 5 of 6 spans in one session,
+    // ~4.9 s of extraction for zero verdict change).
+    //
+    // THE CASE FOR, which is why it is back: that argument is about VERDICTS, and
+    // word error rate is a separate number nobody has measured here. `confirm` is
+    // where the clinician's quieter dictation sits (journal.md §9 measures it at
+    // 0.730), and a span lands there precisely when something is competing with
+    // his voice. Suppressing the other speaker can win words even though the
+    // verdict never moves. If the transcript gets WORSE on confirm-heavy sessions,
+    // this is the first line to put back to `no` — the artefact risk is real and
+    // `[TSE/cover]` logs the split per chunk to tell you.
     //
     // `tooShort` never routes under either coverage: it carries no distance, so
     // there is no `d_sep` to check the result against and a rescue would be
@@ -171,7 +187,7 @@ extension SpeakerGateService {
         guard TSEConfig.mode.runsExtractor else { return false }
         guard verdict != .tooShort else { return false }
         guard durationSeconds >= TSEConfig.minRouteSeconds else { return false }
-        return TSEConfig.coverage == .everySpan || verdict == .reject
+        return TSEConfig.coverage == .everySpan || verdict == .reject || verdict == .confirm
     }
 
     // Classify one span, and extract it when the coverage policy says to.
