@@ -126,19 +126,23 @@ Applied by `Wav2VecAudioCapture.normalizeAudio(data:)` using `vDSP_normalize` (h
 
 ## 6. Constrained CTC Decoding
 
-**Algorithm:** Prefix Trie-constrained CTC beam search. At each timestep, only characters that form a valid prefix in the `PrefixTrie` are kept; all others have their probability forced to -∞. Beam width = 10.
+**Algorithm:** Prefix Trie-constrained CTC beam search. At each timestep, only characters that form a valid prefix in the `PrefixTrie` are kept; all others have their probability forced to -∞. Beam width = 40.
 
 - **Log-softmax:** Applied to logits before beam search using numerically stable formulation (subtract max before exponentiating).
 - **Blank token:** `[PAD]` index (usually 27). Space token: `|` (mapped to space character).
+- **Character Pruning:** Phonetic character branches with log-probs below `-15.0` are pruned. This relaxed threshold allows weaker phonetic branches (like `lingual`) to survive long enough to complete and receive their word-level bonuses.
 
 ### Implicit Space Injection
 When a new character would violate the trie but the last completed word is valid, the decoder tries injecting a space first. Injected spaces carry a 2.0 log-probability penalty to discourage over-eager word splitting.
+
+### Shallow Fusion LM Boost
+When a valid word is completed, the decoder checks if it is a clinical anatomy term (e.g., `lingual`, `mesio`, `bukal`). If so, a massive log-probability bonus (`-3.0`) is subtracted from its cost, actively steering the acoustic beam search toward these crucial structural anchors during ambiguous audio segments.
 
 ### Partial Word Handling
 At decoding end, if the final word is not a complete dictionary entry, it is dropped (hard commit). This prevents partial words from reaching the parser and triggering spurious annotations.
 
 > [!NOTE]
-> **Beam width rationale:** Increasing beam width from 10 to 50 was tested and degraded accuracy (errors increased from ~49 to 75 mismatches). Without an N-gram LM, wider beams allow the acoustic model to hallucinate longer confident-sounding garbage strings. Width 10 is the measured operating point.
+> **Beam width rationale:** The beam width was increased to 40 to allow numeric and anatomy paths to survive pruning and receive their respective bonuses. With the acoustic cost filter properly normalized by frames spanned, wider beams no longer result in runaway hallucinations.
 
 ---
 
@@ -155,6 +159,7 @@ At decoding end, if the final word is not a complete dictionary entry, it is dro
 
 - `canonical_mapping.json` maps acoustic mispronunciations to canonical terms. Example: `{"misiobocal": "mesiobukal", "nggak": "gak"}`.
 - Applied as a regex word-boundary replacement after decoding, longest match first.
+- **Two-Pass Loop:** The mapping routine runs in a 2-pass loop to resolve cascaded phonetic combinations (e.g., `diso lima` → `disto lima` → `distolingual`).
 - Variants are also added to `lexicon.txt` so the prefix trie can construct them.
 
 > [!IMPORTANT]
@@ -164,13 +169,10 @@ At decoding end, if the final word is not a complete dictionary entry, it is dro
 
 ## 9. Acoustic Cost Rejection
 
-After decoding, each word is scored by `costPerLetter = totalBeamCost / letterCount`.
-- **Default threshold:** `maxCostPerLetter = 3.0`. Words exceeding this are silently discarded.
-- **Strict threshold:** `1.0` for destructive structural modifiers: `semua`, `semuanya`, `seluruh`, `seluruhnya`, `sampai`, `hingga`. These words, if hallucinated, can apply a value to all 192 measurement sites or open a massive range. They must be clearly spoken.
+After decoding, each word is scored by its average acoustic cost over the audio frames it spanned: `costPerFrame = wordCost / framesSpanned`.
+- **Default threshold:** `maxCostPerFrame = 2.0`. Words exceeding this are silently discarded. This is relaxed enough to allow muffled prefixes and low-confidence numbers to pass.
+- **Strict threshold:** `0.2` for destructive structural modifiers: `semua`, `semuanya`, `seluruh`, `seluruhnya`, `sampai`, `hingga`, `tika`, `tike`. These words, if hallucinated, can apply a value to all 192 measurement sites or open a massive range. They must be clearly spoken and pass a highly stringent acoustic bar.
 - Applied to both committed decodes and live preview decodes (so the UI never shows hallucinated words).
-
-> [!WARNING]
-> **Known bias:** Dividing cost by letter count makes short words structurally expensive. Words ≤ 5 letters (including high-frequency chart values like `dua` and `enam`) are more likely to be rejected. The correct fix is to normalize by frames spanned rather than letters, but this requires a measured cost distribution as baseline.
 
 ---
 
@@ -234,9 +236,9 @@ Mic audio (hardware sample rate)
 
 ## 13. Known Limitations & Design Notes
 
-1. **Short word acoustic cost bias.** The `costPerLetter` metric is biased against short words (≤5 letters) because the trie-boundary cost component does not scale linearly with word length. High-frequency chart values (`dua`, `enam`, `tiga`) and clinical terms (`bop`, `gak`) are occasionally rejected. Normalizing by frames spanned would correct this but requires baseline measurement.
+1. **Contextual Phonetic Recovery.** The acoustic model exhibits a massive bias toward numeric tokens (e.g., `lima`, `dua`) over phonetically similar clinical anatomies (e.g., `lingual`, `bukal`). Even with character pruning thresholds relaxed (`-15.0`) and LM boosts applied, a direct substitution often prevails acoustically. To defend against this, `StatefulParser` uses a contextual recovery step: if a number (`5` or `2`) is received *exactly* when the parsing state strictly expects an anatomy token, it safely recovers them to `lingual` and `bukal`.
 
-2. **Beam width without language model.** Without a dedicated N-gram LM (e.g. KenLM), increasing beam width beyond 10 degrades accuracy by allowing the acoustic model to hallucinate longer confident-sounding garbage sequences. A future integration of KenLM or a lightweight bigram model would enable wider beams.
+2. **Beam width without language model.** Without a dedicated N-gram LM (e.g. KenLM), increasing beam width beyond 40 degrades accuracy by allowing the acoustic model to hallucinate longer confident-sounding garbage sequences. A future integration of KenLM or a lightweight bigram model would enable wider beams.
 
 3. **No cross-chunk context.** Wav2Vec2 is a bidirectional transformer. Each committed chunk is decoded independently — there is no mechanism to pass acoustic context across commit boundaries. The energy VAD is tuned to avoid splitting words (by waiting for genuine silence), but rapid speech near a commit boundary can cause dropped phonemes at chunk edges.
 
