@@ -424,11 +424,20 @@ final class TargetSpeakerExtractor: @unchecked Sendable {
         }
     }
 
+    private static func isContiguous(_ a: MLMultiArray) -> Bool {
+        var expectedStride = 1
+        for i in (0..<a.shape.count).reversed() {
+            if a.strides[i].intValue != expectedStride { return false }
+            expectedStride *= a.shape[i].intValue
+        }
+        return true
+    }
+
     /// Core ML hands back fp16 buffers for models converted at FLOAT16
     /// precision, so never assume Float32 on an OUTPUT array.
     private static func read(_ a: MLMultiArray, into out: inout [Float]) {
         let n = min(a.count, out.count)
-        guard a.strides.last?.intValue == 1 else {
+        guard isContiguous(a) else {
             for i in 0..<n { out[i] = a[i].floatValue }
             return
         }

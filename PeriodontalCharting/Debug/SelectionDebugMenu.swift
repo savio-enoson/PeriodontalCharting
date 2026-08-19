@@ -14,6 +14,7 @@ struct SelectionDebugMenu: View {
     
     @State private var selectedAudioFile: String = "dr_lucky_audio"
     @State private var speedMultiplier: Double = 2.0
+    @State private var tseEnabled: Bool = TSEConfig.mode != .off
     
     var body: some View {
         NavigationStack {
@@ -35,6 +36,14 @@ struct SelectionDebugMenu: View {
                 }
 
                 Section("Speaker Gate (TSE)") {
+                    Toggle("Enable TSE (Extraction & Gate)", isOn: Binding(
+                        get: { TSEConfig.mode != .off },
+                        set: { isOn in
+                            TSEConfig.mode = isOn ? .enforce : .off
+                            tseEnabled = isOn // Force UI update
+                        }
+                    ))
+                    
                     NavigationLink("Open gate test harness") {
                         SpeakerGateDebugView()
                     }
