@@ -38,10 +38,19 @@ enum TSEConfig {
     // `SpeakerGate.acceptThreshold` with nothing keeping the two in step: a
     // profile that lowered its accept line kept routing at the stale one.
     //
-    // Applied to `d_sep` — trust the rescued stream or not. The zero-error band
-    // after extraction was re-derived as (0.486, 0.779). Margin is asymmetric in
-    // the WRONG direction for the cost model, so any adjustment goes DOWN.
-    static let postAcceptThreshold = 0.675
+    // THE SAME NOW APPLIES AFTER EXTRACTION. `postAcceptThreshold`, a second
+    // global 0.675, used to decide the accept band for `d_sep` while the reject
+    // band beside it came from the profile — so a span was judged before
+    // extraction at the clinician's own line and after it at a stale global. It
+    // was the identical drift, one line further down, and it is gone:
+    // `TSERescue.route` now reads `gate.acceptThreshold` for both.
+    //
+    // Re-introduce a separate post-extraction line ONLY with evidence that the
+    // post-extraction distance distribution genuinely differs — the zero-error
+    // band after extraction was re-derived as (0.486, 0.779) — and make it an
+    // OFFSET from the profile's line rather than an independent absolute. Margin
+    // is asymmetric in the WRONG direction for the cost model, so any adjustment
+    // goes DOWN.
 
     // Extraction is not worth its ~0.3 RTF on a fragment the gate cannot judge.
     // Matches `SpeakerGate.minDurationSeconds`, below which `classify` refuses.
