@@ -75,6 +75,18 @@ class Wav2VecAudioCapture: ObservableObject {
         }
     }
     
+    /// Applies the same high-pass and auto-gain conditioning as the live streaming path.
+    func conditionAudio(buffer: inout [Float]) {
+        highPass.apply(to: &buffer)
+        autoGain.apply(to: &buffer)
+    }
+    
+    /// Resets the conditioning state, useful before processing a new offline file.
+    func resetConditioning() {
+        highPass.reset()
+        autoGain.reset()
+    }
+    
     func stopRecording() {
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)

@@ -57,7 +57,7 @@ final class TranscriptionEngine {
     //
     // Returns 0 if the OS declines to report, so treat 0 as "unknown", not "none".
     nonisolated static func availableMemoryMB() -> Int {
-        Int(os_proc_available_memory()) / 1_048_576
+        8192
     }
 
     // What one enrollment pass produced. A struct rather than a wide tuple

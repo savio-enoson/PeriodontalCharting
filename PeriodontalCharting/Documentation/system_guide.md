@@ -2,7 +2,7 @@
 
 This document is the definitive high-level reference for the Periodontal Charting voice command system. It covers the full pipeline from raw speech to chart annotation: how speech is transcribed, how text becomes tokens, how tokens drive a stateful session parser, and how that parser produces structured commands that update the clinical record.
 
-For the project brief, getting started, and roadmap, see [project_guide.md](project_guide.md). For the file-by-file Swift reference, see [frontend_guide.md](frontend_guide.md). For the ML tokenizer internals (label schema, state conditioning, inference loop, post-processing heuristics), see [ml_tokenizer_guide.md](ml_tokenizer_guide.md).
+For the project brief, getting started, and roadmap, see [project_guide.md](project_guide.md). For the file-by-file Swift reference, see [frontend_guide.md](frontend_guide.md).
 
 ---
 
@@ -77,17 +77,17 @@ Live microphone audio
         ▼
 ┌──────────────────────────────────────────┐
 │  Phase 0b: Speech-to-Text                │
-│  TranscriptionEngine (WhisperKit)        │  Whisper large-v3-turbo, on-device
-│  SileroVADEngine                         │  Speech segment detection (32 ms hops)
-│  SequenceBiasFilter (ClinicalConfig)     │  Per-step clinical vocabulary logit biasing
+│  Wav2VecAudioCapture                     │  16 kHz mic capture, resampling, signal conditioning
+│  Wav2VecViewModel                        │  Energy-based VAD, chunk commit logic
+│  Wav2VecEngine (Wav2Vec2 FP16)           │  CoreML acoustic model inference
+│  CTCDecoder (+ PrefixTrie)              │  Constrained beam search, acoustic cost rejection
 └──────────────────────────────────────────┘
-        │  Indonesian text (VAD-confirmed chunks)
+        │  Indonesian text (committed Wav2Vec chunks)
         ▼
 ┌──────────────────────────────────────────┐
 │  Phase 1: Tokenization                   │
-│  TokenizerManager                        │  Normalisation, ML/rule-based dispatch
-│    ├── MLVoiceTokenizer  (default)       │  CoreML word classifier → [VoiceToken]
-│    └── VoiceTokenizer    (fallback)      │  Rule-based alias dictionary → [VoiceToken]
+│  TokenizerManager                        │  Normalisation, dispatch
+│    └── VoiceTokenizer                    │  Rule-based alias dictionary → [VoiceToken]
 └──────────────────────────────────────────┘
         │  [VoiceToken]
         ▼
@@ -105,11 +105,11 @@ Live microphone audio
     ChartDashboard  (SwiftUI view re-render)
 ```
 
-**Phase 0a (Speaker Isolation):** `SpeakerGateService` runs ECAPA-TDNN speaker verification on each confirmed Whisper segment. `TSEEngine` applies BSRNN target source enhancement as a pre-filter to suppress non-target speech before it reaches Whisper. This layer is handled by a separate peer module; the components live in `Audio/` and `Audio/TSE/`. See [frontend_guide.md §3.9](frontend_guide.md) for the file reference.
+**Phase 0a (Speaker Isolation):** `SpeakerGateService` runs ECAPA-TDNN speaker verification on each confirmed Wav2Vec segment. `TSEEngine` applies BSRNN target source enhancement as a pre-filter to suppress non-target speech before it reaches Wav2Vec. This layer is handled by a separate peer module; the components live in `Audio/` and `Audio/TSE/`. See [frontend_guide.md §3.9](frontend_guide.md) for the file reference.
 
-**Phase 0b (Speech-to-Text):** `TranscriptionEngine` is an app-wide singleton that owns one `WhisperKit` instance (Whisper large-v3-turbo, ~632 MB, loaded once at launch). `SileroVADEngine` detects speech segments on 32 ms hops before Whisper transcription. `SequenceBiasFilter` (configured by `ClinicalConfig`) biases Whisper's decoder log-probabilities toward the clinical vocabulary at each decoding step. `TranscriptionViewModel` drives the live stream and fires `onLiveTranscript` / `onConfirmedTranscript` callbacks into `AIVoiceViewModel`.
+**Phase 0b (Speech-to-Text):** `Wav2VecAudioCapture` records at 16 kHz mono, applies `HighPassFilter` (80 Hz cutoff) and `AutoGain` (target RMS 0.1, ~1.5 s time constant) before chunking into 512-sample aligned buffers. `Wav2VecViewModel` implements energy-based VAD (dynamic RMS threshold relative to a running baseline). Speech is accumulated into a growing `streamingBuffer`. A commit fires when silence frames exceed a threshold that tightens as the buffer grows (0–15 s: 15 frames, 15–30 s: 10 frames, 30–45 s: 5 frames, >45 s: 3 frames, >55 s: force-commit immediately). `Wav2VecEngine.predict()` pads audio to 1-second bucket boundaries with white noise (not zeros — zeros create a Z-score flatline at boundaries that drops phonemes), runs CoreML inference (`computeUnits = .cpuAndGPU`), and returns logits shape `[1, time_steps, vocab_size]`. `CTCDecoder` performs constrained beam search (width 10) guided by a `PrefixTrie` built from `lexicon.txt`. Characters forming an invalid trie prefix are culled to -∞ probability. After beam search, `Acoustic Cost Rejection` filters words with `costPerLetter > 3.0`. Structural modifiers (`semua`, `sampai`, `hingga`, etc.) use a stricter threshold of 1.0 to prevent catastrophic chart mutations from hallucinated structural commands. `canonical_mapping.json` is applied as a post-processing step.
 
-**Phase 1 (Tokenization):** `TokenizerManager.shared.tokenize(text:isFinal:)` is the unified entry point. It applies string normalisation, then dispatches to either `MLVoiceTokenizer` (the CoreML word classifier, default when the model is loaded) or the rule-based `VoiceTokenizer` (fallback). The output in both cases is a flat `[VoiceToken]` array. For full ML tokenizer internals, see [ml_tokenizer_guide.md](ml_tokenizer_guide.md).
+**Phase 1 (Tokenization):** `TokenizerManager.shared.tokenize(text:isFinal:)` dispatches directly to the rule-based `VoiceTokenizer` (there is no ML path).
 
 **Phase 2 (Parsing):** `AIVoiceViewModel` holds one `StatefulParser` instance alive for the duration of a dictation session. On each confirmed VAD chunk, the chunk's text is tokenized and `sessionParser.consume(tokens:isFinal:)` is called. The parser accumulates numbers, tracks the current tooth and surface selection, and emits `AnnotationCommand` objects. At session end, `consume(tokens: [], isFinal: true)` force-flushes all buffered state.
 
@@ -121,13 +121,7 @@ Live microphone audio
 
 ### 3.0 TokenizerManager — Unified Entry Point
 
-All tokenization calls go through `TokenizerManager.shared.tokenize(text:isFinal:)`. The manager:
-
-1. Reads the `useMLTokenizer` `UserDefaults` key (defaults to `true`).
-2. If `true` and `MLVoiceTokenizer` is loaded, routes through the ML path — applying `normalize(text:)`, splitting on `_sep_` boundaries to reset ML state between sentences, running word-by-word inference, then applying a post-processing pass for tooth-ID disambiguation and multi-word token assembly.
-3. If `false` or the model is unavailable (e.g. `.mlmodelc` missing from the bundle), falls back to `VoiceTokenizer.tokenize(text:isFinal:)` directly.
-
-The ML path's full specification — label schema, state conditioning, inference loop, post-processing heuristics, and fallback behavior — is covered in [ml_tokenizer_guide.md](ml_tokenizer_guide.md). The rule-based fallback path is documented in the sections below.
+All tokenization calls go through `TokenizerManager.shared.tokenize(text:isFinal:)`. The manager reads a `useMLTokenizer` UserDefaults key for legacy compatibility, but since `MLVoiceTokenizer` is no longer present, it always routes to `VoiceTokenizer.tokenize(text:isFinal:)` directly.
 
 `VoiceTokenizer` (`NLP/Tokenizer/`) performs a **single left-to-right pass** over the input text. It first applies string-level normalization, then walks word by word, attempting multi-word alias matches before falling back to single-word matches.
 
@@ -278,7 +272,7 @@ The `StatefulParser` instance **persists across VAD chunk boundaries** for the d
 | `isFinal` flag | Marked end of a single parse call | Marks end of the **entire dictation session** |
 | Ghosting | Preview vs. committed command sets | `committedCommandCount` marks the boundary in `AIVoiceViewModel` |
 
-**Rationale:** Since Whisper emits complete, grammatically bounded confirmed chunks (silence-delimited), holding parser state across chunk boundaries means the cursor position, `activeSelection`, `pendingNumbers`, and `missingTeeth` all carry forward naturally. The parser does not need to "replay" prior history on every new chunk.
+**Rationale:** Since Wav2Vec's commit boundaries are silence-delimited (energy VAD), holding parser state across commit boundaries means the cursor position, `activeSelection`, `pendingNumbers`, and `missingTeeth` all carry forward naturally.
 
 **Batch processing (regression tests):** A fresh `StatefulParser` is constructed, `consume(tokens: allTokens, isFinal: true)` is called with the complete tokenized transcript, and `parser.commands` is read. The "incremental" aspect is transparent to callers who want batch behaviour.
 

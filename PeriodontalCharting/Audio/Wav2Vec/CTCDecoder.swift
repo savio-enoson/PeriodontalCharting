@@ -30,7 +30,7 @@ class CTCDecoder {
     // The bar a word must clear to survive. Named rather than left as a bare
     // `4.5` at the comparison site, because it is an operating point and not an
     // implementation detail. See TSE_ISSUES.md for the length-bias caveat.
-    static let maxCostPerLetter: Float = 4.5
+    static let maxCostPerLetter: Float = 3.0
 
 
     var labels: [String] = []
@@ -219,6 +219,12 @@ class CTCDecoder {
         }
         
         let bestBeam = beams.values.max(by: { $0.totalProb < $1.totalProb })
+        let sortedBeams = beams.values.sorted(by: { $0.totalProb > $1.totalProb }).prefix(3)
+        print("--- TOP 3 BEAMS ---")
+        for (i, beam) in sortedBeams.enumerated() {
+            print("Beam \(i): '\(beam.text)' (Prob: \(beam.totalProb))")
+        }
+        print("-------------------")
         let constrainedText = bestBeam?.text.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let lastSpaceFrame = bestBeam?.lastSpaceFrame ?? -1
         let hasTrailingSpace = bestBeam?.text.hasSuffix(" ") ?? false
@@ -265,7 +271,17 @@ class CTCDecoder {
             // and `enam` (6), which are chart values. Normalising by frames
             // spanned rather than letters would remove the bias; that change needs
             // a measured distribution behind it.
-            let accepted = costPerLetter <= Self.maxCostPerLetter
+            var threshold = Self.maxCostPerLetter
+            
+            // Destructive modifiers are rarely mumbled. If hallucinated, they destroy
+            // the entire chart state (e.g. applying a value to all teeth or opening a massive range).
+            // We hold them to a much stricter acoustic standard to prevent cascading failures.
+            let strictModifiers: Set<String> = ["semua", "semuanya", "seluruh", "seluruhnya", "sampai", "hingga", "tika", "tike"]
+            if strictModifiers.contains(word) {
+                threshold = 1.0
+            }
+            
+            let accepted = costPerLetter <= threshold
             if accepted {
                 filteredWords.append(word)
             } else {

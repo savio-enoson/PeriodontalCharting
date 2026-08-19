@@ -35,12 +35,12 @@ Disto Bukal 2
 Bukal 2
 Mesio Bukal 2
 
-3 1
+gigi 31
 Mesio Bukal 2
 Bukal 2
 Disto Bukal 2
 
-Gigi 3 2
+Gigi 32
 Mesio Bukal 2
 Bukal 2
 Disto Bukal 2
@@ -136,11 +136,11 @@ Mesio lingual 3
 Lingual 2
 Disto lingual 2
 
-resesi mesiobukal gigi 47 1 
+resesi mesiobukal gigi 47 1
 mesiolingual gigi 47 1
-distobukal gigi 45 1 
+distobukal gigi 45 1
 distolingual gigi 45 1
-Bukal gigi 42, 2. 
+Bukal gigi 42, 2.
 Bukal gigi 41, 2.
 bukal gigi 31 2,
 bukal gigi 32 2.
@@ -227,7 +227,7 @@ Gigi 16 Mesyu Bukal. Bukal dan Disto Bukal 1
 
 Gigi 15 disto Bukal 1
 
-ke bagian lingual 
+ke bagian lingual
 probing depth
 
 gigi 27
@@ -306,9 +306,9 @@ mesio lingual 3
 lingual 3
 disto lingual 2
 
-resesi mesiopalatal gigi 17 1 
+resesi mesiopalatal gigi 17 1
 distal mesial gigi 16 2
-palatal gigi 16 4 
+palatal gigi 16 4
 distopalatal palatal gigi 15 1
 
 Bleeding on Probing

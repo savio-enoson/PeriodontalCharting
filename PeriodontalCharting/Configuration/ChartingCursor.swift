@@ -74,8 +74,15 @@ struct ChartingCursor: Equatable {
     }
     
     mutating func advanceToNextRow() -> Bool {
-        secondaryIndex += 1
-        var secondaryLimit = 2
+        let primaryLimit = configuration.primaryOrder == .jawFirst ? configuration.jawOrder.count : configuration.aspectOrder.count
+        if primaryIndex >= primaryLimit {
+            return false
+        }
+        
+        var nextSecondary = secondaryIndex + 1
+        var nextPrimary = primaryIndex
+        
+        let secondaryLimit: Int
         if configuration.primaryOrder == .jawFirst {
             let jaw = configuration.jawOrder[primaryIndex]
             secondaryLimit = (jaw == .upper ? configuration.upperAspectOrder : configuration.lowerAspectOrder).count
@@ -84,16 +91,17 @@ struct ChartingCursor: Equatable {
             secondaryLimit = (aspect == .buccal ? configuration.buccalJawOrder : configuration.palatalJawOrder).count
         }
         
-        if secondaryIndex >= secondaryLimit {
-            primaryIndex += 1
-            secondaryIndex = 0
+        if nextSecondary >= secondaryLimit {
+            nextPrimary += 1
+            nextSecondary = 0
             
-            let primaryLimit = configuration.primaryOrder == .jawFirst ? configuration.jawOrder.count : configuration.aspectOrder.count
-            if primaryIndex >= primaryLimit {
+            if nextPrimary >= primaryLimit {
                 return false
             }
         }
         
+        primaryIndex = nextPrimary
+        secondaryIndex = nextSecondary
         setupSequence()
         return true
     }

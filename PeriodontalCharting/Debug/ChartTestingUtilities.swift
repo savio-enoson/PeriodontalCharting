@@ -3,11 +3,11 @@ import Foundation
 struct ChartTestingUtilities {
     
     static func getProjectDirectoryURL() -> URL {
-        return URL(fileURLWithPath: "/Users/vio/XCodeProjects/PeriodontalCharting/PeriodontalCharting/Testing/Suite/Data/GroundTruth/")
+        return URL(fileURLWithPath: "/Users/vio/XCodeProjects/PeriodontalCharting/PeriodontalCharting/Testing/Ground/")
     }
     
     static func getFileURL(for transcriptName: String) -> URL {
-        let filename = "\(transcriptName)_ground.json"
+        let filename = transcriptName == "ground_truth" ? "ground_truth.json" : "\(transcriptName).json"
         #if targetEnvironment(simulator) || targetEnvironment(macCatalyst) || os(macOS)
         return getProjectDirectoryURL().appendingPathComponent(filename)
         #else
@@ -76,7 +76,7 @@ struct ChartTestingUtilities {
                 differences.append("Tooth \(toothNum) Bleeding mismatch. Expected: \(expectedTooth.bleeding), Actual: \(actualTooth.bleeding)")
             }
             if expectedTooth.plaque != actualTooth.plaque {
-                differences.append("Tooth \(toothNum) Plaque mismatch.")
+                differences.append("Tooth \(toothNum) Plaque mismatch. Expected: \(expectedTooth.plaque), Actual: \(actualTooth.plaque)")
             }
             if expectedTooth.mobility != actualTooth.mobility {
                 differences.append("Tooth \(toothNum) Mobility mismatch. Expected: \(expectedTooth.mobility), Actual: \(actualTooth.mobility)")

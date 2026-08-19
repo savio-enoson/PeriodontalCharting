@@ -11,7 +11,6 @@ class AIVoiceViewModel: ObservableObject {
     // simulation, which sets `isListening`). Kept separate so both controls can
     // show independent state; the two are mutually exclusive at runtime.
     @Published var isDictating: Bool = false
-    @Published var isPaused: Bool = false
     // True after the mic is turned off but while the tail chunk's gate pass and
     // decode are still landing. The chart is not final yet, so the mic button
     // shows a "still working" state and stays disabled until this flips back.
@@ -93,9 +92,7 @@ resesi 18, 17, 16, -1 -1
         
         // Simulate Wav2Vec2 STT engine by forcing spaces between consecutive digits
         let sttSimulated = text.replacingOccurrences(of: #"(?<=\d)(?=\d)"#, with: " ", options: .regularExpression)
-        // We must preserve \n because the tokenizer converts \n into _sep_ to flush metrics!
-        // If we split by \n and omit it, the parser leaks state across lines.
-        let chunks = sttSimulated.components(separatedBy: "\n").map { $0.trimmingCharacters(in: .whitespaces) + " \n" }.filter { $0.trimmingCharacters(in: .whitespacesAndNewlines).count > 0 }
+        let chunks = sttSimulated.components(separatedBy: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         
         committedTranscription = ""
         uncommittedTranscription = ""
@@ -223,17 +220,6 @@ resesi 18, 17, 16, -1 -1
         if isDictating { stopLiveDictation() } else { startLiveDictation() }
     }
 
-    func togglePauseLiveDictation() {
-        guard isDictating else { return }
-        if isPaused {
-            wav2VecTranscriber.resumeLive()
-            isPaused = false
-        } else {
-            wav2VecTranscriber.pauseLive()
-            isPaused = true
-        }
-    }
-
     // Begin real on-device dictation. "Optimistic preview + confirmed commit":
     // the chart is driven by the full running transcript (preview) so it tracks
     // the voice closely, while a separate confirmed-only pass
@@ -283,7 +269,6 @@ resesi 18, 17, 16, -1 -1
     func stopLiveDictation() {
         guard isDictating else { return }
         isDictating = false
-        isPaused = false
         // Mic is off, but the tail chunk still has a gate pass and a decode ahead
         // of it. `isFinishing` holds the mic button until both land. The class is
         // @MainActor, so every mutation below stays on the main actor; callers

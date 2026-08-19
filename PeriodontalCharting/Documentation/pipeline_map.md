@@ -2,18 +2,9 @@
 
 A navigation aid, not a replacement for the deep-dive guides. Read this first to
 understand **which of the three greater pipelines a file belongs to and what it
-talks to**, then jump into [system_guide.md](system_guide.md) /
-[frontend_guide.md](frontend_guide.md) / [ml_tokenizer_guide.md](ml_tokenizer_guide.md)
-for the internals of any one box. For architectural deep-dives with flow diagrams,
-see [arch_wav2vec_trie.md](arch_wav2vec_trie.md) (STT engine) and
-[arch_statefulparser.md](arch_statefulparser.md) (NLP parser).
-
-> [!NOTE]
-> This file documents the **3D visualization pipeline** and the **SwiftData
-> persistence layer** in full — neither is covered anywhere else in
-> `Documentation/`. `project_guide.md`'s roadmap still lists "Patient
-> persistence" as *Pending*; it is actually implemented (`PatientChart.swift`,
-> §4 below) and that roadmap entry is stale.
+talks to**, then jump into [system_guide.md](system_guide.md) or
+[frontend_guide.md](frontend_guide.md)
+for the internals of any one box. For STT and TSE architecture, see [TSE_documentation.md](TSE_documentation.md) and [STT_documentation.md](STT_documentation.md).
 
 ---
 
@@ -82,17 +73,17 @@ exact same `@State private var mouth`. There is no cross-pipeline API beyond
 machine, targeting modes, worked examples). This section is only the map.
 
 ```
-Mic audio ──▶ Audio/ (speaker isolation + Wav2Vec2 STT [default] / WhisperKit [alt]) ──▶ text
-   text ──▶ NLP/Tokenizer/ (TokenizerManager: ML or rule-based) ──▶ [VoiceToken]
+Mic audio ──▶ Audio/ (speaker isolation + Wav2Vec2 STT) ──▶ text
+   text ──▶ NLP/Tokenizer/VoiceTokenizer ──▶ [VoiceToken]
    tokens ──▶ NLP/Parser/StatefulParser ──▶ [AnnotationCommand]
    commands ──▶ Models/ChartProcessor.apply(command:to:) ──▶ mutates mouth
 ```
 
 | Stage | Owner file(s) | Entry point |
 |---|---|---|
-| Recording / speaker isolation | `Audio/AudioManager.swift`, `Audio/SpeakerGate*.swift`, `Audio/TSE/*` | consumed internally by `TranscriptionEngine` (Whisper path) or `Wav2VecAudioCapture` (Wav2Vec2 path) |
-| Speech-to-text | `Audio/Wav2Vec/` (default) or `Audio/TranscriptionEngine.swift` + `Audio/SileroVADEngine.swift` (alt) | `Wav2VecViewModel` / `TranscriptionViewModel` |
-| Tokenization | `NLP/Tokenizer/TokenizerManager.swift` (+ `MLVoiceTokenizer`/`VoiceTokenizer` beneath it) | `TokenizerManager.shared.tokenize(text:isFinal:)` |
+| Recording / speaker isolation | `Audio/Capture/AudioManager.swift`, `Audio/Speaker/`, `Audio/TSE/` | consumed internally by `Wav2VecAudioCapture` (Wav2Vec2 path) |
+| Speech-to-text | `Audio/Wav2Vec/Wav2VecEngine.swift`, `Audio/Wav2Vec/CTCDecoder.swift` | `Wav2VecViewModel` |
+| Tokenization | `NLP/Tokenizer/VoiceTokenizer.swift` | `VoiceTokenizer.tokenize()` |
 | Parsing | `NLP/Parser/StatefulParser.swift` (+ `+Flush`, `+Lookahead`) | `StatefulParser.consume(tokens:isFinal:)` |
 | Application | `Models/ChartProcessor.swift` | `ChartProcessor.apply(command:to:)` (static, headless) |
 | Orchestration | `ViewModels/AIVoiceViewModel.swift` | owns `commandHistory`, wires everything above together, feeds `ChartDashboard` |
@@ -109,7 +100,7 @@ guarantees determinism (see `system_guide.md` §15).
 **Debug/offline route (bypasses the mic entirely):** `Debug/SelectionDebugMenu.swift`
 → `AIVoiceViewModel.parseInstant(text:)` → same tokenizer/parser/processor
 chain, `isFinal: true` in one shot. This is also what the CLI regression
-runner (`test_parser.sh` / `run_regression_tests.swift`) uses headlessly via
+runner (`build_tests.sh` / `run_regression_tests.swift`) uses headlessly via
 `Debug/ChartTestingUtilities.swift`.
 
 ---
@@ -169,6 +160,7 @@ mouth ──▶ PeriodontalAnatomyPresenter ──▶ PeriodontalSceneView
 | `3D/DentalArch.swift` | Tiny enum: FDI tooth order per arch (maxilla/mandible), identical ordering to the 2-D chart's quadrant arrays in `ChartDashboard`/`ChartContentView` — this is what lets `GingivalAnatomyGenerator` reuse `AspectData` site index (0/1/2) directly as "previous/mid/next tooth" without a separate lookup. |
 | `3D/GingivalAnatomyGenerator.swift` | Procedurally builds gum + alveolar bone meshes **from the same `mouth` dictionary Pipeline B reads** (uses `probingDepth`/`gingivalMargin`/`missing` per tooth to sculpt tissue height/recession per site). This is the file that makes the 3-D view "the exact same data, different projection" rather than an independent visualization. |
 | `3D/ToothStatusPanel.swift` | Small side-panel view showing a tapped tooth's chart values (PD/GM/mobility/etc.) — reads directly from `mouth[fdi]`, same cells Pipeline B renders, just laid out differently. |
+| `3D/Model3DExporter.swift` | Handles exporting the `PeriodontalSceneView` state or objects for external 3D reference. |
 
 **Entry point from the rest of the app:** `ChartDashboard`'s `view.3d` toolbar
 button sets `show3DView = true`, which triggers
@@ -232,6 +224,7 @@ looking for "the voice code" inside `Views/Chart/` and get confused:
 | `ViewModels/AIVoiceViewModel.swift` | A → B | Bridges the headless NLP pipeline into `@Published` state that SwiftUI (B) observes (`commandHistory`, `currentCursor`, ghosting via `committedCommands`). |
 | `Configuration/ChartingConfiguration.swift` + `ChartingCursor.swift` | Onboarding UI → A | User-configured traversal order (set in `Views/Onboarding/`) steers how the parser advances through teeth — the only place user *preferences* (not chart data) cross into Pipeline A. |
 | `3D/DentalArch.swift` | B ↔ C | Guarantees the FDI ordering used by the 2-D quadrant arrays and the 3-D anatomy generator's site-index math stay in lock-step. If you ever reorder quadrants in `ChartContentView`, this file (and `GingivalAnatomyGenerator`) is the other place that assumption lives. |
+| `Debug/SessionRecorder.swift` | System → A | Helps debug or re-record pipeline A parsing sessions for offline validation. |
 
 ---
 
@@ -247,9 +240,8 @@ which guide) a new feature belongs to:
 | Add a manual-edit interaction (new popover, new gesture) | B | `Views/Chart/ToothColumnView.swift`, `NumberPadPopoverView.swift` |
 | Change 3-D tooth/gum appearance or add a new visualization mode | C (3D) | §4a above, `3D/GingivalAnatomyGenerator.swift` |
 | Add a field to what's saved per patient, or add multi-exam history | C (persistence) | §4b above, `Models/PatientChart.swift` |
-| Change STT accuracy / vocabulary bias / speaker isolation | A (upstream) | [arch_wav2vec_trie.md](arch_wav2vec_trie.md), `Audio/Domain/ClinicalConfig.swift` |
-| Understand the StatefulParser state machine in detail | A | [arch_statefulparser.md](arch_statefulparser.md) |
-| Change ML tokenizer behavior specifically | A | [ml_tokenizer_guide.md](ml_tokenizer_guide.md) |
+| Change STT accuracy / vocabulary bias / speaker isolation | A (upstream) | [STT_documentation.md](STT_documentation.md), `Audio/Domain/ClinicalConfig.swift` |
+| Understand the StatefulParser state machine in detail | A | [system_guide.md](system_guide.md) |
 
 ---
 
@@ -259,12 +251,16 @@ which guide) a new feature belongs to:
 Pipeline A (Voice/NLP)         Pipeline B (2D Chart)              Pipeline C (3D + Persistence)
 ────────────────────────       ────────────────────────           ─────────────────────────────
 Audio/                         Views/Chart/ChartDashboard.swift   3D/PeriodontalSceneView.swift
-NLP/                           Views/Chart/QuadrantView.swift     3D/ToothMeshLoader.swift
-ViewModels/AIVoiceViewModel    Views/Chart/ToothColumnView.swift  3D/DentalArch.swift
-Views/Voice/                   Views/Chart/ToothRowViews.swift    3D/GingivalAnatomyGenerator.swift
-Configuration/                 Views/Chart/ToothGraphicSideView   3D/ToothStatusPanel.swift
-Testing/, Debug/*Utilities     Views/Chart/NumberPadPopoverView   Models/PatientChart.swift
-                                                                   App/ContentView.swift (@Query)
+  ├── Wav2Vec/                 Views/Chart/QuadrantView.swift     3D/ToothMeshLoader.swift
+  ├── TSE/                     Views/Chart/ToothColumnView.swift  3D/DentalArch.swift
+  ├── Speaker/                 Views/Chart/ToothRowViews.swift    3D/GingivalAnatomyGenerator.swift
+  ├── Signal/                  Views/Chart/ToothGraphicSideView   3D/ToothStatusPanel.swift
+  └── Profiles/                Views/Chart/NumberPadPopoverView   3D/Model3DExporter.swift
+NLP/                                                              Models/PatientChart.swift
+ViewModels/AIVoiceViewModel                                       App/ContentView.swift (@Query)
+Views/Voice/AIListeningView.swift
+Configuration/
+Testing/Suite/, Debug/
 
 Shared by all three: Models/Models.swift, Models/ChartProcessor.swift, App/PeriodontalChartingApp.swift
 ```

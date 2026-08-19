@@ -54,12 +54,12 @@ struct StatefulParser: Equatable, Sendable {
 
     mutating func consume(tokens: [VoiceToken], isFinal: Bool = false) {
         for token in tokens {
-            parserTrace("CONSUME TOKEN: \(token)")
+            print("CONSUME TOKEN: \(token)")
             consume(token: token)
         }
         if isFinal {
             // Force-commit everything in the buffer
-            if !pendingNumbers.isEmpty { parserTrace("CALLING flushNumbers(true) from line (#line)"); parserTrace("CALLING flushNumbers(true) from line \(#line)"); flushNumbers(force: true) }
+            if !pendingNumbers.isEmpty { print("CALLING flushNumbers(true) from line (#line)"); print("CALLING flushNumbers(true) from line \(#line)"); flushNumbers(force: true) }
             emitBoolIfPending()
             pendingRangeDigits = []
             isWaitingForRangeEnd = false
@@ -125,7 +125,7 @@ struct StatefulParser: Equatable, Sendable {
 
             
             if didResolveAnatomy && !pendingNumbers.isEmpty {
-                parserTrace("CALLING flushNumbers(true) from line \(#line)"); flushNumbers(force: true)
+                print("CALLING flushNumbers(true) from line \(#line)"); flushNumbers(force: true)
                 emitBoolIfPending()
                 activeSelection = nil
             }
@@ -154,7 +154,7 @@ struct StatefulParser: Equatable, Sendable {
                 }
             }
             
-            parserTrace("CALLING flushNumbers(false) from line \(#line)"); flushNumbers(force: false)
+            print("CALLING flushNumbers(false) from line \(#line)"); flushNumbers(force: false)
             isListAggregationActive = false
             
         case .toothIdentifier(let tooth):
@@ -169,6 +169,15 @@ struct StatefulParser: Equatable, Sendable {
             if isWaitingForRangeEnd {
                 var sel = activeSelection ?? TeethSelection(startTooth: ToothObject.create(number: cursor.currentTooth), startAspect: nil, startSite: nil, endTooth: ToothObject.create(number: cursor.currentTooth), endAspect: nil, endSite: nil)
                 sel.endTooth = newToothObj
+                
+                // Refuse massive range hallucinations (e.g. crossing half the mouth)
+                // 16 teeth * 3 slots = 48. Dentists don't chart cross-arch ranges spanning 3 quadrants.
+                if sel.expectedSlots > 48 {
+                    isWaitingForRangeEnd = false
+                    pendingAnatomies = []
+                    return
+                }
+                
                 if !pendingAnatomies.isEmpty {
                     for pa in pendingAnatomies {
                         if let resolved = ChartAnatomyResolver.resolve(anatomy: pa, for: tooth, currentAspect: cursor.currentAspect) {
@@ -203,7 +212,7 @@ struct StatefulParser: Equatable, Sendable {
             } else {
                 let isPlainTooth = activeSelection != nil && activeSelection!.startSite == nil && activeSelection!.startAspect == nil && activeSelection!.endSite == nil && activeSelection!.endAspect == nil && pendingAnatomies.isEmpty
                 
-                parserTrace("DEBUG toothIdentifier(\(tooth)): else block entered. activeSel=\(activeSelection != nil), pendingEmpty=\(pendingNumbers.isEmpty), listAgg=\(isListAggregationActive), isPlainTooth=\(isPlainTooth), rangeStart=\(isRangeStartPending), freshMetric=\(isFreshMetric)")
+                print("DEBUG toothIdentifier(\(tooth)): else block entered. activeSel=\(activeSelection != nil), pendingEmpty=\(pendingNumbers.isEmpty), listAgg=\(isListAggregationActive), isPlainTooth=\(isPlainTooth), rangeStart=\(isRangeStartPending), freshMetric=\(isFreshMetric)")
                 if let _ = activeSelection, pendingNumbers.isEmpty {
                     if isRangeStartPending {
                         activeSelection?.endTooth = ToothObject.create(number: tooth)
@@ -263,7 +272,7 @@ struct StatefulParser: Equatable, Sendable {
                         pendingTeeth.append(newToothObj.toothNumber)
                         isPostTargeting = false
                     } else if !hadTargets {
-                        parserTrace("DEBUG toothIdentifier(\(tooth)): implicitly post-targeting because no specific targets yet")
+                        print("DEBUG toothIdentifier(\(tooth)): implicitly post-targeting because no specific targets yet")
                         activeSelection?.startTooth = newToothObj
                         activeSelection?.endTooth = newToothObj
                         _ = cursor.jumpTo(tooth: tooth)
@@ -298,9 +307,9 @@ struct StatefulParser: Equatable, Sendable {
                         }
                         activeSelection = sel
                         pendingAnatomies = []
-                        parserTrace("CALLING flushNumbers(false) from line \(#line)"); flushNumbers(force: false)
+                        print("CALLING flushNumbers(false) from line \(#line)"); flushNumbers(force: false)
                     } else {
-                        parserTrace("CALLING flushNumbers(true) from line \(#line)"); flushNumbers(force: true)
+                        print("CALLING flushNumbers(true) from line \(#line)"); flushNumbers(force: true)
                         emitBoolIfPending()
                         activeSelection = nil
                         let currentToothObj = ToothObject.create(number: tooth)
@@ -359,7 +368,7 @@ struct StatefulParser: Equatable, Sendable {
 
                 
                 let jumpSuccess = cursor.jumpTo(tooth: tooth, aspect: activeSelection?.startAspect ?? cursor.currentAspect, updateSequenceIndex: cursor.currentMetric == .probingDepth)
-                parserTrace("DEBUG JUMP: jumping to \(tooth) aspect=\(activeSelection?.startAspect ?? cursor.currentAspect) updateSeq=\(cursor.currentMetric == .probingDepth) -> success=\(jumpSuccess). currentTooth is now \(cursor.currentTooth)")
+                print("DEBUG JUMP: jumping to \(tooth) aspect=\(activeSelection?.startAspect ?? cursor.currentAspect) updateSeq=\(cursor.currentMetric == .probingDepth) -> success=\(jumpSuccess). currentTooth is now \(cursor.currentTooth)")
             }
             
         case .metric(let m, let mult):
@@ -372,7 +381,7 @@ struct StatefulParser: Equatable, Sendable {
             isRangeStartPending = false
             
             if !pendingNumbers.isEmpty {
-                parserTrace("CALLING flushNumbers(true) from line (#line)"); parserTrace("CALLING flushNumbers(true) from line \(#line)"); flushNumbers(force: true)
+                print("CALLING flushNumbers(true) from line (#line)"); print("CALLING flushNumbers(true) from line \(#line)"); flushNumbers(force: true)
             }
             
             let prevMetric = cursor.currentMetric
@@ -442,7 +451,7 @@ struct StatefulParser: Equatable, Sendable {
                     if resolved.aspect != cursor.currentAspect {
                         if activeSelection?.startSite != nil || activeSelection?.endSite != nil {
                             emitBoolIfPending()
-                            if !pendingNumbers.isEmpty { parserTrace("CALLING flushNumbers(true) from line (#line)"); parserTrace("CALLING flushNumbers(true) from line \(#line)"); flushNumbers(force: true) }
+                            if !pendingNumbers.isEmpty { print("CALLING flushNumbers(true) from line (#line)"); print("CALLING flushNumbers(true) from line \(#line)"); flushNumbers(force: true) }
                         }
                         let aspectType: AspectType = (resolved.aspect == .outer) ? .buccal : .palatal
                         _ = cursor.jumpTo(aspect: aspectType)
@@ -497,7 +506,7 @@ struct StatefulParser: Equatable, Sendable {
                         } else {
                             if !pendingNumbers.isEmpty {
                                 if activeSelection?.startSite == nil && activeSelection?.endSite == nil {
-                                    parserTrace("DEBUG ANATOMY: applying anatomy \(a) to existing activeSelection because startSite was nil")
+                                    print("DEBUG ANATOMY: applying anatomy \(a) to existing activeSelection because startSite was nil")
                                     let aspectToSet = (a == .mesial || a == .distal) ? nil : resolved.aspect
                                     activeSelection?.startAspect = aspectToSet
                                     activeSelection?.endAspect = aspectToSet
@@ -545,7 +554,7 @@ struct StatefulParser: Equatable, Sendable {
                 discardOrFlush()
                 
                 if targets.isEmpty {
-                    parserTrace("DEBUG Parser: Ignoring .missing because no explicit tooth was targeted")
+                    print("DEBUG Parser: Ignoring .missing because no explicit tooth was targeted")
                 } else {
                     for targetTooth in targets {
                         missingTeeth.insert(targetTooth)

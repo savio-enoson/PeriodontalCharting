@@ -1,12 +1,12 @@
 import Foundation
 
 extension VoiceTokenizer {
-    static func tokenize(text: String, isFinal: Bool = false, currentMetric: AnnotationOperation? = nil, parserCurrentValues: Int = 0, parserExpectedValues: Int = 3) -> [VoiceToken] {
+    static func tokenize(text: String, isFinal: Bool = false, currentMetric: AnnotationOperation? = nil) -> [VoiceToken] {
         var currentMetric = currentMetric
         var tokens: [VoiceToken] = []
-        var expectedValues = parserExpectedValues
-        var currentValues = parserCurrentValues
         let cleaned = text.lowercased()
+            // Fix wav2vec STT spaced digits for tooth identifiers (e.g. "gigi 1 8" -> "gigi 18")
+            .replacingOccurrences(of: #"(?i)\b(gigi|sampai|sampe|ke)\s+(\d)[,\.\s]+(\d)\b"#, with: "$1 $2$3", options: .regularExpression)
             // A decimal point BETWEEN digits ("1.5", "2.5", chained "1.5.3") is never
             // one charting value — depths/recession are whole mm dictated one digit
             // per site, so "1.5" is the two values 1 and 5. Split it to a space FIRST,
@@ -38,11 +38,8 @@ extension VoiceTokenizer {
             .replacingOccurrences(of: "bleeding on probing", with: "bop")
             .replacingOccurrences(of: "bleeding or probing", with: "bop")
             .replacingOccurrences(of: "probing depth", with: "poket")
-            .replacingOccurrences(of: "gingival margin", with: "margin")
-            .replacingOccurrences(of: "gingiva margin", with: "margin")
         
         var words = cleaned.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
-        print("WORDS: \(words)")
         
         words = words.map { word in
             switch word {
@@ -66,7 +63,7 @@ extension VoiceTokenizer {
         }
         
         // ---- Fused directional-compound splitter ------------------------------------
-        // The STT sometimes GLUES the stem and site into a single token, with the site
+        // Whisper sometimes GLUES the stem and site into a single token, with the site
         // half itself fuzzed ("mesiyobukal", "distobuqal"). The positional recovery
         // below only fires when the site is a SEPARATE token, so peel a (fuzzy) trailing
         // site suffix off any m/d-initial token first — restoring the canonical site and
@@ -90,7 +87,7 @@ extension VoiceTokenizer {
         }
 
         // ---- Directional-stem recovery (generalized, position-based) ----------------
-        // The STT mangles the directional STEM ("disto"/"mesio") into an open-ended,
+        // Whisper mangles the directional STEM ("disto"/"mesio") into an open-ended,
         // un-enumerable set of junk ("di situ"/"justru"/"stok"/"di slow"/"misi"/"mili"/…)
         // while the SITE word after it ("bukal"/"lingual"/"palatal") stays reliable.
         // Rather than chase every variant with a ClinicalConfig regex, use POSITION: a
@@ -140,6 +137,8 @@ extension VoiceTokenizer {
         }
 
         print("DEBUG Tokenizer input words: \(words)"); var i = 0
+        var expectedValues = 3
+        var currentValues = 0
 
         // "disto bukal" acoustically compressed by STT into a "<di-fragment>
         // <bop-fragment>" pair ("di bop"/"di bob"/"the bop"/…). Dangerous because a
@@ -180,13 +179,8 @@ extension VoiceTokenizer {
             let nextW = (i + 1 < words.count) ? words[i+1] : ""
             
             if w == "_sep_" {
-                tokens.append(.word("_sep_"))
+                tokens.append(.word(w))
                 currentValues = 0
-                if let m = currentMetric {
-                    updateExpectedValues(for: m)
-                } else {
-                    expectedValues = 3
-                }
                 i += 1
                 continue
             }
@@ -211,14 +205,7 @@ extension VoiceTokenizer {
                 i += 1; continue
             }
             if w == "semua" || w == "semuanya" || w == "seluruh" || w == "seluruhnya" { tokens.append(.action(.all)); i += 1; continue }
-            if w == "lanjut" || w == "lanjutkan" { 
-                tokens.append(.action(.next))
-                currentMetric = .probingDepth
-                updateExpectedValues(for: .probingDepth)
-                i += 1
-                continue 
-            }
-            if w == "selesai" || w == "kemudian" || w == "selanjutnya" || w == "berikutnya" { tokens.append(.action(.commit)); i += 1; continue }
+            if w == "lanjut" || w == "selesai" || w == "kemudian" || w == "selanjutnya" || w == "berikutnya" { tokens.append(.action(.commit)); i += 1; continue }
             
             if w == "midlingual" || w == "tengahlingual" { tokens.append(.anatomy(.midLingual)); updateExpectedValues(for: .midLingual); currentValues = 0; i += 1; continue }
             if w == "midbukal" || w == "tengahbukal" { tokens.append(.anatomy(.midBuccal)); updateExpectedValues(for: .midBuccal); currentValues = 0; i += 1; continue }
@@ -280,7 +267,7 @@ extension VoiceTokenizer {
             }
             
             if let num = parseIntOrWord(w) {
-                // The STT often concatenates a spoken run of single-digit values
+                // Whisper often concatenates a spoken run of single-digit values
                 // ("3 3 3") into one number ("333"). No valid tooth id (11–48) or
                 // per-site metric value is ≥ 100, so a 3+ digit number here is
                 // unambiguously a run of individual values — split it back into
@@ -309,34 +296,6 @@ extension VoiceTokenizer {
                 }
 
                 if num > 10 && num < 99 {
-                    let firstDigit = num / 10
-                    let secondDigit = num % 10
-                    
-                    var splitIntoValues = false
-                    
-                    if currentValues > 0 {
-                        // We are actively expecting values (mid-block), so a tooth is impossible here
-                        splitIntoValues = true
-                    } else if let lastToken = tokens.last {
-                        switch lastToken {
-                        case .toothIdentifier, .anatomy, .metric, .number:
-                            // If the last token was an anatomy or a metric, the next number is ALWAYS a value.
-                            // If the last token was a tooth, the next number is a value.
-                            splitIntoValues = true
-                        default:
-                            break
-                        }
-                    }
-                    
-                    if splitIntoValues && firstDigit <= 9 && secondDigit <= 9 {
-                        print("DEBUG Tokenizer: Splitting \(num) into \(firstDigit) and \(secondDigit) as values")
-                        tokens.append(.number(firstDigit))
-                        currentValues += 1
-                        tokens.append(.number(secondDigit))
-                        currentValues += 1
-                        i += 1; continue
-                    }
-                    
                     tokens.append(.toothIdentifier(num))
                     expectedValues = 3; currentValues = 0
                     i += 1; continue
@@ -346,88 +305,81 @@ extension VoiceTokenizer {
                     if i + 1 < words.count, let nextNum = parseIntOrWord(words[i+1]), nextNum >= 1 && nextNum <= 8 {
                         let combined = num * 10 + nextNum
                         var isDefinitelyTooth = false
-                        var isSequenceOfTeeth = false
                         let isStartOfBlock = currentValues == 0 || (expectedValues >= 3 && currentValues % expectedValues == 0)
-                        
-                        var consecutiveNumbers = 2
-                        var k = i + 2
-                        while k < words.count {
-                            let w = words[k]
-                            if w == "_sep_" {
-                                break
-                            }
-                            if w == "," || w == "." || w == "dan" || w == "maupun" {
-                                k += 1
-                                continue
-                            }
-                            if parseIntOrWord(w) != nil {
-                                consecutiveNumbers += 1
-                                k += 1
-                            } else {
-                                break
-                            }
-                        }
-                        
-                        let nextWord = i + 2 < words.count ? words[i+2] : "nil"
                         
                         if i > 0 {
                             var prevIdx = i - 1
-                            while prevIdx >= 0 && (words[prevIdx] == "_sep_" || words[prevIdx] == "," || words[prevIdx] == "." || words[prevIdx] == "dan" || words[prevIdx] == "maupun") {
+                            while prevIdx >= 0 && (words[prevIdx] == "," || words[prevIdx] == "dan" || words[prevIdx] == "maupun") {
                                 prevIdx -= 1
                             }
                             if prevIdx >= 0 {
                                 let prevWord = words[prevIdx]
                                 if isToothPrefix(prevWord) {
-                                    if consecutiveNumbers != expectedValues {
-                                        isDefinitelyTooth = true
-                                        print("DEBUG Tokenizer: \(combined) is preceded by tooth prefix \(prevWord)")
+                                    isDefinitelyTooth = true
+                                    print("DEBUG Tokenizer: \(combined) is preceded by tooth prefix \(prevWord)")
+                                    
+                                    // OVERRIDE: If the numbers starting at `i` exactly match the expected values (e.g. "lingual 2 2 2" = 3 values),
+                                    // then it's a sequence of values, not a tooth.
+                                    if hasExactlyNValues(words: words, from: i, expected: expectedValues) {
+                                        isDefinitelyTooth = false
+                                        print("DEBUG Tokenizer: OVERRIDE! sequence matches expected values (\(expectedValues)), so \(combined) is NOT a tooth.")
                                     } else {
-                                        print("DEBUG Tokenizer: \(combined) preceded by prefix \(prevWord), but consecutiveNumbers == expectedValues (\(expectedValues)), ignoring as tooth")
+                                        print("DEBUG Tokenizer: hasExactlyNValues returned FALSE for expected=\(expectedValues) starting at \(words[i])")
                                     }
                                 }
                             }
                         }
                         
                         if !isDefinitelyTooth {
+                            let nextWord = i + 2 < words.count ? words[i+2] : "nil"
+                            var trailingContextFound = false
+                            if i + 2 < words.count {
+                                let maxLookahead = min(words.count, i + 6)
+                                for word in words[(i+2)..<maxLookahead] {
+                                    if word == "_sep_" || word == "," || word == "." { break }
+                                    if isAspectOrAction(word) {
+                                        trailingContextFound = true
+                                        break
+                                    }
+                                }
+                            }
                             
-                            if currentValues == 0 && consecutiveNumbers == expectedValues + 2 {
+                            if trailingContextFound {
+                                print("DEBUG Tokenizer: \(combined) is followed by aspect/action context")
                                 isDefinitelyTooth = true
-                                let prevIdxLocal = i > 0 ? i - 1 : -1
-                                if combined % 11 != 0 || (prevIdxLocal >= 0 && words[prevIdxLocal] != "_sep_") {
-                                    isSequenceOfTeeth = true
-                                }
-                                print("DEBUG Tokenizer: \(combined) forms a tooth because consecutiveNumbers (\(consecutiveNumbers)) == expectedValues + 2")
-                            } else if isSequenceOfTeethEndingInAction(words: words, from: i) {
-                                isSequenceOfTeeth = true
-                                isDefinitelyTooth = true
-                                parserTrace("DEBUG Tokenizer: \(combined) is part of a sequence of teeth ending in action")
-                            } else {
-                                let toothFollowers: Set<String> = [
-                                    "_sep_", "nil", ",", ".", "dan", "maupun", "serta",
-                                    "sampai", "hingga", "ke", "dari", "pada", "lalu",
-                                    "disto", "mesio", "distal", "mesial", "bukal", "lingual", "palatal", "labial", "mid", "tengah", "bagian", "sisi",
-                                    "lanjut", "bop", "poket", "missing", "resesi", "plak", "kemunduran", "margin", "gingival", "enlargement", "pembengkakan", "pembesaran", "probing", "kedalaman", "berdarah", "plaque", "kegoyangan", "mobilitas", "mobility", "furkasi", "furcation", "implan", "implant", "gigi", "semua", "seluruh",
-                                    "gak", "tidak", "ada", "minus", "mm", "mili", "milimeter"
-                                ]
-                                
-                                if currentValues == 0 && consecutiveNumbers == 2 && toothFollowers.contains(nextWord) {
+                            } else if isStartOfBlock && hasExactlyNValues(words: words, from: i + 2, expected: expectedValues) {
+                                // If expectedValues is < 3 (e.g. after a site specific anatomy), a sequence of identical digits
+                                // like "2 2 2" is almost certainly a sequence of values rather than tooth 22 + value 2.
+                                if num == nextNum && expectedValues < 3 {
+                                    isDefinitelyTooth = false
+                                } else {
                                     isDefinitelyTooth = true
-                                    isSequenceOfTeeth = true
-                                    print("DEBUG Tokenizer: \(combined) is followed by strong toothFollower '\(nextWord)'")
+                                    print("DEBUG Tokenizer: \(combined) is followed by exactly \(expectedValues) values")
                                 }
+                            } else if isSequenceOfTeethEndingInAction(words: words, from: i) {
+                                isDefinitelyTooth = true
+                                print("DEBUG Tokenizer: \(combined) is part of a sequence of teeth ending in action")
+                            } else {
+                                print("DEBUG Eval: currentValues=\(currentValues), num=\(num), nextNum=\(nextNum), nextWord=\(nextWord)")
+                                if currentValues == 0 && num != nextNum && (nextWord == "_sep_" || nextWord == "nil" || nextWord == "," || nextWord == "." || nextWord == "dan" || nextWord == "maupun" || nextWord == "serta") {
+                                    isDefinitelyTooth = true
+                                    print("DEBUG Tokenizer: \(combined) is followed by separator and currentValues == 0")
+                                }
+                            }
+                            
+                            if !isDefinitelyTooth && isFinal && nextWord == "nil" && expectedValues != 3 {
+                                isDefinitelyTooth = true
                             }
                         }
                         
-                        if let metric = currentMetric, metric == .probingDepth, !isSequenceOfTeeth {
-                            isDefinitelyTooth = false
-                        }
+                        // Removed over-aggressive probingDepth safeguard
                         
                         if isDefinitelyTooth {
                             tokens.append(.toothIdentifier(combined))
                             expectedValues = 3; currentValues = 0
                             i += 2; continue
                         } else {
-                            parserTrace("DEBUG Tokenizer: \(combined) was NOT deemed a tooth. nextWord was \(i+2 < words.count ? words[i+2] : "nil")")
+                            print("DEBUG Tokenizer: \(combined) was NOT deemed a tooth. nextWord was \(i+2 < words.count ? words[i+2] : "nil")")
                         }
                     }
                 }
@@ -437,7 +389,24 @@ extension VoiceTokenizer {
             }
             
             if let anatomy = AnatomyType(rawValue: w) { tokens.append(.anatomy(anatomy)); updateExpectedValues(for: anatomy); currentValues = 0; i += 1; continue }
-
+            if w == "lanjut" {
+                tokens.append(.action(.next))
+                expectedValues = 3; currentValues = 0
+                let aspectWords = ["palatal", "lingual", "bukal", "labial"]
+                if aspectWords.contains(nextW) {
+                    let thirdW = (i + 2 < words.count) ? words[i+2] : ""
+                    var skipNext = true
+                    if let tNum = Int(thirdW), tNum > 10 && tNum < 99 {
+                        skipNext = false
+                    }
+                    if skipNext {
+                        i += 2
+                        continue
+                    }
+                }
+                i += 1
+                continue
+            }
             if let action = ActionType(rawValue: w) { tokens.append(.action(action)); expectedValues = 3; currentValues = 0; i += 1; continue }
             
             if w == "resesi" || w == "kemunduran" { tokens.append(.metric(.gingivalMargin, multiplier: -1)); currentMetric = .gingivalMargin; updateExpectedValues(for: AnnotationOperation.gingivalMargin); i += 1; continue }

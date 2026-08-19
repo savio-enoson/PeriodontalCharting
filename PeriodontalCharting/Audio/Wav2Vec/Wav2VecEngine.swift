@@ -113,8 +113,8 @@ class Wav2VecEngine: ObservableObject {
                 let shape = logitsArray.shape
                 let vocabSize = shape[shape.count - 1].intValue
                 
-                // We only decode the logits that correspond to the ACTUAL audio length, discarding the padded silence predictions
-                let actualTimeSteps = seqLength / 320
+                // Decode the full padded length to capture the CNN's forward receptive field
+                let actualTimeSteps = paddedLength / 320
                 
                 var logits2D: [[Float]] = Array(repeating: Array(repeating: 0.0, count: vocabSize), count: actualTimeSteps)
                 

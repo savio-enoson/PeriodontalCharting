@@ -26,32 +26,47 @@ struct AIListeningView: View {
                     // annotation parser, per committed chunk. A spinner shows
                     // until the STT model is ready, then the mic becomes tappable.
                     let modelReady = Wav2VecEngine.shared.isModelLoaded
-                    Button(action: { viewModel.toggleLiveDictation() }) {
-                        if viewModel.isFinishing {
-                            // The mic is off, but the tail chunk's gate pass and
-                            // decode are still landing — the chart is not final
-                            // yet, so the button must not look ready.
-                            //
-                            // Deliberately NOT a bare ProgressView: inside a
-                            // DISABLED button it renders dimmed and small next to a
-                            // title2 icon, which reads as "nothing happened". Same
-                            // footprint as the mic, unmistakably busy, and it says
-                            // "still working on your audio" rather than the generic
-                            // "loading" a spinner implies.
-                            Image(systemName: "waveform")
-                                .font(.title2)
-                                .foregroundStyle(.orange)
-                                .symbolEffect(.variableColor.iterative, isActive: true)
-                        } else if modelReady || viewModel.isDictating {
-                            Image(systemName: viewModel.isDictating ? "mic.fill" : "mic")
-                                .font(.title2)
-                                .foregroundStyle(viewModel.isDictating ? .red : .blue)
-                                .symbolEffect(.pulse, isActive: viewModel.isDictating)
-                        } else {
-                            ProgressView().controlSize(.small)
+                    if viewModel.isDictating {
+                        HStack(spacing: 12) {
+                            Button(action: { viewModel.togglePauseLiveDictation() }) {
+                                Image(systemName: viewModel.isPaused ? "mic.fill" : "pause.fill")
+                                    .font(.title2)
+                                    .foregroundStyle(.white)
+                                    .frame(width: 44, height: 44)
+                                    .background(viewModel.isPaused ? Color.blue : Color.orange, in: Circle())
+                            }
+
+                            Button(action: { viewModel.toggleLiveDictation() }) {
+                                Image(systemName: "square.fill")
+                                    .font(.title2)
+                                    .foregroundStyle(.white)
+                                    .frame(width: 44, height: 44)
+                                    .background(Color.red, in: Circle())
+                            }
                         }
+                    } else {
+                        Button(action: { viewModel.toggleLiveDictation() }) {
+                            if viewModel.isFinishing {
+                                Image(systemName: "waveform")
+                                    .font(.title2)
+                                    .foregroundStyle(.white)
+                                    .frame(width: 44, height: 44)
+                                    .background(Color.orange, in: Circle())
+                                    .symbolEffect(.variableColor.iterative, isActive: true)
+                            } else if modelReady {
+                                Image(systemName: "mic.fill")
+                                    .font(.title2)
+                                    .foregroundStyle(.white)
+                                    .frame(width: 44, height: 44)
+                                    .background(Color.blue, in: Circle())
+                            } else {
+                                ProgressView().controlSize(.small)
+                                    .frame(width: 44, height: 44)
+                                    .background(Color.gray.opacity(0.3), in: Circle())
+                            }
+                        }
+                        .disabled(viewModel.isFinishing || !modelReady)
                     }
-                    .disabled(viewModel.isFinishing || (!modelReady && !viewModel.isDictating))
 
                     // DEBUG: Start Simulation
 //                    Button(action: {

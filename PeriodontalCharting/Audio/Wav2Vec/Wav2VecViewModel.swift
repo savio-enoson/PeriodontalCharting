@@ -36,6 +36,7 @@ final class Wav2VecViewModel {
     private(set) var isModelReady: Bool = false
     private(set) var isTranscribing: Bool = false
     private(set) var isRecording: Bool = false
+    private(set) var isPaused: Bool = false
 
     // MARK: - Live event hooks (for AI Mode)
     // `onConfirmedTranscript` is the ONLY path to the parser. `onLiveTranscript`
@@ -126,6 +127,30 @@ final class Wav2VecViewModel {
 
     func toggleRecording() {
         if isRecording { Task { await stopLive() } } else { startLive() }
+    }
+
+    func pauseLive() {
+        guard isRecording, !isPaused else { return }
+        isPaused = true
+        Wav2VecAudioCapture.shared.stopRecording()
+        statusMessage = String(localized: "Paused")
+    }
+
+    func resumeLive() {
+        guard isRecording, isPaused else { return }
+        isPaused = false
+        do {
+            try Wav2VecAudioCapture.shared.startStreamingRecording { [weak self] buffer in
+                DispatchQueue.main.async {
+                    self?.processAudioChunk(buffer)
+                }
+            }
+            statusMessage = String(localized: "Listening…")
+        } catch {
+            statusMessage = "Live error: \(error.localizedDescription)"
+            isRecording = false
+            isTranscribing = false
+        }
     }
 
     func startLive() {
@@ -273,9 +298,12 @@ final class Wav2VecViewModel {
         // gated, extracted and decoded a SECOND time after the session had been
         // saved, at ~4 s of wasted extraction and a duplicate parser feed.
         isStopping = true
-        Wav2VecAudioCapture.shared.stopRecording()
+        if !isPaused {
+            Wav2VecAudioCapture.shared.stopRecording()
+        }
         isRecording = false
         isTranscribing = false
+        isPaused = false
         statusMessage = transcript.isEmpty ? String(localized: "No speech captured") : String(localized: "Done")
 
         // Final flush

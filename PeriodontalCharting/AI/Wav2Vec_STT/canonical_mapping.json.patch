@@ -1,0 +1,21 @@
+--- canonical_mapping.json	2026-08-18
++++ canonical_mapping.json	2026-08-18
+@@ -194,6 +194,11 @@
+   "misialpalato": "mesiopalatal",
+   "misialpaletel": "mesiopalatal",
+   "misialpelatal": "mesiopalatal",
+   "misialpukal": "mesiobukal",
+   "misialvocal": "mesiobukal",
++  "missing bukal": "mesiobukal",
++  "missing lingual": "mesiolingual",
++  "missing palatal": "mesiopalatal",
++  "missing labial": "mesiolabial",
+   "misin": "missing",
+   "mising": "missing",
+@@ -235,6 +240,8 @@
+   "nggak": "gak",
+   "nol": "0",
++  "on mid": "4",
++  "on mit": "4",
+   "palat": "palatal",
+   "palatallima": "palatal",

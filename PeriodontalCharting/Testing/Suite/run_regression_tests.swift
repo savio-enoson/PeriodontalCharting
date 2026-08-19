@@ -81,10 +81,13 @@ struct RegressionRunner {
         
         // 2. Load audio
         let url = URL(fileURLWithPath: path)
-        guard let audioData = Wav2VecAudioCapture.shared.readAudioFile(url: url) else {
+        guard var audioData = Wav2VecAudioCapture.shared.readAudioFile(url: url) else {
             print("Failed to read audio file")
             return
         }
+        
+        Wav2VecAudioCapture.shared.resetConditioning()
+        Wav2VecAudioCapture.shared.conditionAudio(buffer: &audioData)
         
         print("Loaded \(audioData.count) audio samples (\(Double(audioData.count)/16000.0) seconds)")
         
