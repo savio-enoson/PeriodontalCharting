@@ -1,0 +1,21 @@
+{
+  "Inputs" : {
+    "separated" : {
+      "MLFeatureShortDescription" : ""
+    }
+  },
+  "Outputs" : {
+    "mask_real" : {
+      "MLFeatureShortDescription" : ""
+    },
+    "mask_imag" : {
+      "MLFeatureShortDescription" : ""
+    }
+  },
+  "TrainingInputs" : {
+
+  },
+  "States" : {
+
+  }
+}
