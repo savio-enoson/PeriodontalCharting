@@ -362,9 +362,10 @@ extension VoiceTokenizer {
                                 print("DEBUG Tokenizer: \(combined) is part of a sequence of teeth ending in action")
                             } else {
                                 print("DEBUG Eval: currentValues=\(currentValues), num=\(num), nextNum=\(nextNum), nextWord=\(nextWord)")
-                                if currentValues == 0 && num != nextNum && (nextWord == "_sep_" || nextWord == "nil" || nextWord == "," || nextWord == "." || nextWord == "dan" || nextWord == "maupun" || nextWord == "serta") {
+                                let nextIsAction = VoiceTokenizer.isAspectOrAction(nextWord) || ["missing", "hilang", "gak", "tidak", "ada"].contains(nextWord)
+                                if currentValues == 0 && num != nextNum && (nextWord == "_sep_" || nextWord == "nil" || nextWord == "," || nextWord == "." || nextWord == "dan" || nextWord == "maupun" || nextWord == "serta" || nextIsAction) {
                                     isDefinitelyTooth = true
-                                    print("DEBUG Tokenizer: \(combined) is followed by separator and currentValues == 0")
+                                    print("DEBUG Tokenizer: \(combined) is followed by separator or action and currentValues == 0")
                                 }
                                 
                                 let anatomyWords = ["mesio", "mesial", "disto", "distal", "bukal", "lingual", "palatal", "labial", "mesiolingual", "distolingual", "mesiobukal", "distobukal"]

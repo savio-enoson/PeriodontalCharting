@@ -58,7 +58,7 @@ struct ChartTestingUtilities {
                 continue
             }
             if expectedTooth.missing != actualTooth.missing {
-                differences.append("Tooth \(toothNum) Missing status mismatch.")
+                differences.append("Tooth \(toothNum) Missing status mismatch. Expected: \(expectedTooth.missing), Actual: \(actualTooth.missing)")
                 continue // If they mismatch on missing status, further detailed comparison is often noisy.
             }
             

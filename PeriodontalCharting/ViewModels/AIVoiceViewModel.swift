@@ -93,27 +93,22 @@ resesi 18, 17, 16, -1 -1
         
         // Simulate Wav2Vec2 STT engine by forcing spaces between consecutive digits
         let sttSimulated = text.replacingOccurrences(of: #"(?<=\d)(?=\d)"#, with: " ", options: .regularExpression)
-        // We must preserve \n because the tokenizer converts \n into _sep_ to flush metrics!
-        // If we split by \n and omit it, the parser leaks state across lines.
-        let chunks = sttSimulated.components(separatedBy: "\n").map { $0.trimmingCharacters(in: .whitespaces) + " \n" }.filter { $0.trimmingCharacters(in: .whitespacesAndNewlines).count > 0 }
         
-        committedTranscription = ""
+        committedTranscription = sttSimulated
         uncommittedTranscription = ""
         
         var parser = StatefulParser(configuration: self.getConfiguration())
         
-        for (idx, chunk) in chunks.enumerated() {
-            let isFinal = idx == chunks.count - 1
-            if !committedTranscription.isEmpty {
-                committedTranscription += " \n "
-            }
-            committedTranscription += chunk
-            
-            let parserCurrentValues = parser.pendingNumbers.count
-            let parserExpectedValues = parser.activeSelection?.expectedSlots ?? 3
-            let tokens = TokenizerManager.shared.tokenize(text: chunk, isFinal: isFinal, currentMetric: parser.cursor.currentMetric, parserCurrentValues: parserCurrentValues, parserExpectedValues: parserExpectedValues)
-            parser.consume(tokens: tokens, isFinal: isFinal)
-        }
+        let parserCurrentValues = parser.pendingNumbers.count
+        let parserExpectedValues = parser.activeSelection?.expectedSlots ?? 3
+        let tokens = TokenizerManager.shared.tokenize(
+            text: sttSimulated,
+            isFinal: true,
+            currentMetric: parser.cursor.currentMetric,
+            parserCurrentValues: parserCurrentValues,
+            parserExpectedValues: parserExpectedValues
+        )
+        parser.consume(tokens: tokens, isFinal: true)
         
         self.commandHistory = parser.commands
         if let last = parser.commands.last, last.operation == parser.cursor.currentMetric {

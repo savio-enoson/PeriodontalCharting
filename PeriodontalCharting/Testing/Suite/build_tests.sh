@@ -15,12 +15,12 @@ SOURCES=(
   # Audio — Speaker & TSE & Profiles
   "$PROJ/PeriodontalCharting/Audio/Speaker/SpeakerGate.swift"
   "$PROJ/PeriodontalCharting/Audio/Speaker/SpeakerGateService.swift"
+  "$PROJ/PeriodontalCharting/Audio/Speaker/SpeakerGateEngine.swift"
   "$PROJ/PeriodontalCharting/Audio/TSE/TSEConfig.swift"
   "$PROJ/PeriodontalCharting/Audio/TSE/TSEEngine.swift"
   "$PROJ/PeriodontalCharting/Audio/TSE/TSEExtractor.swift"
   "$PROJ/PeriodontalCharting/Audio/TSE/TSEFeatures.swift"
   "$PROJ/PeriodontalCharting/Audio/TSE/TSERescue.swift"
-  "$PROJ/PeriodontalCharting/Audio/Transcription/TranscriptionEngine.swift"
   "$PROJ/PeriodontalCharting/Audio/Profiles/CalibrationTake.swift"
   "$PROJ/PeriodontalCharting/Audio/Profiles/VoiceProfile.swift"
   "$PROJ/PeriodontalCharting/Audio/Profiles/VoiceProfileStore.swift"

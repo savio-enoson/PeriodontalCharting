@@ -170,13 +170,6 @@ struct StatefulParser: Equatable, Sendable {
             isListAggregationActive = false
             
         case .toothIdentifier(let tooth):
-            let flushedSomething = !pendingNumbers.isEmpty
-            if !pendingNumbers.isEmpty {
-                flushNumbers(force: true)
-            }
-            if flushedSomething {
-                canImplicitlyAggregate = false
-            }
             lastAutoAdvancedFromTooth = nil
             let hadTargets = metricHadSpecificTargets
             metricHadSpecificTargets = true
@@ -294,6 +287,7 @@ struct StatefulParser: Equatable, Sendable {
                         print("DEBUG toothIdentifier(\(tooth)): implicitly post-targeting because no specific targets yet")
                         activeSelection?.startTooth = newToothObj
                         activeSelection?.endTooth = newToothObj
+                        pendingTeeth.append(newToothObj.toothNumber)
                         _ = cursor.jumpTo(tooth: tooth)
                         // Note: we do NOT flush here! The pending numbers remain,
                         // and will be flushed on the NEXT separator or command, 
@@ -425,7 +419,6 @@ struct StatefulParser: Equatable, Sendable {
             
             cursor.setMetric(m)
             currentMetricMultiplier = mult
-            metricHadSpecificTargets = false
             isPostTargeting = false
             isFreshMetric = true
             pendingRangeDigits = []
@@ -581,6 +574,7 @@ struct StatefulParser: Equatable, Sendable {
                         }
                     }
                 }
+                print("DEBUG MISSING TARGETS: \(targets) (pendingTeeth: \(pendingTeeth), explicitSel: \(String(describing: activeSelection?.startTooth.toothNumber)))")
                 
                 discardOrFlush()
                 
@@ -673,6 +667,7 @@ struct StatefulParser: Equatable, Sendable {
             } else if w == "_sep_" {
                 discardOrFlush(clearSelection: false)
                 isListAggregationActive = false
+                metricHadSpecificTargets = false
                 pendingTeeth.removeAll()
                 if activeSelection == nil && pendingNumbers.isEmpty {
                     pendingAnatomies.removeAll()
