@@ -39,6 +39,7 @@ enum VoiceToken: Equatable {
     case anatomy(AnatomyType)
     case metric(AnnotationOperation, multiplier: Int)
     case action(ActionType)
+    case listSeparator
     case toothIdentifier(Int)
     case word(String)
 }

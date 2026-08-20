@@ -7,6 +7,7 @@
   "bleding": "bleeding",
   "bleeding": "bop",
   "bleeding on probing": "bop",
+  "bop probing": "bop",
   "bleeding onprobing": "bop",
   "bleedingon probing": "bop",
   "bleedingonprobing": "bop",
@@ -584,6 +585,7 @@
   "pelatal": "palatal",
   "piope": "bop",
   "plaque": "plak",
+  "radang": "plak",
   "plat": "plak",
   "plek": "plak",
   "plug": "plak",
@@ -617,5 +619,9 @@
   "tujuh": "7",
   "vocal": "bukal",
   "vurgasi": "furkasi",
-  "vurkasi": "furkasi"
+  "vurkasi": "furkasi",
+  "tu": "1",
+  "ga": "3",
+  "ma": "5",
+  "min": "minus"
 }

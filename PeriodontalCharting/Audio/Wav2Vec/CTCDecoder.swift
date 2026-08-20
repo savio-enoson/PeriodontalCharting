@@ -93,6 +93,25 @@ class CTCDecoder {
     }
     
     func decode(logits: [[Float]], beamWidth: Int = 10, isLivePreview: Bool = false) -> String {
+        // --- GREEDY DEBUG ---
+        var greedyChars: [String] = []
+        var lastGreedy = -1
+        for t in 0..<logits.count {
+            let stepLogits = logits[t]
+            var maxIdx = 0
+            var maxVal = stepLogits[0]
+            for i in 1..<stepLogits.count {
+                if stepLogits[i] > maxVal { maxVal = stepLogits[i]; maxIdx = i }
+            }
+            if maxIdx != lastGreedy && maxIdx != blankIndex && maxIdx < labels.count {
+                let char = labels[maxIdx] == "|" ? " " : labels[maxIdx]
+                greedyChars.append(char)
+            }
+            lastGreedy = maxIdx
+        }
+        print("GREEDY: '\(greedyChars.joined())'")
+        // ---------------------
+
         let logProbs = applyLogSoftmax(to: logits)
         let negInf: Float = -Float.greatestFiniteMagnitude
         var beams: [BeamState: Beam] = [:]
@@ -143,6 +162,7 @@ class CTCDecoder {
                     
                     let pChar = stepLogits[c]
                     if pChar < -15.0 { continue } // prune highly unlikely chars
+                    if label == " " && beam.text.hasSuffix(" ") { continue }
                     
                     var newText = beam.text
                     let isRepeat = (c == beam.lastCharIndex)
@@ -170,9 +190,27 @@ class CTCDecoder {
                     if !isRepeat && label == " " {
                         let words = activeText.split(separator: " ", omittingEmptySubsequences: true)
                         if let completedWord = words.last {
-                            let anatomyTerms: Set<String> = ["lingual", "mesiolingual", "distolingual", "mesio", "disto", "bukal", "mesiobukal", "distobukal", "palatal", "labial"]
+                            let anatomyTerms: Set<String> = ["lingual", "mesiolingual", "distolingual", "mesio", "disto", "bukal", "mesiobukal", "distobukal", "palatal", "mesiopalatal", "distopalatal", "labial", "mesial", "distal", "gigi", "gak", "missing", "misin", "bleeding", "bop", "plak", "plaque", "pocket", "resesi", "recession", "kalkulus", "karang", "implan", "implant", "probing"]
+                            
                             if anatomyTerms.contains(String(completedWord)) {
-                                beamProbPenalty -= 3.0 // Shallow fusion anatomy bonus
+                                beamProbPenalty -= 20.0 // Strong anatomy/action bonus
+                            }
+                            
+                            // Phrase boost for missing commands
+                            if words.count >= 2 {
+                                let lastTwo = String(words[words.count - 2]) + " " + String(completedWord)
+                                if lastTwo == "gak ada" || lastTwo == "tidak ada" {
+                                    beamProbPenalty -= 20.0
+                                }
+                            }
+                        }
+                    } else if !isRepeat && label != " " {
+                        if let currentWord = activeText.split(separator: " ", omittingEmptySubsequences: true).last {
+                            let anatomyTerms = ["lingual", "mesiolingual", "distolingual", "mesio", "disto", "bukal", "mesiobukal", "distobukal", "palatal", "mesiopalatal", "distopalatal", "labial", "mesial", "distal", "gigi", "gak", "missing", "misin", "bleeding", "bop", "plak", "plaque", "pocket", "resesi", "recession", "kalkulus", "karang", "implan", "implant", "probing"]
+                            
+                            let currentStr = String(currentWord)
+                            if currentStr.count >= 2 && anatomyTerms.contains(where: { $0.hasPrefix(currentStr) }) {
+                                beamProbPenalty -= 2.0 // Running prefix boost
                             }
                         }
                     }
@@ -188,9 +226,16 @@ class CTCDecoder {
                                     activeLastSpaceFrame = t
                                     beamProbPenalty = 2.0 // Penalize fracturing
                                     
-                                    let anatomyTerms: Set<String> = ["lingual", "mesiolingual", "distolingual", "mesio", "disto", "bukal", "mesiobukal", "distobukal", "palatal", "labial"]
+                                    let anatomyTerms: Set<String> = ["lingual", "mesiolingual", "distolingual", "mesio", "disto", "bukal", "mesiobukal", "distobukal", "palatal", "mesiopalatal", "distopalatal", "labial", "mesial", "distal", "gigi", "gak", "missing", "misin", "bleeding", "bop", "plak", "plaque", "pocket", "resesi", "recession", "kalkulus", "karang", "implan", "implant", "probing"]
                                     if anatomyTerms.contains(String(lastWord)) {
-                                        beamProbPenalty -= 3.0 // Shallow fusion anatomy bonus overrides fracture penalty
+                                        beamProbPenalty -= 20.0 // Strong anatomy bonus overrides fracture penalty
+                                    }
+                                    
+                                    if words.count >= 2 {
+                                        let lastTwo = String(words[words.count - 2]) + " " + String(lastWord)
+                                        if lastTwo == "gak ada" || lastTwo == "tidak ada" {
+                                            beamProbPenalty -= 20.0
+                                        }
                                     }
                                     
                                     // Implicit space was injected!

@@ -30,6 +30,7 @@ struct StatefulParser: Equatable, Sendable {
 
     // --- List aggregation ---
     var isListAggregationActive: Bool = false
+    var canImplicitlyAggregate: Bool = true
 
     // --- Range start pending ---
     // Set by case .from (no pending numbers) so the immediately following
@@ -69,6 +70,17 @@ struct StatefulParser: Equatable, Sendable {
     mutating func consume(token: VoiceToken) {
         switch token {
         case .number(var n):
+            if isRangeStartPending || isWaitingForRangeEnd || cursor.currentMetric == .bleeding || cursor.currentMetric == .plaque || cursor.currentMetric == .implant {
+                if n == 5 {
+                    print("DEBUG RECOVERY: Recovering 5 -> lingual")
+                    consume(token: .anatomy(.lingual))
+                    return
+                } else if n == 2 {
+                    print("DEBUG RECOVERY: Recovering 2 -> bukal")
+                    consume(token: .anatomy(.buccal))
+                    return
+                }
+            }
             if isNextNumberNegative {
                 n = -n
                 isNextNumberNegative = false
@@ -154,10 +166,17 @@ struct StatefulParser: Equatable, Sendable {
                 }
             }
             
-            print("CALLING flushNumbers(false) from line \(#line)"); flushNumbers(force: false)
+            flushNumbers(force: false)
             isListAggregationActive = false
             
         case .toothIdentifier(let tooth):
+            let flushedSomething = !pendingNumbers.isEmpty
+            if !pendingNumbers.isEmpty {
+                flushNumbers(force: true)
+            }
+            if flushedSomething {
+                canImplicitlyAggregate = false
+            }
             lastAutoAdvancedFromTooth = nil
             let hadTargets = metricHadSpecificTargets
             metricHadSpecificTargets = true
@@ -360,11 +379,23 @@ struct StatefulParser: Equatable, Sendable {
                 // Preserve pendingAnatomies in list-aggregation mode so flushNumbers
                 // can apply the anatomy (e.g. "bukal") to every tooth in the list.
                 if !isListAggregationActive {
+                    if !canImplicitlyAggregate {
                         pendingAnatomies = []
-                    }
-                    if pendingTeeth.isEmpty {
+                        pendingTeeth = [newToothObj.toothNumber]
+                    } else if !pendingTeeth.isEmpty {
+                        isListAggregationActive = true
+                        if !pendingTeeth.contains(newToothObj.toothNumber) {
+                            pendingTeeth.append(newToothObj.toothNumber)
+                        }
+                    } else {
+                        pendingAnatomies = []
                         pendingTeeth = [newToothObj.toothNumber]
                     }
+                } else {
+                    if !pendingTeeth.contains(newToothObj.toothNumber) {
+                        pendingTeeth.append(newToothObj.toothNumber)
+                    }
+                }
 
                 
                 let jumpSuccess = cursor.jumpTo(tooth: tooth, aspect: activeSelection?.startAspect ?? cursor.currentAspect, updateSequenceIndex: cursor.currentMetric == .probingDepth)
@@ -497,8 +528,8 @@ struct StatefulParser: Equatable, Sendable {
                                     activeSelection?.endSite = resolved.site
                                     isSelectionUsed = false
                                 } else {
-                                    let sSite = min(sel.startSite!, resolved.site!)
-                                    let eSite = max(sel.endSite!, resolved.site!)
+                                    let sSite = min(sel.startSite ?? resolved.site!, resolved.site!)
+                                    let eSite = max(sel.endSite ?? resolved.site!, resolved.site!)
                                     activeSelection?.startSite = sSite
                                     activeSelection?.endSite = eSite
                                 }
@@ -616,10 +647,6 @@ struct StatefulParser: Equatable, Sendable {
                 if m == .bleeding || m == .plaque || m == .implant {
                     commands.append(AnnotationCommand(operation: m, teethSelection: selUpper, aspect: nil, values: ["True"]))
                     commands.append(AnnotationCommand(operation: m, teethSelection: selLower, aspect: nil, values: ["True"]))
-                } else if !pendingNumbers.isEmpty {
-                    let vals = pendingNumbers.map { String(m == .probingDepth ? max(1, abs($0)) : abs($0) * currentMetricMultiplier) }
-                    commands.append(AnnotationCommand(operation: m, teethSelection: selUpper, aspect: nil, values: vals))
-                    commands.append(AnnotationCommand(operation: m, teethSelection: selLower, aspect: nil, values: vals))
                 }
                 
                 pendingNumbers = []
@@ -627,10 +654,17 @@ struct StatefulParser: Equatable, Sendable {
                 isPostTargeting = false
             }
             
+        case .listSeparator:
+            if !pendingTeeth.isEmpty || (activeSelection != nil && pendingNumbers.isEmpty) {
+                isListAggregationActive = true
+            } else {
+                isListAggregationActive = false
+            }
+            
         case .word(let w):
             if w == "minus" {
                 isNextNumberNegative = true
-            } else if w == "dan" || w == "serta" || w == "," {
+            } else if w == "serta" {
                 if !pendingTeeth.isEmpty || (activeSelection != nil && pendingNumbers.isEmpty) {
                     isListAggregationActive = true
                 } else {

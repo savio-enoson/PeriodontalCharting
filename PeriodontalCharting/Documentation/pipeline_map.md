@@ -240,7 +240,7 @@ which guide) a new feature belongs to:
 | Add a manual-edit interaction (new popover, new gesture) | B | `Views/Chart/ToothColumnView.swift`, `NumberPadPopoverView.swift` |
 | Change 3-D tooth/gum appearance or add a new visualization mode | C (3D) | §4a above, `3D/GingivalAnatomyGenerator.swift` |
 | Add a field to what's saved per patient, or add multi-exam history | C (persistence) | §4b above, `Models/PatientChart.swift` |
-| Change STT accuracy / vocabulary bias / speaker isolation | A (upstream) | [STT_documentation.md](STT_documentation.md), `Audio/Domain/ClinicalConfig.swift` |
+| Change STT accuracy / vocabulary bias / speaker isolation | A (upstream) | [STT_documentation.md](STT_documentation.md), `AI/Wav2Vec_STT/lexicon.txt`, `canonical_mapping.json` |
 | Understand the StatefulParser state machine in detail | A | [system_guide.md](system_guide.md) |
 
 ---

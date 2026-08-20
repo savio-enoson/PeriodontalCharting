@@ -113,8 +113,9 @@ class Wav2VecEngine: ObservableObject {
                 let shape = logitsArray.shape
                 let vocabSize = shape[shape.count - 1].intValue
                 
-                // Decode the full padded length to capture the CNN's forward receptive field
-                let actualTimeSteps = paddedLength / 320
+                // Decode only the valid frames to prevent transcribing the white noise padding.
+                // We add 1 frame to ensure we capture the final phoneme affected by the CNN's receptive field.
+                let actualTimeSteps = min(paddedLength / 320, Int(ceil(Double(seqLength) / 320.0)) + 1)
                 
                 var logits2D: [[Float]] = Array(repeating: Array(repeating: 0.0, count: vocabSize), count: actualTimeSteps)
                 

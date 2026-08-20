@@ -5,7 +5,6 @@ import Accelerate
 @main
 struct RegressionRunner {
         static func main() async throws {
-        freopen("/Users/vio/XCodeProjects/PeriodontalCharting/test_out.txt", "w", stdout)
         UserDefaults.standard.set(false, forKey: "useMLTokenizer")
         
         print("Starting DR LUCKY")
@@ -22,6 +21,23 @@ struct RegressionRunner {
         let diffs2 = ChartTestingUtilities.compareCharts(expected: try getExpected(path: "/Users/vio/XCodeProjects/PeriodontalCharting/PeriodontalCharting/Testing/Ground/student_ground.json"), actual: mouth2)
         print("STUDENT DIFFS:", diffs2)
         
+        
+        print("\n=== IDEAL TRANSCRIPT TESTS ===")
+        
+        print("Starting DR LUCKY IDEAL")
+        var mouth3 = ToothObject.fullMouthEmpty()
+        var parser3 = StatefulParser(configuration: ChartingConfiguration())
+        try runTextTest(path: "/Users/vio/XCodeProjects/PeriodontalCharting/PeriodontalCharting/Testing/Raw/dr_lucky_ground.txt", parser: &parser3, mouth: &mouth3)
+        let diffs3 = ChartTestingUtilities.compareCharts(expected: try getExpected(path: "/Users/vio/XCodeProjects/PeriodontalCharting/PeriodontalCharting/Testing/Ground/ground_truth.json"), actual: mouth3)
+        print("DR LUCKY IDEAL DIFFS:", diffs3)
+        
+        print("Starting STUDENT IDEAL")
+        var mouth4 = ToothObject.fullMouthEmpty()
+        var parser4 = StatefulParser(configuration: ChartingConfiguration())
+        try runTextTest(path: "/Users/vio/XCodeProjects/PeriodontalCharting/PeriodontalCharting/Testing/Raw/student_ground.txt", parser: &parser4, mouth: &mouth4)
+        let diffs4 = ChartTestingUtilities.compareCharts(expected: try getExpected(path: "/Users/vio/XCodeProjects/PeriodontalCharting/PeriodontalCharting/Testing/Ground/student_ground.json"), actual: mouth4)
+        print("STUDENT IDEAL DIFFS:", diffs4)
+
         print("DONE")
         exit(0)
     }
@@ -65,9 +81,12 @@ struct RegressionRunner {
         }
         
         Wav2VecAudioCapture.shared.resetConditioning()
+        Wav2VecAudioCapture.shared.conditionAudio(buffer: &audioData)
         
-        print("Loaded \(audioData.count) audio samples (\(Double(audioData.count)/16000.0) seconds)")
+        let audioDuration = Double(audioData.count)/16000.0
+        print("Loaded \(audioData.count) audio samples (\(audioDuration) seconds)")
         
+        let startTime = CFAbsoluteTimeGetCurrent()
         // 3. Emulate the ViewModel chunking
         var streamingBuffer: [Float] = []
         var committedHistory: [String] = []
@@ -78,6 +97,7 @@ struct RegressionRunner {
         
         var currentCommandsProcessed = 0
         
+
         // Local function to feed parser and process commands
         func processTranscript(_ text: String, isFinal: Bool) {
             let tokens = TokenizerManager.shared.tokenize(text: text, isFinal: isFinal, currentMetric: parser.cursor.currentMetric, parserCurrentValues: parser.pendingNumbers.count, parserExpectedValues: parser.activeSelection?.expectedSlots ?? 3)
@@ -96,8 +116,6 @@ struct RegressionRunner {
             let endIndex = min(chunkIndex + chunkSize, audioData.count)
             var chunk = Array(audioData[chunkIndex..<endIndex])
             chunkIndex += chunkSize
-            
-            Wav2VecAudioCapture.shared.conditionAudio(buffer: &chunk)
             
             // Simple RMS energy calculation to emulate VAD speech detection
             var rms: Float = 0

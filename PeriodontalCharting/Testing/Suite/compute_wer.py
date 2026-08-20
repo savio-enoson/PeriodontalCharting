@@ -65,6 +65,10 @@ def parse_log_for_words(log_path):
                 text = line[7:].strip()
                 if text:
                     all_text += " " + text
+            elif line.startswith("FINAL COMMIT:"):
+                text = line[13:].strip()
+                if text:
+                    all_text += " " + text
                     
     return normalize_text(all_text)
 

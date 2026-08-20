@@ -19,7 +19,7 @@ extension VoiceTokenizer {
     static func isAspectOrAction(_ word: String) -> Bool {
         let w = word.lowercased()
         let actions = [
-            "missing", "gak", "tidak", "resesi", "poket", "pocket", "bop", "bleeding", "plak", "flek", "mobiliti", "furkasi", "impaksi", "sisa", "akar", "lanjut", "selesai",
+            "missing", "hilang", "misin", "gak", "tidak", "resesi", "poket", "pocket", "bop", "bleeding", "plak", "flek", "mobiliti", "furkasi", "impaksi", "sisa", "akar", "lanjut", "selesai",
             "semua", "semuanya", "seluruh", "seluruhnya", "kemudian", "selanjutnya", "berikutnya", "ada",
             "sampai", "hingga", "ke", "dan"
         ]
@@ -63,7 +63,7 @@ extension VoiceTokenizer {
             let word = words[i].lowercased()
             
             let actions = [
-                "missing", "gak", "tidak", "resesi", "poket", "pocket", "bop", "bleeding", "plak", "flek", "mobiliti", "furkasi", "impaksi", "sisa", "akar", "lanjut", "selesai",
+                "missing", "hilang", "gak", "tidak", "resesi", "poket", "pocket", "bop", "bleeding", "plak", "flek", "mobiliti", "furkasi", "impaksi", "sisa", "akar", "lanjut", "selesai",
                 "semua", "semuanya", "seluruh", "seluruhnya", "kemudian", "selanjutnya", "berikutnya", "ada"
             ]
             

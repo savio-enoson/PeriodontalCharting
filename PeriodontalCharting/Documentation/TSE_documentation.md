@@ -78,7 +78,6 @@ Wav2VecEngine.predict()    transcribes gated audio only
 |---|---|
 | `SpeakerGate.swift` | CoreML ECAPA-TDNN wrapper, `enroll(utterances:)`, `classify(_:)` |
 | `SpeakerGateService.swift` | Stateless gate orchestrator, `enrollmentSelection(fromFile:)`, `concatenatedSpeech(in:)` |
-| `SpeakerVerdict.swift` | **Deprecated** — entire file commented out (DEPRECATED 2026-08-13). No longer used. |
 
 ---
 
@@ -405,17 +404,18 @@ Enrollment is split into two separate processes because the gate and extractor u
 
 ### Live Session Pickup
 
-`Wav2VecViewModel.startLive()` reads `TSEEngine.shared.extractor`. If `extractor?.isPrepared == false`, fires `Task { await TSEEngine.shared.prepare() }` in the background. First few commits may run gate-only. `GateStatus.extractorReady` reflects this.
+`Wav2VecViewModel.startLive()` captures the current `TSEEngine.shared.extractor` and unconditionally fires `Task { await TSEEngine.shared.prepare() }` in the background. Once `prepare()` completes, the extractor reference is re-assigned on the view model. First few commits may therefore run gate-only (until `extractor.isPrepared` flips true). `GateStatus.extractorReady` reflects this.
 
 **After profile switch:** call `TSEEngine.shared.reprepare()`. The old `enroll_kv` is keyed to the previous user's voice and must be recomputed with WeSpeaker for the new profile.
+
 
 ---
 
 ## 11. GateStatus and Debug
 
-### `GateStatus` (on `Wav2VecViewModel`)
+### `GateStatus` (on `Wav2VecViewModel`, exposed via `AIVoiceViewModel`)
 
-Updated after every commit. Observed by `AIListeningView`.
+Defined and updated on `Wav2VecViewModel` after every commit. `AIVoiceViewModel` exposes it as a passthrough computed property (`var gateStatus: Wav2VecViewModel.GateStatus { wav2VecTranscriber.gateStatus }`), which is what `AIListeningView` reads.
 
 | Field | Type | Meaning |
 |---|---|---|
@@ -521,6 +521,6 @@ At RTF 0.3, a session with many long rejected spans can add several seconds of l
 
 Clinicians with short calibration recordings fall back to whole-file conditioning, which degrades quality. The onboarding UI should clearly communicate this requirement.
 
-**`SpeakerVerdict.swift` is a dead file.**
+**`SpeakerVerdict.swift` has been removed.**
 
-Entire file is commented out (DEPRECATED 2026-08-13). Previously defined a text-span verdict type for the Whisper post-transcription gate. Nothing in the live path references it.
+Previously defined a text-span verdict type for a Whisper post-transcription gate. Deprecated 2026-08-13 and subsequently deleted. Nothing in the live path references it.

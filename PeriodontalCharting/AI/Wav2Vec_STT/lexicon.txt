@@ -678,3 +678,37 @@ tujuh	t u j u h
 vocal	v o c a l
 vurgasi	v u r g a s i
 vurkasi	v u r k a s i
+
+bleeding	b l i d i n g
+bleeding	b l i d i n
+missing	m i s i n g
+missing	m i s i n
+plaque	p l a k
+plaque	p l e k
+pocket	p o k e t
+probing	p r o p i n g
+recession	r i s e s i
+recession	r e s e s i
+bop	b i o p i
+implant	i m p l a n
+implant	i m p l e n
+
+palatal	p e l a t a l
+palatal	p a l e t o
+mesiopalatal	m e s i o p e l a t a l
+mesiopalatal	m e s i o p a l e t o
+distopalatal	d i s t o p e l a t a l
+distopalatal	d i s t o p a l e t o
+
+labial	l a b i e l
+labial	l a b i y e l
+labial	l a b y a l
+plak	p e l a k
+plak	p l a g
+plaque	p e l a k
+
+min	m i n
+ma	m a
+tu	t u
+ga	g a
+lapan	l a p a n

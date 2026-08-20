@@ -103,6 +103,7 @@ extension VoiceTokenizer {
         // Words that may legitimately precede a site — real directionals/positions,
         // at-actions, structural words, and the clinical vocabulary we must never
         // clobber. Anything NOT here (and not a number) before a site is a mis-hear.
+        let actionWords = ["missing", "hilang", "misin", "implan", "implant", "goyang", "goyah", "kalkulus", "karang", "plak", "plaque", "bop", "bleeding", "berdarah", "darah", "pus", "nanah", "resesi", "recession", "turun", "furkasi", "purkasi", "cabut", "gak", "tidak", "ada"]
         let recognizedBeforeSite: Set<String> = [
             "mesio", "mesial", "disto", "distal", "mid", "tengah",
             "di", "pada", "semua", "seluruh", "dan", "sampai", "hingga", "dari",
@@ -199,7 +200,7 @@ extension VoiceTokenizer {
                 expectedValues = 3; currentValues = 0
                 i += 2; continue
             }
-            if w == "missing" {
+            if w == "missing" || w == "hilang" || w == "misin" {
                 tokens.append(.action(.missing))
                 expectedValues = 3; currentValues = 0
                 i += 1; continue
@@ -334,10 +335,10 @@ extension VoiceTokenizer {
                             let nextWord = i + 2 < words.count ? words[i+2] : "nil"
                             var trailingContextFound = false
                             if i + 2 < words.count {
-                                let maxLookahead = min(words.count, i + 6)
-                                for word in words[(i+2)..<maxLookahead] {
-                                    if word == "_sep_" || word == "," || word == "." { break }
-                                    if isAspectOrAction(word) {
+                                let maxLookahead = min(words.count, i + 15)
+                                for lookaheadWord in words[(i+2)..<maxLookahead] {
+                                    if lookaheadWord == "_sep_" || lookaheadWord == "," || lookaheadWord == "." { break }
+                                    if isAspectOrAction(lookaheadWord) || lookaheadWord == "misin" {
                                         trailingContextFound = true
                                         break
                                     }
@@ -364,6 +365,12 @@ extension VoiceTokenizer {
                                 if currentValues == 0 && num != nextNum && (nextWord == "_sep_" || nextWord == "nil" || nextWord == "," || nextWord == "." || nextWord == "dan" || nextWord == "maupun" || nextWord == "serta") {
                                     isDefinitelyTooth = true
                                     print("DEBUG Tokenizer: \(combined) is followed by separator and currentValues == 0")
+                                }
+                                
+                                let anatomyWords = ["mesio", "mesial", "disto", "distal", "bukal", "lingual", "palatal", "labial", "mesiolingual", "distolingual", "mesiobukal", "distobukal"]
+                                if anatomyWords.contains(nextWord) {
+                                    isDefinitelyTooth = true
+                                    print("DEBUG Tokenizer: \(combined) is followed by anatomy word \(nextWord), treating as tooth")
                                 }
                             }
                             
@@ -404,6 +411,11 @@ extension VoiceTokenizer {
                         continue
                     }
                 }
+                i += 1
+                continue
+            }
+            if w == "dan" || w == "maupun" || w == "," {
+                tokens.append(.listSeparator)
                 i += 1
                 continue
             }

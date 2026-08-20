@@ -107,11 +107,11 @@ Live microphone audio
 
 **Phase 0a (Speaker Isolation):** `SpeakerGateService` runs ECAPA-TDNN speaker verification on each confirmed Wav2Vec segment. `TSEEngine` applies BSRNN target source enhancement as a pre-filter to suppress non-target speech before it reaches Wav2Vec. This layer is handled by a separate peer module; the components live in `Audio/` and `Audio/TSE/`. See [frontend_guide.md §3.9](frontend_guide.md) for the file reference.
 
-**Phase 0b (Speech-to-Text):** `Wav2VecAudioCapture` records at 16 kHz mono, applies `HighPassFilter` (80 Hz cutoff) and `AutoGain` (target RMS 0.1, ~1.5 s time constant) before chunking into 512-sample aligned buffers. `Wav2VecViewModel` implements energy-based VAD using a 4-second rolling percentile window and dynamic range contrast check. Speech is accumulated into a growing `streamingBuffer`. A commit fires when silence frames exceed a threshold that tightens as the buffer grows (0–15 s: 15 frames, 15–30 s: 10 frames, 30–45 s: 5 frames, >45 s: 3 frames, >55 s: force-commit immediately). `Wav2VecEngine.predict()` pads audio to 1-second bucket boundaries with white noise (not zeros — zeros create a Z-score flatline at boundaries that drops phonemes), runs CoreML inference (`computeUnits = .cpuAndGPU`), and returns logits shape `[1, time_steps, vocab_size]`. `CTCDecoder` performs constrained beam search (width 40) guided by a `PrefixTrie` built from `lexicon.txt`. Characters forming an invalid trie prefix are culled to -∞ probability. `CTCDecoder` applies a Shallow Fusion LM boost to steer the beam toward critical anatomy terms. After beam search, `Acoustic Cost Rejection` filters words with `costPerFrame > 2.0`. Structural modifiers (`semua`, `sampai`, `hingga`, etc.) use a stricter threshold of 0.2 to prevent catastrophic chart mutations from hallucinated structural commands. `canonical_mapping.json` is applied in a 2-pass post-processing step. The `StatefulParser` applies Contextual Phonetic Recovery as a final safety net to map misheard numeric tokens (e.g. `lima`) back to anatomies (e.g. `lingual`) when clinically demanded.
+**Phase 0b (Speech-to-Text):** `Wav2VecAudioCapture` records at 16 kHz mono, applies `HighPassFilter` (80 Hz cutoff) and `AutoGain` (target RMS 0.1, ~1.5 s time constant) before chunking into 512-sample aligned buffers. `Wav2VecViewModel` implements energy-based VAD using a 4-second rolling percentile window and dynamic range contrast check. Speech is accumulated into a growing `streamingBuffer`. A commit fires when silence frames exceed a threshold that tightens as the buffer grows (0–15 s: 15 frames, 15–30 s: 10 frames, 30–45 s: 5 frames, 45–55 s: 3 frames, >55 s: force-commit immediately). `Wav2VecEngine.predict()` pads audio to 1-second bucket boundaries with white noise (not zeros — zeros create a Z-score flatline at boundaries that drops phonemes), runs CoreML inference (`computeUnits = .cpuAndGPU`), and returns logits shape `[1, time_steps, vocab_size]`. `CTCDecoder` performs constrained beam search (width 40, prune threshold `-15.0`) guided by a `PrefixTrie` built from `lexicon.txt`. Characters forming an invalid trie prefix are culled to -∞ probability. `CTCDecoder` applies **Shallow Fusion LM boost**: when a beam path completes a recognised anatomy word, a `-3.0` log-probability bonus is injected into that beam's score, compensating for the acoustic model's numeric bias. After beam search, `Acoustic Cost Rejection` filters words with `costPerFrame > 2.0`. Structural modifiers (`semua`, `sampai`, `hingga`, etc.) use a stricter threshold of 0.2 to prevent catastrophic chart mutations from hallucinated structural commands. `canonical_mapping.json` is applied in a 2-pass post-processing step. The `StatefulParser` applies Contextual Phonetic Recovery as a final safety net to map misheard numeric tokens (e.g. `lima`) back to anatomies (e.g. `lingual`) when clinically demanded.
 
-**Phase 1 (Tokenization):** `TokenizerManager.shared.tokenize(text:isFinal:)` dispatches directly to the rule-based `VoiceTokenizer` (there is no ML path).
+**Phase 1 (Tokenization):** `TokenizerManager.shared.tokenize(text:isFinal:currentMetric:parserCurrentValues:parserExpectedValues:)` dispatches directly to the rule-based `VoiceTokenizer` (there is no ML path). The parser state hints (`currentMetric`, `parserCurrentValues`, `parserExpectedValues`) are passed in to improve number disambiguation at chunk boundaries.
 
-**Phase 2 (Parsing):** `AIVoiceViewModel` holds one `StatefulParser` instance alive for the duration of a dictation session. On each confirmed VAD chunk, the chunk's text is tokenized and `sessionParser.consume(tokens:isFinal:)` is called. The parser accumulates numbers, tracks the current tooth and surface selection, and emits `AnnotationCommand` objects. At session end, `consume(tokens: [], isFinal: true)` force-flushes all buffered state.
+**Phase 2 (Parsing):** `AIVoiceViewModel` holds one `StatefulParser` instance alive for the duration of a dictation session. On each confirmed VAD chunk, `onConfirmedTranscript` delivers the **full accumulated transcript** (not just the latest chunk), which is tokenized and fed to `sessionParser.consume(tokens:isFinal:)`. The parser accumulates numbers, tracks the current tooth and surface selection, and emits `AnnotationCommand` objects. At session end, `consume(tokens: [], isFinal: true)` force-flushes all buffered state.
 
 **Phase 3 (Application):** `ChartProcessor.apply(command:to:)` is a headless, UI-independent `static func` that takes an `AnnotationCommand` and updates `mouthState`. `ChartDashboard` rebuilds `mouthState` from scratch by replaying the entire `commandHistory` on every change, guaranteeing idempotency.
 
@@ -141,12 +141,25 @@ Before splitting into words, the tokenizer applies regex/string substitutions to
 | `mesiolingual` / `distolingual` | `"mesio lingual"` / `"disto lingual"` | Same |
 | `mesiopalatal` / `distopalatal` | `"mesio palatal"` / `"disto palatal"` | Same |
 | `mesiolabial` / `distolabial` | `"mesio labial"` / `"disto labial"` | Same |
+| `(gigi|sampai|sampe|ke)\s+(\d)[.,\s]+(\d)` (regex) | Join the two digits | `"gigi 1 8"` → `"gigi 18"` — STT sometimes emits spaced digits for tooth numbers |
 | `"mid-"` / `"mid "` | `"mid"` | Normalizes hyphenated/spaced mid-prefix for multi-word alias matching |
 | `"bleeding or probing"` | `"bop"` | Common STT transcription error for "bleeding on probing" |
 | `"b o p"` / `"b.o.p"` / `"bleeding on probing"` | `"bop"` | Standard aliases |
 | `"probing depth"` | `"poket"` | English-language probing depth phrase → Indonesian metric keyword |
 
 After normalization, the text is split on whitespace into a word array.
+
+### Fused Directional-Compound Splitter
+
+Before the main loop, the tokenizer applies a compound-suffix splitter. Any token starting with `m` or `d` that ends with a recognisable site suffix (`bukal`, `lingual`, `palatal` and fuzzy variants) has the suffix peeled off (e.g., `mesiyobukal` → `[mesiyo, bukal]`). The remaining prefix is then processed by the directional stem recovery pass below.
+
+### Directional Stem Recovery (Position-based)
+
+The STT engine mangles the directional stem (`disto`/`mesio`) into an open-ended variety of mis-hears while the site word that follows it stays reliable. A position-based pass identifies any word sitting immediately before a site word (`bukal`, `lingual`, `palatal`) that the tokenizer does not otherwise recognise and replaces it with the correct stem, recovering direction by the word's leading sound: `m`-initial → `mesio`, otherwise → `disto`. A leading article fragment (`di`, `the`, `de`) immediately before the junk stem is also consumed to avoid emitting a spurious `at`-action token.
+
+### `di bop` → `disto bukal` Collapse (Inside Main Loop)
+
+The `disto bukal` phrase is acoustically compressed by the STT engine into a `<di-fragment> <bop-fragment>` pair (`di bop`, `di bob`, `the bop`, etc.) — dangerous because a bare `bop` is the bleeding metric. This pair is collapsed to `.anatomy(.distoBuccal)` as the very first check inside the main tokenizer loop, before the generic `di`→at-action and `bop`→bleeding rules can misroute it.
 
 **Word-level spell correction** is then applied before token matching:
 
@@ -176,6 +189,7 @@ After normalization, the text is split on whitespace into a word array.
 | `.metric(AnnotationOperation, multiplier: Int)` | `"resesi"` / `"BOP"` / `"plak"` | `.metric(.gingivalMargin, multiplier: -1)` |
 | `.action(ActionType)` | `"lanjut"` / `"gak ada"` / `"sampai"` | `.action(.next)` |
 | `.toothIdentifier(Int)` | `"gigi 16"` or bare two-digit `"16"` | `.toothIdentifier(16)` |
+| `.listSeparator` | `"dan"`, `"maupun"`, `","` | `.listSeparator` — signals a list continuation; sets `isListAggregationActive` in the parser |
 | `.word(String)` | Unrecognised | `.word("mili")` |
 
 > **Note on `multiplier`:** The `.metric` case carries an associated `multiplier: Int` value. For recession metrics (`"resesi"`, `"kemunduran"`), the multiplier is **-1**, automatically negating dictated values so the gingival margin is stored as a negative number (recession). All other metrics use `multiplier: 1`.
@@ -203,7 +217,7 @@ After normalization, the text is split on whitespace into a word array.
 |---|---|---|
 | `.next` | `"lanjut"`, `"kemudian"`, `"selanjutnya"`, `"berikutnya"` | Advance cursor / flush current selection |
 | `.commit` | `"selesai"` | Advance cursor / flush current selection (synonym for `.next`) |
-| `.missing` | `"gak ada"`, `"missing"` | Tooth is missing / edentulous (note: `"gak"` alone is ignored) |
+| `.missing` | `"gak ada"`, `"missing"`, `"hilang"`, `"misin"` | Tooth is missing / edentulous (note: `"gak"` alone is ignored) |
 | `.missing2` | `"tidak ada"` | Alternative missing form (note: `"tidak"` alone is ignored) |
 | `.from` | `"dari"` | Start of a range or possessive target specifier |
 | `.until` | `"sampai"` | End of a range |
@@ -212,7 +226,7 @@ After normalization, the text is split on whitespace into a word array.
 | `.at2` | `"di"` | Shorter "at / on" form |
 | `.all` | `"semua"`, `"semuanya"`, `"seluruh"`, `"seluruhnya"` | "all" — instantly assigns to all 64 surfaces |
 
-> **Note on `.next` and `.commit`:** Both cases exist as distinct enum values (`case next = "lanjut"`, `case commit = "selesai"`). They produce identical behavior in the parser — both call `discardOrFlush()` then `restoreToMainSequence()`. All other commit-style synonyms (`kemudian`, `selanjutnya`, `berikutnya`) are mapped to `.next` by the tokenizer.
+> **Note on `.next` and `.commit`:** Both `.next` and `.commit` are defined as enum values and produce identical behaviour in the parser — both call `discardOrFlush()` then `restoreToMainSequence()`. In the live tokenizer, **all** of the synonyms (`lanjut`, `selesai`, `kemudian`, `selanjutnya`, `berikutnya`) emit `.action(.commit)`. The `.next` case exists in the enum but is no longer emitted by the tokenizer.
 
 ### 3.3 Multi-word Alias Matching
 
@@ -402,7 +416,7 @@ stopLiveDictation()
 | Value | Effect |
 |---|---|
 | `"minus"` | Set `isNextNumberNegative = true` |
-| `"dan"`, `"serta"`, `","` | If `pendingTeeth` is non-empty or `activeSelection` exists with no pending numbers: set `isListAggregationActive = true`. Otherwise clear it. |
+| `.listSeparator` (`"dan"`, `"maupun"`, `","`) | If `pendingTeeth` is non-empty or `activeSelection` exists with no pending numbers: set `isListAggregationActive = true`. Otherwise clear it. Note: `"serta"` was removed; `"maupun"` is now the second Indonesian conjunction handled. |
 | `"_sep_"` | Call `discardOrFlush()`; clear `isListAggregationActive`. |
 | All other words | Clear `isListAggregationActive`. |
 

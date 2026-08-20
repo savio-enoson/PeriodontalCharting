@@ -2,7 +2,7 @@
 build
 build.log
 DerivedData/
-PeriodontalCharting/Testing/Suite/
+PeriodontalCharting/Testing/Suite/Data
 AI/*.mlpackage
 **/openai_whisper-large-v3_turbo_954MB/
 **/openai_whisper-large-v3_turbo_632MB/

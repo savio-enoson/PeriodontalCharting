@@ -59,6 +59,7 @@ PeriodontalCharting/
     │       └── StatefulParser+Lookahead.swift
     ├── Configuration/
     │   ├── ChartingConfiguration.swift
+    │   ├── ChartingConfiguration+Defaults.swift
     │   ├── ChartingCursor.swift
     │   └── ToothFramePreferenceKey.swift
     ├── Audio/
@@ -74,8 +75,7 @@ PeriodontalCharting/
     │   │   └── HighPassFilter.swift      ← 80 Hz IIR biquad high-pass
     │   ├── Speaker/
     │   │   ├── SpeakerGate.swift
-    │   │   ├── SpeakerGateService.swift
-    │   │   └── SpeakerVerdict.swift      ← deprecated, entire file commented out
+    │   │   └── SpeakerGateService.swift
     │   ├── TSE/
     │   │   ├── TSEConfig.swift
     │   │   ├── TSEEngine.swift
@@ -83,7 +83,7 @@ PeriodontalCharting/
     │   │   ├── TSEFeatures.swift
     │   │   └── TSERescue.swift
     │   ├── Transcription/
-    │   │   └── TranscriptionEngine.swift ← thin singleton; provides makeSpeakerGateIfNeeded()
+    │   │   └── TranscriptionEngine.swift ← app-wide SpeakerGateService owner; enrollment orchestration; VoiceProfileStore integration
     │   └── Wav2Vec/
     │       ├── CTCDecoder.swift          ← constrained CTC beam search
     │       ├── PrefixTrie.swift          ← clinical vocabulary prefix trie
@@ -127,7 +127,11 @@ PeriodontalCharting/
     │   └── Suite/
     │       ├── run_regression_tests.swift
     │       ├── build_tests.sh
-    │       └── (other test utilities)
+    │       ├── compute_rtf.py            ← RTF measurement helper
+    │       ├── compute_wer.py            ← WER measurement helper
+    │       ├── diff_words.py             ← filtered WER word diff
+    │       ├── diff_words_unfiltered.py  ← unfiltered WER word diff
+    │       └── Data/                     ← suite data directory
     ├── AI/                               ← gitignored
     │   ├── Target_Speech_Extraction/
     │   │   ├── SpeakerEmbedding_ECAPA.mlpackage
@@ -297,7 +301,7 @@ When the parser emits commands, `ChartDashboard` replays the entire `commandHist
 
 **Ghosted preview:**
 
-When `aiViewModel.committedCommands` is non-nil (i.e. live dictation is active), each cell checks whether its coordinate is backed by the committed set. Cells present in `commandHistory` but not in `committedCommands` render with reduced opacity, signalling that Whisper has not yet confirmed that portion of the transcript.
+When `aiViewModel.committedCommands` is non-nil (i.e. live dictation is active), each cell checks whether its coordinate is backed by the committed set. Cells present in `commandHistory` but not in `committedCommands` render with reduced opacity, signalling that Wav2Vec2 has not yet confirmed that portion of the transcript.
 
 ---
 
@@ -413,15 +417,17 @@ A floating overlay panel that slides in from the trailing edge in AI Mode. Fills
 
 - **AI Mode icon** — `apple.intelligence` SF Symbol with orange gradient and `.pulse` symbol effect.
 - **Live dictation controls** — Gated on `Wav2VecEngine.shared.isModelLoaded`. Shows a `ProgressView` spinner while the model is loading, then a solid circular `mic.fill` start button. When dictation is active, this transitions into an `HStack` with a Stop button (red `square.fill`) and a Pause/Resume button (`pause.fill` / `mic.fill`) to pause the recording without ending the session.
-- **Simulation play/stop button** — Removed from the active view to avoid racing the final commit.
+
+> [!NOTE]
+> The simulation play/stop button was removed from `AIListeningView`. Audio file simulation is now launched from **Debug → Audio File Streaming → Start File Simulation**.
 
 **Speaker gate status strip** (visible only during live dictation):
 
-Displays `Wav2VecViewModel.gateStatus` — a `GateStatus` struct with fields: active, extractorReady, silencing, spans, rejected, extracted, rescued, lastDistance.
+Displays `AIVoiceViewModel.gateStatus` — a passthrough to `Wav2VecViewModel.GateStatus` with fields: active, extractorReady, silencing, spans, rejected, extracted, rescued, lastDistance.
 
 **Three content sections:**
 
-1. **Live Transcription** — scrollable monospace `footnote`-sized `Text` showing the accumulating `liveTranscription` string. Minimum 120pt height (~5 lines).
+1. **Live Transcription** — scrollable monospace `footnote`-sized `Text` showing the accumulating transcript. Committed text is shown via `committedTranscription`; unconfirmed (in-flight) text via `uncommittedTranscription`. Minimum 120pt height (~5 lines).
 2. **Current Command** — structured card with three rows:
    - *Operation* — `currentMetric.displayName` from the active cursor (e.g., "Probing Depth").
    - *Selection* — current tooth number from the cursor.
@@ -471,14 +477,21 @@ A unified configuration interface for both initial onboarding and in-app setting
 
 An `@MainActor` `ObservableObject` that orchestrates the voice pipeline — both debug simulation and real live dictation — and maintains the live state of the NLP pipeline.
 
+**Dependencies:**
+
+- Holds a private `Wav2VecViewModel` instance (`wav2VecTranscriber`) which owns the mic, VAD, gate, and Wav2Vec2 engine. `AIVoiceViewModel` wires `onLiveTranscript` / `onConfirmedTranscript` callbacks into `wav2VecTranscriber` to receive confirmed and preview transcript updates.
+- Holds `sessionParser: StatefulParser?` — created when dictation begins and kept alive for the entire session.
+
 **State properties:**
 
 | Property | Type | Role |
 |---|---|---|
-| `liveTranscription` | `String` | The raw incoming text stream, updated continuously during simulation or live dictation. |
-| `isListening` | `Bool` | True while the debug simulation is running. |
-| `isDictating` | `Bool` | True while real live dictation is active. The two modes are mutually exclusive. |
+| `committedTranscription` | `String` | Confirmed transcript text (joined confirmed chunks). |
+| `uncommittedTranscription` | `String` | In-flight preview text (text since the last committed chunk). |
+| `isListening` | `Bool` | True while the debug text simulation is running. |
+| `isDictating` | `Bool` | True while real Wav2Vec live dictation is active. The two modes are mutually exclusive. |
 | `isPaused` | `Bool` | True while live dictation is temporarily paused. |
+| `isFinishing` | `Bool` | True between mic-off and the last chunk's decode landing. The mic button shows a "still working" state while this is true. |
 | `currentCommand` | `AnnotationCommand?` | The most recent command emitted by the parser. |
 | `commandHistory` | `[AnnotationCommand]` | Complete list of all applied mutations. `ChartDashboard` listens to this to rebuild the mouth. During live dictation, derived from the full preview transcript. |
 | `committedCommands` | `[AnnotationCommand]?` | Commands parsed from confirmed chunks only. `nil` during simulation/instant fill (no ghosting). Non-nil during live dictation — cells not in this set render ghosted. |
@@ -488,18 +501,17 @@ An `@MainActor` `ObservableObject` that orchestrates the voice pipeline — both
 | `wpm` | `Double` | Simulation playback speed (20–300 WPM). Adjustable via debug slider. |
 | `selectedTestTranscriptName` | `String` | Name key of the currently selected test transcript. |
 | `selectedTestTranscript` | `String` *(computed)* | Looks up `TestTranscripts.all` by `selectedTestTranscriptName`. |
+| `gateStatus` | `Wav2VecViewModel.GateStatus` *(computed)* | Passthrough to `wav2VecTranscriber.gateStatus`. Used by `AIListeningView`. |
+| `currentStatusMessage` | `String` *(computed)* | Passthrough to `wav2VecTranscriber.statusMessage`. |
 
 **Key methods:**
 
-- **`toggleSimulation(from:)`** — If already listening, stops the simulation. Otherwise starts it. Stops live dictation first (mutually exclusive).
-- **`toggleLiveDictation()`** — Primary public method called by `AIListeningView`. Wires `Wav2VecViewModel.onLiveTranscript` / `onConfirmedTranscript` callbacks and calls `startLiveDictation()` or `stopLiveDictation()` based on `isDictating`.
-- **`togglePauseLiveDictation()`** — Pauses or resumes an active live dictation session without destroying the ongoing session state or flushing the `StatefulParser`.
-- **`startSimulation(from:)`** *(private)* — Splits the transcript into words (expanding `\n`, `.`, `,` as discrete tokens). Resets state, then spawns an `@MainActor` bound `Task` that appends one word per loop iteration. Parsing is offloaded to a detached thread via `Task.detached` calling a `nonisolated` helper (`parseOffline`) to prevent UI hitching during dense token streams. Sets `committedCommands = nil` (no ghosting in simulation mode).
-- **`parseInstant(text:)`** — Stops any running simulation/dictation, runs a fresh `StatefulParser` with `isFinal: true` on the given text. Sets `committedCommands = nil` (no ghosting). Used by the Debug menu's **Fill Chart** and **Test Debug Transcript** buttons.
-- **`startLiveDictation()`** — Hooks `Wav2VecViewModel.onLiveTranscript` → `ingestPreview` (full transcript → chart preview) and `onConfirmedTranscript` → `ingestCommitted` (confirmed-only → committed set). Calls `Wav2VecViewModel.startLive()`.
-- **`stopLiveDictation()`** — Stops the stream, performs a final `isFinal: true` parse over the full accumulated transcript, and sets `committedCommands = commandHistory` so no cells remain ghosted.
-- **`ingestPreview(_:isFinal:)`** *(private)* — Parses the full running transcript (skips if text unchanged). Updates `commandHistory`, `currentCommand`, `currentCursor`, `activeSelection`, `pendingValues`.
-- **`ingestCommitted(_:)`** *(private)* — Parses confirmed-only text. Updates `committedCommands`. The chart uses this to determine ghosting.
+- **`toggleSimulation(from:)`** — If already listening, stops the simulation. Otherwise starts it (mutually exclusive with live dictation).
+- **`startLiveDictation()`** — Wires `wav2VecTranscriber.onLiveTranscript` → preview update and `wav2VecTranscriber.onConfirmedTranscript` → `sessionParser.consume()` + `committedCommands` update. Calls `wav2VecTranscriber.startLive()`.
+- **`stopLiveDictation()`** — Calls `wav2VecTranscriber.stopLive()` (async — awaits in-flight commits), then performs a final `isFinal: true` parse over the full accumulated transcript so the chart is fully resolved before `isFinishing` clears.
+- **`pauseLiveDictation()` / `resumeLiveDictation()`** — Delegates to `wav2VecTranscriber.pauseLive()` / `resumeLive()` without destroying session state or flushing the `StatefulParser`.
+- **`parseInstant(text:)`** — Stops any running simulation/dictation, runs a fresh `StatefulParser` with `isFinal: true` on the given text. Splits on newlines to preserve `_sep_` semantics. Sets `committedCommands = nil` (no ghosting). Used by the Debug menu.
+- **`audioFileSimulation(fileURL:speedMultiplier:)`** — Reads a `.m4a` file via `AVAudioFile`, resamples to 16 kHz Float32, and feeds it through `wav2VecTranscriber.startSimulation(audio:speedMultiplier:)`. The live pipeline (VAD, commit chain, Wav2Vec decode) runs as normal; only the gate is disabled for file simulation. Used by **Debug → Audio File Streaming → Start File Simulation**.
 - **`initializeCursorIfNeeded()`** — Creates an initial `ChartingCursor` when AI Mode is first opened.
 
 **Static properties:**
@@ -521,16 +533,17 @@ A developer `.sheet` presented as a `NavigationStack` with `List` sections. Rece
 - **Fill Random Data** — overwrites `mouth` with `ToothObject.fullMouthMock()`.
 
 **Section: Speaker Gate (TSE)**
-- **Enable TSE (Extraction & Gate)** toggle — bound to `TSEConfig.mode`. Toggles the target speech extraction pipeline between `.enforce` (on) and `.off`.
+- **Enable TSE (Extraction & Gate)** toggle — bound to `TSEConfig.mode`. Switches between `.enforce` (on) and `.off`. When toggled on, sets `TSEConfig.mode = .enforce`.
 - `NavigationLink` to `SpeakerGateDebugView`, which is the enrollment + verification test harness for the ECAPA-TDNN speaker gate.
 
 **Section: Audio File Streaming**
-- `Picker` to select an audio file (Dr. Lucky, Student, Dr. Gaby) and `Slider` for speed multiplier.
-- **Start File Simulation** — calls `aiViewModel.audioFileSimulation` to simulate dictation directly from a bundled `.m4a` file.
+- `Picker` to select an audio file (`dr_lucky_audio`, `student_audio`, `dr_gaby_audio`) and a `Slider` for speed multiplier (0.5x–5.0x, step 0.5).
+- **Start File Simulation** — calls `aiViewModel.audioFileSimulation(fileURL:speedMultiplier:)` to run a bundled `.m4a` through the real live pipeline (VAD + Wav2Vec decode, gate disabled).
 
 **Section: AI Simulation**
 - `Slider` for `aiViewModel.wpm` in the range 20–300, step 10.
-- **Start Simulation** — simulates a running voice transcript word-by-word.
+- **Start Simulation (Streaming)** — calls `aiViewModel.toggleSimulation(from:)` with the selected test transcript, streaming words word-by-word through the debug path.
+
 
 **Section: Instant Fill (Testing)**
 - `Picker` bound to `aiViewModel.selectedTestTranscriptName` listing all entries in `TestTranscripts.all`.
@@ -541,14 +554,6 @@ A developer `.sheet` presented as a `NavigationStack` with `List` sections. Rece
 **Section: Clear**
 - **Clear All Selections** (destructive) — empties `selectionModel.selectedCells`.
 
-> [!NOTE]
-> On a **physical iOS device**, ground truth files are written to the app’s `Documents/` sandbox folder. On the **Simulator** or macOS, `#if targetEnvironment(simulator)` directs the save path directly to the project’s `Testing/Ground/` folder so files are checked into source control immediately.
-
-**Section: Single Cell Highlights**
-- Pre-built scenarios for individual cell and mid-site highlights (e.g. “Tooth 16 Probing Depth (Outer)”, “Tooth 21 Bleeding (Inner, Mid)”) for UI verification without invoking the voice pipeline.
-
-**Section: Row / Region Highlights**
-- Pre-built multi-cell scenarios (e.g. “Q1 Gingival Margin (Outer)”, “All Implants (Shared Grid)”).
 
 **Section: Clear**
 - **Clear All Selections** (destructive) — empties `selectionModel.selectedCells` without clearing the chart.
@@ -776,7 +781,9 @@ The `Audio/` directory owns all real-time audio processing: voice recording, on-
 #### `Audio/Speaker/`
 
 - **`SpeakerGate.swift`** and **`SpeakerGateService.swift`** — Enrollment + multi-template centroid logic for ECAPA-TDNN.
-- **`SpeakerVerdict.swift`** — Deprecated (entire file commented out as of 2026-08-13).
+
+> [!NOTE]
+> `SpeakerVerdict.swift` — previously in this folder, deprecated 2026-08-13, and subsequently **deleted**. No longer present on disk.
 
 #### `Audio/TSE/`
 
@@ -784,14 +791,14 @@ The `Audio/` directory owns all real-time audio processing: voice recording, on-
 
 #### `Audio/Transcription/`
 
-- **`TranscriptionEngine.swift`** — Thin `@MainActor @Observable` singleton that provides `makeSpeakerGateIfNeeded() -> SpeakerGateService?`. It holds the app-wide `SpeakerGateService` and `VoiceProfileStore`. It is NOT the STT engine. Called from `Wav2VecViewModel.startLive()` to obtain the gate service.
+- **`TranscriptionEngine.swift`** — `@MainActor @Observable` singleton that owns the app-wide `SpeakerGateService` and coordinates enrollment (including multi-take enrollment from `VoiceProfileStore`). It is NOT the STT engine — the STT model loads separately through `Wav2VecEngine`. The name is a historical artifact. Called from `Wav2VecViewModel.startLive()` via `TranscriptionEngine.shared.makeSpeakerGateIfNeeded()`.
 
 #### `Audio/Wav2Vec/`
 
-- **`Wav2VecEngine.swift`** — `@MainActor ObservableObject` singleton. `loadModel()` loads `Wav2Vec2_Indonesian_FP16.mlmodelc` from bundle (path searched in `AI/Wav2Vec_STT/`), builds `CTCDecoder` with `vocab.json`, `lexicon.txt`, `canonical_mapping.json`. `predict(audioData:isLivePreview:)` pads audio to 1-second bucket boundaries, runs CoreML inference, returns decoded string. `computeUnits = .cpuAndGPU`.
+- **`Wav2VecEngine.swift`** — `@MainActor ObservableObject` singleton. `loadModel()` loads `Wav2Vec2_Indonesian_FP16.mlpackage` from bundle (path searched in `AI/Wav2Vec_STT/`), builds `CTCDecoder` with `vocab.json`, `lexicon.txt`, `canonical_mapping.json`. `predict(audioData:isLivePreview:)` pads audio to 1-second bucket boundaries, runs CoreML inference, returns decoded string. `computeUnits = .cpuAndGPU`.
 - **`Wav2VecAudioCapture.swift`** — `@MainActor ObservableObject` singleton. Captures mic audio via `AVAudioEngine`, resamples to 16kHz mono float32 via `AVAudioConverter`. `startStreamingRecording(onBuffer:)` applies `HighPassFilter` then `AutoGain` before emitting 512-sample chunks. `normalizeAudio(data:)` performs Z-score normalization (zero mean, unit variance) using `vDSP`. `readAudioFile(url:)` reads `.m4a` files via `AVAssetReader` decoded to 16kHz float32.
-- **`Wav2VecViewModel.swift`** — `@MainActor @Observable final class`. Orchestrates the full live pipeline: mic → conditioning → energy-based VAD → commit → gate → extract → decode → parser. Published state: `transcript`, `statusMessage`, `isModelReady`, `isTranscribing`, `isRecording`, `gateStatus: GateStatus`. Callbacks: `onLiveTranscript`, `onConfirmedTranscript`. Key methods: `startLive()`, `stopLive() async`, `startSimulation(audio:speedMultiplier:)`. Commits are chained (each awaits its predecessor) to guarantee parser receives chunks in capture order. `GateStatus` struct reports: `active`, `extractorReady`, `silencing`, `spans`, `rejected`, `extracted`, `rescued`, `lastDistance`.
-- **`CTCDecoder.swift`** — Prefix-Trie-constrained CTC beam search. `beamWidth = 10`. Characters not forming a valid prefix in the Trie are culled to -∞. After decoding, `Acoustic Cost Rejection` filters words where `costPerLetter > maxCostPerLetter (3.0)`. Destructive structural modifiers (`semua`, `sampai`, `hingga`, etc.) use a stricter threshold of `1.0`. Applies `canonical_mapping.json` patterns after decoding.
+- **`Wav2VecViewModel.swift`** — `@MainActor @Observable final class`. Orchestrates the full live pipeline: mic → conditioning → energy-based VAD → commit → gate → extract → decode → parser. Observable state: `transcript`, `statusMessage`, `isModelReady`, `isTranscribing`, `isRecording`, `gateStatus: GateStatus`. Callbacks: `onLiveTranscript`, `onConfirmedTranscript`, `isCommandBoundary`. Key methods: `startLive()`, `stopLive() async`, `startSimulation(audio:speedMultiplier:)`. Commits are chained (each awaits its predecessor) to guarantee parser receives chunks in capture order. `GateStatus` struct reports: `active`, `extractorReady`, `silencing`, `spans`, `rejected`, `extracted`, `rescued`, `lastDistance`.
+- **`CTCDecoder.swift`** — Prefix-Trie-constrained CTC beam search. `beamWidth = 40`, character prune threshold `-15.0` (relaxed to allow anatomy candidates to survive long enough to receive the LM boost). Characters not forming a valid prefix in the Trie are culled to -∞. **Shallow Fusion LM boost:** when a beam path completes a recognised anatomy word, a `-3.0` log-probability bonus is injected into that beam's score, correcting the acoustic model's numeric bias. After decoding, `Acoustic Cost Rejection` filters words where `costPerFrame > maxCostPerFrame (2.0)`. Destructive structural modifiers (`semua`, `sampai`, `hingga`, etc.) use a stricter threshold of `0.2`. Applies `canonical_mapping.json` patterns after decoding.
 - **`PrefixTrie.swift`** — In-memory prefix trie built from `lexicon.txt` at startup. Supports `isValidPrefix(sequence:)` and `isWord(_:)` queries during CTC decoding.
 
 ---
@@ -816,8 +823,8 @@ Transforms a linear `[VoiceToken]` stream into structured `[AnnotationCommand]` 
 
 | File | Responsibilities |
 |---|---|
-| `StatefulParser.swift` | Holds running context (`cursor`, `bufferedDigits`, `activeSelection`). Owns the main `consume()` loop and token dispatch switch. |
-| `StatefulParser+Flush.swift` | Logic for assembling `bufferedDigits` into full `AnnotationCommand` objects and emitting them when a boundary token is hit (e.g. `flushNumbers()`, `discardOrFlush()`). |
+| `StatefulParser.swift` | Holds running context (`cursor`, `pendingNumbers`, `activeSelection`). Owns the main `consume()` loop and token dispatch switch. |
+| `StatefulParser+Flush.swift` | Logic for assembling `pendingNumbers` into full `AnnotationCommand` objects and emitting them when a boundary token is hit (e.g. `flushNumbers()`, `discardOrFlush()`). |
 | `StatefulParser+Lookahead.swift` | Handles lookahead strategies for fragmented digits (e.g. resolving `[digit_1] [digit_2] [digit_3]` vs `[digit_1] [to] [digit_3]`). |
 
 ---

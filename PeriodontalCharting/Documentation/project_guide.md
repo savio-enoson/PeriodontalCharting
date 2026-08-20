@@ -65,7 +65,7 @@ This project modernises the workflow across three layers:
 
 - macOS 14+ with Xcode 16+
 - Target: **iPad** simulator or physical iPad (layout specifically tailored for iPad — iPhone not supported)
-- The `Wav2Vec2_Indonesian_FP16.mlmodelc` model is bundled directly in the app (no download required).
+- The `Wav2Vec2_Indonesian_FP16.mlpackage` model is bundled directly in the app (no download required).
 
 ### Steps
 
@@ -74,7 +74,7 @@ This project modernises the workflow across three layers:
 3. Build and run (`Cmd + R`).
 4. **First launch:** The onboarding screen appears. Record a voice calibration sample and configure your preferred annotation traversal order, then tap **Complete Setup**.
 5. The chart opens with all teeth empty (`fullMouthEmpty()`). Use the **Debug** (ladybug) toolbar button to apply test highlights, adjust simulation WPM, or instantly fill the chart from a test transcript.
-6. Tap **AI Mode** to open the voice panel. Tap **▶** to run the simulation with the selected test transcript, or tap **Mic** to begin live on-device dictation.
+6. Tap **AI Mode** to open the voice panel. Tap **Mic** to begin live on-device dictation. To run a recorded audio file through the real pipeline, use **Debug → Audio File Streaming → Start File Simulation** instead.
 7. Toggle layout mode via the toolbar (1-col / 2-col).
 8. Pinch-to-zoom to inspect fine detail; use the zoom slider (bottom-right) to return to 1×.
 9. Tap **Settings** (gear icon) to reconfigure traversal order or re-record the voice calibration sample.
@@ -126,7 +126,7 @@ All colors are system-adaptive — no manual Dark Mode handling is required. The
 - [x] **State Machine** — Indonesian NLP engine (`VoiceTokenizer` + `StatefulParser`) parses confirmed chunks into `AnnotationCommand` mutations with range support, verbal numbers, and sub-site targeting. `StatefulParser` persists across chunk boundaries within a session.
 - [x] **Dynamic UI Camera & Highlighting** — dual-state highlight mask (cursor vs active selection) with `ScrollViewProxy` auto-pan and padded frame limits for free panning in AI Mode.
 - [x] **Selection Debug Menu** — developer sheet with WPM slider, transcript picker, instant fill, regression testing buttons, and pre-built highlight scenarios.
-- [x] **Regression Testing** — `ChartProcessor` + `ChartTestingUtilities` + CLI `test_parser.sh` for headless parser validation against JSON ground truth files. In-app "Save as Ground Truth" / "Test vs Ground Truth" buttons in the debug menu.
+- [x] **Regression Testing** — `ChartProcessor` + `ChartTestingUtilities` + CLI `build_tests.sh` for headless parser validation against JSON ground truth files. In-app "Save as Ground Truth" / "Test vs Ground Truth" buttons in the debug menu.
 - [x] **Manual editing** — tap any numeric cell to open a `NumberPadPopoverView` (full-screen cover); tap furcation cells to cycle value directly; tap implant cell to toggle.
 - [x] **Expanded test suite** — full dictation scripts `dr_lucky_ground.txt`, `student_ground.txt` with paired ground truth JSONs in `Testing/Raw/` and `Testing/Ground/`.
 - [x] **Live speech-to-text integration** — `Wav2VecEngine` + `Wav2VecViewModel` fully integrated. `AIVoiceViewModel` wires confirmed and live-preview chunks to the annotation parser. Chart renders a ghosted-preview + committed-solid two-tier display during live dictation.
