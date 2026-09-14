@@ -26,6 +26,7 @@ struct ContentView: View {
 
     var body: some View {
         content
+            .ignoresSafeArea()
             .overlay {
                 if needsSplash {
                     ModelLoadingSplash()
@@ -112,7 +113,9 @@ struct ContentView: View {
                     // changes, so switching records reloads the right mouth.
                     .id(selectedChart?.persistentModelID)
                     .toolbar(.hidden, for: .navigationBar)
+                    .ignoresSafeArea()
             }
+            .ignoresSafeArea()
             .onAppear {
                 if selectedChart == nil { selectedChart = charts.first }
             }

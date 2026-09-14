@@ -25,6 +25,7 @@ struct PeriodontalChartingApp: App {
             // compile at launch queues everything onboarding does (the keyboard,
             // the chart diagrams, the audio session) behind it.
             ContentView()
+                .ignoresSafeArea()
                 // Persist patient charts with SwiftData. The container is created
                 // once and injected into the environment for @Query / modelContext.
                 .modelContainer(for: PatientChart.self)

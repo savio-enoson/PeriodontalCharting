@@ -7,9 +7,10 @@ struct ChartContentView: View, Equatable {
     var isSingleColumn: Bool
     var mouth: [Int: ToothObject]
     var updateTooth: (ToothObject) -> Void
+    var topPadding: CGFloat = 100
     
     static func == (lhs: ChartContentView, rhs: ChartContentView) -> Bool {
-        return lhs.isSingleColumn == rhs.isSingleColumn && lhs.mouth == rhs.mouth
+        return lhs.isSingleColumn == rhs.isSingleColumn && lhs.mouth == rhs.mouth && lhs.topPadding == rhs.topPadding
     }
     
     private var q1: [ToothObject] { [18,17,16,15,14,13,12,11].compactMap { mouth[$0] } }
@@ -38,7 +39,7 @@ struct ChartContentView: View, Equatable {
             }
         }
         .padding(24)
-        .padding(.top, 70) // Push content down to avoid overlapping with floating toolbar
+        .padding(.top, topPadding) // Push content down to avoid overlapping with floating toolbar
     }
 }
 
@@ -66,9 +67,24 @@ struct ChartDashboard: View {
     @State private var highlightTask: Task<Void, Never>?
     @Binding var columnVisibility: NavigationSplitViewVisibility
 
+    /// Natural clearance to vertically center the toolbar with the side menu header controls (~48 pt center)
+    private var naturalTopPadding: CGFloat {
+        let topInset = (UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap { $0.windows }
+            .first { $0.isKeyWindow }?
+            .safeAreaInsets.top) ?? 24
+        return max(topInset, 24)
+    }
+
     var body: some View {
         ZoomableScrollView(zoomScale: $zoomScale, targetRect: $targetRect, showAIMode: showAIMode) {
-            ChartContentView(isSingleColumn: isSingleColumn, mouth: mouth, updateTooth: updateTooth)
+            ChartContentView(
+                isSingleColumn: isSingleColumn,
+                mouth: mouth,
+                updateTooth: updateTooth,
+                topPadding: naturalTopPadding + 56
+            )
                 .equatable()
                 .coordinateSpace(name: "ChartSpace")
                 .onPreferenceChange(HighlightFramePreferenceKey.self) { frame in
@@ -158,7 +174,7 @@ struct ChartDashboard: View {
             .padding(.vertical, 12)
             .background(darkBlue, in: RoundedRectangle(cornerRadius: 12))
             .shadow(color: Color.black.opacity(0.1), radius: 10, y: 4)
-            .padding(.top, 0) // align perfectly with the sidebar's navigation bar
+            .padding(.top, naturalTopPadding)
             .padding(.trailing, 24)
         }
         .overlay(alignment: .topLeading) {
@@ -173,7 +189,7 @@ struct ChartDashboard: View {
                         .background(Color(red: 0.05, green: 0.2, blue: 0.5), in: Circle())
                         .shadow(color: .black.opacity(0.1), radius: 8, y: 4)
                 }
-                .padding(.top, 0) // align perfectly with the safe area top
+                .padding(.top, naturalTopPadding)
                 .padding(.leading, 24)
             }
         }
@@ -230,6 +246,7 @@ struct ChartDashboard: View {
             }
         }
         .environmentObject(selectionModel)
+        .ignoresSafeArea()
         .sheet(isPresented: $showDebugMenu) {
             SelectionDebugMenu(mouth: $mouth)
                 .environmentObject(selectionModel)
@@ -237,6 +254,7 @@ struct ChartDashboard: View {
         }
         .fullScreenCover(isPresented: $showSettings) {
             OnboardingView(hasCompletedOnboarding: .constant(true), isSettingsMode: true)
+                .ignoresSafeArea()
         }
         .sheet(item: $exportURL) { url in
             ShareSheet(items: [url])   // UIActivityViewController wrapper
